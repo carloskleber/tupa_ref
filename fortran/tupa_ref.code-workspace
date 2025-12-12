@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		}
+	],
+	"settings": {
+		"fortran.formatting.findentArgs": [
+			"-i2"
+		]
+	}
+}

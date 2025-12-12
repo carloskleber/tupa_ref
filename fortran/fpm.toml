@@ -1,0 +1,24 @@
+name = "Tupa"
+version = "0.0.1"
+license = "GPL"
+author = "Carlos Kleber C. Arruda"
+maintainer = "carloskleber@gmail.com"
+copyright = "Copyright 2025, Carlos Kleber"
+
+[dependencies]
+
+[build]
+auto-executables = true
+auto-tests = true
+auto-examples = true
+module-naming = false
+link = ["slatec", "lapack"]
+
+[install]
+library = false
+test = false
+
+[fortran]
+implicit-typing = false
+implicit-external = false
+source-form = "free"

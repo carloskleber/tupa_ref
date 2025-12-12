@@ -1,0 +1,26 @@
+# Tupa - Fortran version
+
+## Recommended setup
+
+### Windows
+
+* Install VS Code;
+* Install WSL and a Linux distribution (for the next scripts, I assume you chose Ubuntu);
+* Open the Linux distro;
+* Install the following packages:
+
+```bash
+sudo apt update
+sudo apt install gfortran
+sudo apt install pipx
+pipx install fpm
+pipx install fortls
+```
+
+* `git clone` from inside your `home/username/` folder
+* `cd tupa_ref`
+* `code .`
+* Install the recommended "VS Code Server for Linux"
+
+### Linux
+
