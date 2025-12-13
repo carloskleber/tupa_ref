@@ -1,4 +1,5 @@
-module mImpMutua
+module mImpedance
+  !! Routines related to electrodes´ impedance calculations (self and mutual)
   implicit none
 
 contains
@@ -8,7 +9,7 @@ contains
     real(8) za1(3), zb1(3), zva(3), zvb(3), zla, zlb, res
     real(8) a1(3), b1(3), va(3), vb(3), la, lb
     integer irule
-    common / / a1, b1, va, vb, lb
+    common /params/ a1, b1, va, vb, lb
     real(8) errabs, errrel, errest
 
     a1 = za1
@@ -31,7 +32,7 @@ contains
     real(8) X, Y
     real(8) a1(3), b1(3), va(3), vb(3), lb
     real(8) a, b, c, z
-    common / / a1, b1, va, vb, lb
+    common /params/ a1, b1, va, vb, lb
     integer j
     intrinsic dsqrt
 
@@ -56,7 +57,7 @@ contains
   real(8) function LIMSUP (x)
     real(8) x
     real(8) a1(3), b1(3), va(3), vb(3), la, lb
-    common / / a1, b1, va, vb, lb
+    common /params/ a1, b1, va, vb, lb
 
     LIMSUP = lb
     return

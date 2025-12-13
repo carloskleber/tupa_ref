@@ -9,3 +9,17 @@ Also I like to acknowledge my colleagues` work in the field:
 
 * Salari, J. C., Azevedo, R. M. and Portela, C. "An efficient modeling of transmission lines towers and grounding systems for lightning propagation studies," IX SIPDA, Foz do Iguaçu, Brazil, Nov. 2007.
 *  S. Visacro and A. Soares, Jr., “HEM: A model for simulation of lightning related engineering problems,” IEEE Trans. Power Del., vol. 20, no. 2, pp. 1206–1208, Apr. 2005.
+
+## Purpose
+
+The model is an application of the Method of Moments (MoM), also called in the power system community as Hybrid Electromagnetic Model (HEM).
+
+## How to
+
+The project can be applied standalone using the existing projects, or adapted as a library, connecting with frontends.
+
+It is expected to have a JSON input (even in Fortran)
+
+## Regarding the name
+
+According to Wikipedia, _Tupã_ (or _Tupan_, _Tupave_ or _Tenondete_) is the word for God in the Tupi and Guarani languages, being one of your manifestations in the form of thunder, probably the name itself literally "the sound of thunder". As the model related to lightning phenomena and conceived in Brazil the name TUPÃ was used in the original Matlab routine, whcih to avoid encoding problems can be used as "TUPA".

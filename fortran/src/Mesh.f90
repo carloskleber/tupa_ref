@@ -1,4 +1,5 @@
-module mMalha
+module mMesh
+  !! Mesh configuration: topology and impedances matrix
   implicit none
 
   real(8), parameter :: pi = acos(-1.)

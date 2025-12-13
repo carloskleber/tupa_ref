@@ -6,6 +6,8 @@ maintainer = "carloskleber@gmail.com"
 copyright = "Copyright 2025, Carlos Kleber"
 
 [dependencies]
+stdlib = "*"
+slatec = { git = "https://github.com/carloskleber/slatec" }
 
 [build]
 auto-executables = true
