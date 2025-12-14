@@ -1,9 +1,8 @@
 module mNode
-  use stdlib_strings
   implicit none
 
   type tNode
-    type(string_type) id
+    character(len=256) :: id
     !! Node identifier
     real(8) x
     real(8) y

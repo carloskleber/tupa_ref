@@ -12,10 +12,10 @@ fi
 
 cd "$REPO_DIR"
 git pull
-fpm install "$MAIN_PROJECT_DIR" --profile release --flag "-std=legacy -Wno-argument-mismatch -fallow-invalid-boz"
+fpm install --profile release --flag "-std=legacy -Wno-argument-mismatch -fallow-invalid-boz"
 
 # Build main project
-cd "$MAIN_PROJECT_DIR"
+cd "$SCRIPT_DIR"
 fpm build
 
 echo "Build completed successfully!"

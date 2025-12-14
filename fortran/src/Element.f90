@@ -1,10 +1,9 @@
 module mElement
-  use stdlib_strings
   use mNode
   implicit none
 
   type :: tElement
-    type(string_type) id
+    character(len=256) :: id
     !! Element identifier
     integer(4) nNodes
     integer(4) nSegments

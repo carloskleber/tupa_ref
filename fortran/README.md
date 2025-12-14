@@ -17,10 +17,11 @@ pipx install fpm
 pipx install fortls
 ```
 
-* `git clone` from inside your `home/username/` folder
-* `cd tupa_ref`
-* `code .`
-* Install the recommended "VS Code Server for Linux"
+* `git clone` from inside your `home/username/` folder;
+* `cd tupa_ref/fortran`;
+* `code .`;
+* Install the recommended "VS Code Server for Linux";
+* run `build.sh` to get the [SLATEC lib](https://github.com/carloskleber/slatec);
 
 ### Linux
 

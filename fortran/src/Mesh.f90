@@ -2,10 +2,23 @@ module mMesh
   !! Mesh configuration: topology and impedances matrix
   implicit none
 
+  ! Explicit interface for LAPACK ZGESV (double complex linear solve)
+  interface
+    subroutine zgesv(n, nrhs, a, lda, ipiv, b, ldb, info)
+      integer, intent(in) :: n
+      integer, intent(in) :: nrhs
+      integer, intent(in) :: lda
+      integer, intent(in) :: ldb
+      integer, intent(out) :: ipiv(*)
+      integer, intent(out) :: info
+      complex(8), intent(inout) :: a(lda, *)
+      complex(8), intent(inout) :: b(ldb, *)
+    end subroutine zgesv
+  end interface
   real(8), parameter :: pi = acos(-1.)
   real(8), parameter :: quatropi =  4. * acos(-1.)
   
-  type :: tMalha
+  type :: tMesh
     complex(8), allocatable :: tensao(:)
     complex(8), allocatable :: corrente1(:)
     complex(8), allocatable :: corrente2(:)
@@ -26,7 +39,7 @@ contains
   function alocaMalha(nn, ns) result(malha)
     !! Alocação de memória
     integer(4), value :: nn, ns
-    type(tMalha), pointer :: malha
+    type(tMesh), pointer :: malha
     
     allocate(malha)
     malha%nno = nn
@@ -55,7 +68,7 @@ contains
     !! Gera as matrizes de topologia A, B, C, D a partir dos vetores de conexões
     integer(4), value :: nn, ns
     integer(4), intent(in) :: n1(ns), n2(ns)
-    type(tMalha), pointer :: malha
+    type(tMesh), pointer :: malha
     integer(4) i1
     
     do i1 = 1,ns
@@ -72,14 +85,14 @@ contains
   subroutine calcBase(malha)
     !! Cálculo das matrizes de base
     !! Obtem os dados da estrutura (ou a estrutura cria a matriz de geometria)
-    type(tMalha), pointer :: malha
+    type(tMesh), pointer :: malha
     
   end subroutine
   
   subroutine calcParam(malha, omega, epsAr, muAr, sigmaAr, epsSolo, muSolo, sigmaSolo)
     !! Cálculo dos parâmetros básicos para uma frequência (parâmetros do ar e solo)
     real(8), intent(in), value :: omega, epsAr, muAr, sigmaAr, epsSolo, muSolo, sigmaSolo
-    type(tMalha), pointer :: malha
+    type(tMesh), pointer :: malha
 
     malha%cteEletAr = 1. / (quatropi * cmplx(sigmaAr, omega * epsAr,kind=8))
     malha%cteEletSolo = 1. / (quatropi * cmplx(sigmaSolo, omega * epsSolo,kind=8))
@@ -92,7 +105,7 @@ contains
   !> Seta um elemento das matrizes Zlong e Ztrans
   subroutine setZ(malha, i, j, zl, zt)
     integer(4), intent(in), value :: i, j
-    type(tMalha), pointer :: malha
+    type(tMesh), pointer :: malha
     complex(8), intent(in), value :: zl, zt
 
     malha%Zlong(i, j) = zl
@@ -112,7 +125,7 @@ contains
     integer(4), intent(in) :: i, pos
     real(8), intent(in) :: h, fgl, fgli, fgt, fgti
     complex(8), intent(in) :: zint
-    type(tMalha), pointer :: malha
+    type(tMesh), pointer :: malha
     complex(8) fpropi
 
     if (pos .eq. 1) then
@@ -135,7 +148,7 @@ contains
     !! @param[in] di Distancia entre o primeiro segmento e imagem do segundo segmento
     integer(4), intent(in), value :: i, j, pos1, pos2
     real(8), intent(in), value :: d, di, fgl, fgli, fgt, fgti
-    type(tMalha), pointer :: malha
+    type(tMesh), pointer :: malha
     complex(8) fprop, fpropi, zt, zl
 
     if (pos1 .eq. 1 .and. pos2 .eq. 1) then
@@ -161,7 +174,7 @@ contains
   integer(4) function calcFreqF(malha)
     !! Cálculo na frequencia
     !! @returns INFO das rotinas ZGESV
-    type(tMalha), pointer :: malha
+    type(tMesh), pointer :: malha
     integer INFO
     integer, allocatable :: IPIV(:)
 
@@ -189,7 +202,7 @@ contains
     !! Cálculo na frequência - versão cheia
     !!
     !! Basicamente faz a montagem de Zeq
-    type(tMalha), pointer :: malha
+    type(tMesh), pointer :: malha
     integer INFO, nn, ns, n
     integer, allocatable :: IPIV(:)
 
@@ -213,7 +226,7 @@ contains
     integer(4), intent(in) :: pos(nsig)
     complex(8), intent(in) :: sig(nsig)
     complex(8), allocatable :: y(:)
-    type(tMalha), pointer :: malha
+    type(tMesh), pointer :: malha
     integer INFO, nn, ns, n
     integer, allocatable :: IPIV(:)
     
@@ -239,7 +252,7 @@ contains
     !! Retorna o ponteiro das saídas
     integer(4), intent(in), value :: nn, ns
     complex(8), intent(out) :: v(nn), i1(ns), i2(ns)
-    type(tMalha), pointer :: malha
+    type(tMesh), pointer :: malha
 
     v = malha%tensao
     i1 = malha%corrente1

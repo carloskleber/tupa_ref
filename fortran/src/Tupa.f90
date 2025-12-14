@@ -1,4 +1,5 @@
 module tupa
+  use mStudy
   implicit none
   private
 

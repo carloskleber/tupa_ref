@@ -7,14 +7,14 @@ copyright = "Copyright 2025, Carlos Kleber"
 
 [dependencies]
 stdlib = "*"
-slatec = { git = "https://github.com/carloskleber/slatec" }
 
 [build]
 auto-executables = true
 auto-tests = true
 auto-examples = true
 module-naming = false
-link = ["slatec", "lapack"]
+link = ["lapack", "blas"]
+external-modules = ["slatec"]
 
 [install]
 library = false
