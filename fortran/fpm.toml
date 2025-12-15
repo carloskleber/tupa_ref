@@ -15,6 +15,7 @@ auto-examples = true
 module-naming = false
 link = ["lapack", "blas"]
 external-modules = ["slatec"]
+# To be considered: json-fortran, quadpack
 
 [install]
 library = false
