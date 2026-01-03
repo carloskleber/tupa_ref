@@ -3,10 +3,11 @@ version = "0.0.1"
 license = "GPL"
 author = "Carlos Kleber C. Arruda"
 maintainer = "carloskleber@gmail.com"
-copyright = "Copyright 2025, Carlos Kleber"
+copyright = "Copyright 2026, Carlos Kleber"
 
 [dependencies]
 stdlib = "*"
+feh = { git = "https://github.com/samharrison7/fortran-error-handler" }
 
 [build]
 auto-executables = true

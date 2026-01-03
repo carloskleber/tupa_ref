@@ -1,18 +1,27 @@
 module mStructure
   use mNode
+  use mElectrode
   use mMaterial
   use mElement
   implicit none
   private
-  public :: tStructure
+
+  public :: tStructure, air
+
+  type(tLinear), parameter :: air = createLinear(1., 1., 0.)
 
   type :: tStructure
-    type(tNode), allocatable :: nodes(:)
-    type(tElement), allocatable :: elements(:)
-    class(tMaterial), allocatable :: materials(:)
-    class(tMaterial), allocatable :: soil
+    type(tNode), allocatable, target :: nodes(:)
+    !! Array of main nodes
+    type(tElectrode), allocatable, target :: electrodes(:)
+    !! Array of electrodes
+    class(tElement), allocatable :: elements(:)
+    !! Array of elements
+    class(tMaterial), allocatable, target :: materials(:)
+    !! Array of conductive materials to be applied in elements
+    class(tMaterial), allocatable, target :: soil
+    !! Soil electrical properties.
 
-    !! Dynamic array of nodes
     integer :: nodeCount = 0
     !! Current number of nodes
     integer :: elementCount = 0
@@ -21,6 +30,7 @@ module mStructure
     !! Current number of materials
   contains
     procedure :: addNode => addNodeToStructure
+    procedure :: getNode => getNodeStructure
     procedure :: getNodeCount => getNodeCountStructure
     procedure :: addElement => addElementToStructure
     procedure :: getElementCount => getElementCountStructure
@@ -37,7 +47,7 @@ contains
     integer :: newSize
 
     if (.not. allocated(this%nodes)) then
-      ! First allocation: initial capacity of 10
+      ! Preallocation: initial capacity of 10
       allocate(this%nodes(10))
       this%nodeCount = 0
     end if
@@ -57,6 +67,24 @@ contains
     this%nodeCount = this%nodeCount + 1
     this%nodes(this%nodeCount) = node
   end subroutine addNodeToStructure
+
+  function getNodeStructure(this, id) result(node)
+    !! Get a node by its identifier. Returns null if not found.
+    class(tStructure), intent(in) :: this
+    character(:), intent(in) :: id
+    type(tNode), pointer :: node
+    integer :: i
+
+    node => null()
+    do i = 1, this%count
+      if (allocated(this%nodes(i)%id)) then
+        if (this%nodes(i)%id == id) then
+          node => this%nodes(i)
+          return
+        end if
+      end if
+    end do
+  end function getNodeStructure
 
   function getNodeCountStructure(this) result(count)
     class(tStructure), intent(in) :: this
@@ -147,5 +175,35 @@ contains
     end if
   end function getMaterialCountStructure
 
+  subroutine assembleStructure(this)
+    !! Link main nodes and materials in each element. Create secondary nodes and electrodes.
+    type(tStructure), intent(inout) :: this
+    integer :: i
+    ! Reallocate nodes arrays
+    
+    ! Allocate electrodes array
+
+    ! Link nodes and materials in each element
+    do i = 1, this%elementCount
+      call this%elements(i)%assemble(this%nodes, null(), this%materials)
+    end do
+  end subroutine assembleStructure
+
+  subroutine finalizeStructure(this)
+    type(tStructure), intent(inout) :: this
+
+    if (allocated(this%nodes)) then
+      deallocate(this%nodes)
+    end if
+    if (allocated(this%electrodes)) then
+      deallocate(this%electrodes)
+    end if
+    if (allocated(this%elements)) then
+      deallocate(this%elements)
+    end if
+    if (allocated(this%materials)) then
+      deallocate(this%materials)
+    end if
+  end subroutine finalizeStructure
 end module mStructure
 

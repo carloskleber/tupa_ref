@@ -21,7 +21,10 @@ pipx install fortls
 * `cd tupa_ref/fortran`;
 * `code .`;
 * Install the recommended "VS Code Server for Linux";
-* run `build.sh` to get the [SLATEC lib](https://github.com/carloskleber/slatec);
+* run `build.sh` (assuming Gfortran) to:
+    * get and compile the [SLATEC lib](https://github.com/carloskleber/slatec);
+    * Compile the main project with full optimization.
+
 
 ### Linux
 

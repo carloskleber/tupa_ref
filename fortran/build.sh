@@ -1,4 +1,7 @@
 #!/bin/bash
+# An optimized build script for the Fortran project using fpm and integrating the SLATEC library.
+# This script clones the SLATEC repository if it doesn't exist, pulls the latest changes,
+# installs dependencies with specific compiler flags, and builds the main project.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,6 +19,6 @@ fpm install --profile release --flag "-std=legacy -Wno-argument-mismatch -fallow
 
 # Build main project
 cd "$SCRIPT_DIR"
-fpm build
+fpm build --profile release --flag "-O3 -funroll-loops -ffast-math -fopt-info-vec-optimized -finline-functions -ftree-vectorize -march=native -mtune=native -fopenmp -fno-range-check -ffree-line-length-none"
 
 echo "Build completed successfully!"

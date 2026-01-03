@@ -8,5 +8,10 @@
 		"fortran.formatting.findentArgs": [
 			"-i2"
 		]
+	},
+	"extensions": {
+		"recommendations": [
+			"gruntfuggly.todo-tree"
+		]
 	}
 }

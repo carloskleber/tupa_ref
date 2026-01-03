@@ -1,0 +1,155 @@
+@startuml
+
+' Abstract classes
+abstract class tMaterial {
+    {field} epsilon : real(8)
+    {field} mu : real(8)
+    {field} sigma : real(8)
+    {field} propagationConstant : complex(8)
+    {abstract} +calcPropagationConstant(omega: real) : void
+}
+
+abstract class tElement {
+    {field} id : character(256)
+    {field} material : tMaterial (allocatable)
+    {field} nNodes : integer(4)
+    {field} nSegments : integer(4)
+    {field} radius : real(8)
+    {abstract} +init() : void
+    {abstract} +assemble() : void
+}
+
+' Concrete Material implementations
+class tLinear {
+    +calcPropagationConstant(omega: real) : void
+}
+
+class tSoilFreq {
+    +calcPropagationConstant(omega: real) : void
+}
+
+' Concrete Element implementation
+class tLine {
+    {field} nodeStart : tNode (pointer)
+    {field} nodeEnd : tNode (pointer)
+    +init(nodeStart, nodeEnd, radius, nSegments, material, id) : void
+    +assemble(...) : void
+}
+
+' Data types
+class tNode {
+    {field} id : character(256)
+    {field} x : real(8)
+    {field} y : real(8)
+    {field} z : real(8)
+    {field} voltage : complex(8)
+}
+
+class tElectrode {
+    {field} id : character(256)
+    {field} nNodes : integer(4)
+    {field} nodeIndices : integer(:) (allocatable)
+}
+
+class tMesh {
+    {field} tensao : complex(8)(:)
+    {field} corrente1 : complex(8)(:)
+    {field} corrente2 : complex(8)(:)
+    {field} A : complex(8)(:,:)
+    {field} B : complex(8)(:,:)
+    {field} C : complex(8)(:,:)
+    {field} D : complex(8)(:,:)
+    {field} Ztrans : complex(8)(:,:)
+    {field} Zlong : complex(8)(:,:)
+    {field} Zeq : complex(8)(:,:)
+    {field} cteEletAr : complex(8)
+    {field} cteEletSolo : complex(8)
+    {field} cteMagAr : complex(8)
+    {field} cteMagSolo : complex(8)
+    {field} propAr : complex(8)
+    {field} propSolo : complex(8)
+    {field} nno : integer(4)
+    {field} nseg : integer(4)
+    +alocaMalha(nn, ns) : tMesh
+    +calcTopologia(nn, ns, n1, n2) : void
+    +calcParam(omega, ...) : void
+    +setZ(i, j, zl, zt) : void
+    +calcZPropria(...) : void
+    +calcZMutua(...) : void
+    +calcFreqF() : integer(4)
+    +calcFreq2() : void
+    +injetaSinalF(...) : integer(4)
+}
+
+class tStructure {
+    {field} nodes : tNode(:) (allocatable)
+    {field} elements : tElement(:) (allocatable)
+    {field} materials : tMaterial(:) (allocatable)
+    {field} soil : tMaterial (allocatable)
+    {field} nodeCount : integer
+    {field} elementCount : integer
+    {field} materialCount : integer
+    +addNode(node: tNode) : void
+    +getNodeCount() : integer
+    +addElement(element: tElement) : void
+    +getElementCount() : integer
+    +addMaterial(material: tMaterial) : void
+    +getMaterialCount() : integer
+}
+
+class tStudy {
+    {field} title : character(256)
+    {field} structure : tStructure
+    {field} mesh : tMesh
+}
+
+' Helper module
+class mNode_createNode {
+    {static} +createNode(id, x, y, z) : tNode
+}
+
+' Inheritance relationships
+tLinear -(up)-|> tMaterial
+tSoilFreq -(up)-|> tMaterial
+tLine -(up)-|> tElement
+
+' Composition/Association relationships
+tElement --> tMaterial : has
+tLine --> tNode : points to (nodeStart)
+tLine --> tNode : points to (nodeEnd)
+tStructure --> tNode : contains (array)
+tStructure --> tElement : contains (array)
+tStructure --> tMaterial : contains (polymorphic array)
+tStructure --> tMaterial : has (soil)
+tStudy --> tStructure : has
+tStudy --> tMesh : has
+tMesh --> tElectrode : uses (in methods)
+
+' Constructor function
+mNode_createNode --> tNode : creates
+
+note right of tMaterial
+  Abstract type for electromagnetic materials
+  Used by tElement instances
+  Supports polymorphic behavior
+end note
+
+note right of tElement
+  Abstract element type
+  Extended by tLine for transmission lines
+  Can be extended for other element types
+end note
+
+note right of tStructure
+  Container for nodes, elements, and materials
+  Manages dynamic arrays with auto-expansion
+  Part of the problem domain modeling
+end note
+
+note right of tStudy
+  Top-level study container
+  Aggregates structure and mesh
+  Represents a complete analysis case
+end note
+
+@enduml
