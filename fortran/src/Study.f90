@@ -8,6 +8,7 @@ module mStudy
     character(len=256) :: title
     type(tStructure) :: structure
     type(tMesh) :: mesh
+    class(tElement), pointer :: element => null()
     type(tResult), allocatable :: results(:)
     !! Array of results to be extracted and postprocessing
   end type tStudy
@@ -28,15 +29,16 @@ contains
     print *, "Nodes:"
     do i = 1, study%structure%getNodeCount()
       print *, "  ", trim(study%structure%nodes(i)%id), &
-        " at (", study%structure%nodes(i)%x, ", ", &
-        study%structure%nodes(i)%y, ", ", &
-        study%structure%nodes(i)%z, ")"
+        " at (", study%structure%nodes(i)%p(1), ", ", &
+        study%structure%nodes(i)%p(2), ", ", &
+        study%structure%nodes(i)%p(3), ")"
     end do
     print *, ""
     print *, "Elements:"
     do i = 1, study%structure%getElementCount()
-      print *, "  ", trim(study%structure%elements(i)%id), &
-        " - Length: ", study%structure%elements(i)%length, " m"
+      element = study%structure%getElement(i)
+      print *, "  ", trim(element%id), &
+        " - Length: ", element%length, " m"
     end do
     print *, "========================================="
   end subroutine report

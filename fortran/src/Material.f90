@@ -34,7 +34,7 @@ module mMaterial
   contains
     procedure :: calcPropagationConstant => calcPropagationConstant_freq
   end type tSoilFreq
-
+  
 contains
 
   function newMaterialLinear(epsilonr, mur, sigma) result(this)

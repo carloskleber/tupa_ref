@@ -1,19 +1,13 @@
 module mNode
   implicit none
 
-  type tPoint
-    !! Point in 3D space
-    real(8) x
-    real(8) y
-    real(8) z
-  end type tPoint
-
-  type  tNode
+  type, public ::  tNode
     character(256) id
     !! Node identifier
     real(8) p(3)
-    !! Position in 3D space
+    !! Position in 3D space [x, y, z] (m)
     complex(8) voltage
+    !! Voltage at the node (V)
   end type
 contains
 

@@ -6,21 +6,24 @@ module mStructure
   implicit none
   private
 
-  public :: tStructure, air
+  type :: tElementNode
+    !! Linked list node for elements
+    class(tElement), pointer :: elem => null()
+    type(tElementNode), pointer :: next => null()
+  end type
 
-  type(tLinear), parameter :: air = createLinear(1., 1., 0.)
-
-  type :: tStructure
-    type(tNode), allocatable, target :: nodes(:)
+  type, public :: tStructure
+    type(tNode), allocatable :: nodes(:)
     !! Array of main nodes
-    type(tElectrode), allocatable, target :: electrodes(:)
+    type(tElectrode), allocatable :: electrodes(:)
     !! Array of electrodes
-    class(tElement), allocatable :: elements(:)
+    type(tElementNode), pointer :: elements => null()
     !! Array of elements
-    class(tMaterial), allocatable, target :: materials(:)
+    class(tMaterial), allocatable :: materials(:)
     !! Array of conductive materials to be applied in elements
-    class(tMaterial), allocatable, target :: soil
+    class(tMaterial), allocatable :: soil
     !! Soil electrical properties.
+    type(tLinear) :: air
 
     integer :: nodeCount = 0
     !! Current number of nodes
@@ -30,12 +33,13 @@ module mStructure
     !! Current number of materials
   contains
     procedure :: addNode => addNodeToStructure
-    procedure :: getNode => getNodeStructure
     procedure :: getNodeCount => getNodeCountStructure
     procedure :: addElement => addElementToStructure
+    procedure :: getElement => getElementFromStructure
     procedure :: getElementCount => getElementCountStructure
     procedure :: addMaterial => addMaterialToStructure
     procedure :: getMaterialCount => getMaterialCountStructure
+    final :: finalizeStructure
   end type tStructure
 
 contains
@@ -68,79 +72,64 @@ contains
     this%nodes(this%nodeCount) = node
   end subroutine addNodeToStructure
 
-  function getNodeStructure(this, id) result(node)
-    !! Get a node by its identifier. Returns null if not found.
-    class(tStructure), intent(in) :: this
-    character(:), intent(in) :: id
-    type(tNode), pointer :: node
-    integer :: i
-
-    node => null()
-    do i = 1, this%count
-      if (allocated(this%nodes(i)%id)) then
-        if (this%nodes(i)%id == id) then
-          node => this%nodes(i)
-          return
-        end if
-      end if
-    end do
-  end function getNodeStructure
-
   function getNodeCountStructure(this) result(count)
     class(tStructure), intent(in) :: this
     integer :: count
 
-    if (allocated(this%nodes)) then
-      count = this%nodeCount
-    else
-      count = 0
-    end if
+    count = this%nodeCount
   end function getNodeCountStructure
 
   subroutine addElementToStructure(this, element)
     class(tStructure), intent(inout) :: this
-    type(tElement), intent(in) :: element
-    type(tElement), allocatable :: temp(:)
-    integer :: newSize
+    class(tElement), pointer, intent(inout) :: element
+    type(tElementNode), pointer :: node
 
-    if (.not. allocated(this%elements)) then
-      ! First allocation: initial capacity of 10
-      allocate(this%elements(10))
-      this%elementCount = 0
-    end if
+    allocate(node)
+    node%elem => element
+    nullify(element)
 
-    if (this%elementCount >= size(this%elements)) then
-      ! Array is full, expand it (double the size)
-      newSize = size(this%elements) * 2
-      allocate(temp(newSize))
-      temp(1:this%elementCount) = this%elements(1:this%elementCount)
-      deallocate(this%elements)
-      allocate(this%elements(newSize))
-      this%elements(1:this%elementCount) = temp(1:this%elementCount)
-      deallocate(temp)
-    end if
-
-    ! Add new element
+    node%next => this%elements
+    this%elements => node
     this%elementCount = this%elementCount + 1
-    this%elements(this%elementCount) = element
   end subroutine addElementToStructure
 
   function getElementCountStructure(this) result(count)
     class(tStructure), intent(in) :: this
     integer :: count
 
-    if (allocated(this%elements)) then
-      count = this%elementCount
-    else
-      count = 0
-    end if
+    count = this%elementCount
   end function getElementCountStructure
+
+  function getElementFromStructure(this, index) result(element)
+    !! Retrieve pointer to element by index
+    class(tStructure), intent(in) :: this
+    integer, intent(in) :: index
+    class(tElement), pointer :: element
+    type(tElementNode), pointer :: p
+    integer :: i
+
+    p => this%elements
+    do i = 1, index - 1
+      if (associated(p)) then
+        p => p%next
+      else
+        exit
+      end if
+    end do
+
+    if (associated(p)) then
+      element => p%elem
+    else
+      nullify(element)
+    end if
+  end function getElementFromStructure
 
   subroutine addMaterialToStructure(this, material)
     class(tStructure), intent(inout) :: this
     class(tMaterial), intent(in) :: material
     class(tMaterial), allocatable :: temp(:)
     integer :: newSize
+    integer :: i
 
     if (.not. allocated(this%materials)) then
       ! First allocation: initial capacity of 10
@@ -152,45 +141,44 @@ contains
       ! Array is full, expand it (double the size)
       newSize = size(this%materials) * 2
       allocate(temp(newSize), source=material)
-      temp(1:this%materialCount) = this%materials(1:this%materialCount)
+      do i = 1, this%materialCount
+        allocate(temp(i), source=this%materials(i))
+      end do
       deallocate(this%materials)
       allocate(this%materials(newSize), source=material)
-      this%materials(1:this%materialCount) = temp(1:this%materialCount)
+      do i = 1, this%materialCount
+        allocate(this%materials(i), source=temp(i))
+      end do
       deallocate(temp)
     end if
 
     ! Add new material
     this%materialCount = this%materialCount + 1
-    this%materials(this%materialCount) = material
+    allocate(this%materials(this%materialCount), source=material)
   end subroutine addMaterialToStructure
 
   function getMaterialCountStructure(this) result(count)
     class(tStructure), intent(in) :: this
     integer :: count
 
-    if (allocated(this%materials)) then
-      count = this%materialCount
-    else
-      count = 0
-    end if
+    count = this%materialCount
   end function getMaterialCountStructure
 
   subroutine assembleStructure(this)
     !! Link main nodes and materials in each element. Create secondary nodes and electrodes.
-    type(tStructure), intent(inout) :: this
-    integer :: i
-    ! Reallocate nodes arrays
-    
-    ! Allocate electrodes array
+    class(tStructure), intent(inout) :: this
+    type(tElementNode), pointer :: p
 
-    ! Link nodes and materials in each element
-    do i = 1, this%elementCount
-      call this%elements(i)%assemble(this%nodes, null(), this%materials)
+    p => this%elements
+    do while (associated(p))
+      call p%elem%assemble(this)
+      p => p%next
     end do
   end subroutine assembleStructure
 
   subroutine finalizeStructure(this)
     type(tStructure), intent(inout) :: this
+    type(tElementNode), pointer :: p, next
 
     if (allocated(this%nodes)) then
       deallocate(this%nodes)
@@ -198,12 +186,19 @@ contains
     if (allocated(this%electrodes)) then
       deallocate(this%electrodes)
     end if
-    if (allocated(this%elements)) then
-      deallocate(this%elements)
-    end if
+    p => this%elements
+    do while (associated(p))
+      next => p%next
+      if (associated(p%elem)) deallocate(p%elem)
+      deallocate(p)
+      p => next
+    end do
+    nullify(this%elements)
     if (allocated(this%materials)) then
       deallocate(this%materials)
     end if
+    this%materialCount = 0
+    this%nodeCount = 0
+    this%elementCount = 0
   end subroutine finalizeStructure
 end module mStructure
-
