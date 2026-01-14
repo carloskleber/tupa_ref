@@ -3,7 +3,11 @@ module mMaterial
   implicit none
   private
 
+  public :: newMaterialLinear, newMaterialFreq
+
   type, abstract, public :: tMaterial
+    character(len=256) id
+    !! Material identifier
     real(8) mur
     !! Relative permeability
     complex(8) propagationConstant
@@ -34,33 +38,35 @@ module mMaterial
   contains
     procedure :: calcPropagationConstant => calcPropagationConstant_freq
   end type tSoilFreq
-  
 contains
-
-  function newMaterialLinear(epsilonr, mur, sigma) result(this)
+  function newMaterialLinear(id, epsilonr, mur, sigma) result(this)
     !! Constructor function to create a tLinear material instance
     !! @param[in] epsilonr relative Permittivity
     !! @param[in] mur relative Permeability
     !! @param[in] sigma Conductivity (S/m)
     !! @return Instantiated tLinear object
+    character(*), intent(in) :: id
     real(8), intent(in) :: epsilonr, mur, sigma
     type(tLinear) :: this
 
+    this%id = id
     this%epsilonr = epsilonr
     this%mur = mur
     this%sigma = sigma
     this%propagationConstant = cmplx(0.0d0, 0.0d0, kind=8)
   end function newMaterialLinear
 
-  function newMaterialFreq(mur, alpha0, kr) result(this)
+  function newMaterialFreq(id, mur, alpha0, kr) result(this)
     !! Constructor function to create a tSoilFreq material instance
     !! @param[in] mur Relative permeability
     !! @param[in] alpha0 Frequency-dependent parameter
     !! @param[in] kr Frequency-dependent parameter
     !! @return Instantiated tSoilFreq object
+    character(*), intent(in) :: id
     real(8), intent(in) :: mur, alpha0, kr
     type(tSoilFreq) :: this
 
+    this%id = id
     this%mur = mur
     this%alpha0 = alpha0
     this%kr = kr
@@ -71,8 +77,8 @@ contains
     !! Calculate the propagation constant for linear materials
     class(tLinear), intent(inout) :: this
     real(8), intent(in) :: omega
-    this%propagationConstant = sqrt(cmplx(this%mur * MU0 * this%epsilonr * EPSILON0 * omega * omega, & 
-        this%mur * MU0 * this%sigma * omega, kind=8))
+    this%propagationConstant = sqrt(cmplx(this%mur * MU0 * this%epsilonr * EPSILON0 * omega * omega, &
+      this%mur * MU0 * this%sigma * omega, kind=8))
   end subroutine calcPropagationConstant_linear
 
   subroutine calcPropagationConstant_freq(this, omega)

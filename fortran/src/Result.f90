@@ -8,26 +8,26 @@ module mResult
     !! Base type for different result types
     private
     character(256) :: id
-    type(tNode), allocatable, pointer :: nodes(:)
+    type(tNode), pointer :: nodes(:)
     !! Pointer to array of nodes for which results are stored
-    type(tElement), allocatable, pointer :: elements(:)
+    class(tElement), pointer :: elements(:)
     !! Pointer to array of elements for which results are stored
-    type(tElectrode), allocatable, pointer :: electrodes(:)
+    type(tElectrode), pointer :: electrodes(:)
     !! Pointer to array of electrodes for which results are stored
-    real(8), allocatable, pointer :: omega(:)
+    real(8), pointer :: omega(:)
     !! Pointer to array of angular frequencies
   contains
     procedure(alloc_interface), deferred :: alloc
   end type tResult
 
   abstract interface
-    subroutine alloc_interface(this)
+    subroutine alloc_interface(this, nodes, elements, electrodes, omega)
       import :: tResult, tNode, tElement, tElectrode
       class(tResult), intent(inout) :: this
-      type(tNode), pointer :: nodes(:)
-      class(tElement), pointer :: elements(:)
-      type(tElectrode), pointer :: electrodes(:)
-      real(8), pointer :: omega(:)
+      type(tNode), pointer, intent(inout) :: nodes(:)
+      class(tElement), pointer, intent(inout) :: elements(:)
+      type(tElectrode), pointer, intent(inout) :: electrodes(:)
+      real(8), pointer, intent(inout) :: omega(:)
     end subroutine alloc_interface
   end interface
 
@@ -93,7 +93,7 @@ contains
     !! Allocate arrays for voltages result
     class(tVoltages), intent(inout) :: this
     type(tNode), pointer, intent(inout) :: nodes(:)
-    type(tElement), pointer, intent(inout) :: elements(:)
+    class(tElement), pointer, intent(inout) :: elements(:)
     type(tElectrode), pointer, intent(inout) :: electrodes(:)
     real(8), pointer, intent(inout) :: omega(:)
 
@@ -104,7 +104,7 @@ contains
     !! Allocate arrays for longitudinal currents result
     class(tLongCurrents), intent(inout) :: this
     type(tNode), pointer, intent(inout) :: nodes(:)
-    type(tElement), pointer, intent(inout) :: elements(:)
+    class(tElement), pointer, intent(inout) :: elements(:)
     type(tElectrode), pointer, intent(inout) :: electrodes(:)
     real(8), pointer, intent(inout) :: omega(:)
 
@@ -115,7 +115,7 @@ contains
     !! Allocate arrays for transverse currents result
     class(tTransCurrents), intent(inout) :: this
     type(tNode), pointer, intent(inout) :: nodes(:)
-    type(tElement), pointer, intent(inout) :: elements(:)
+    class(tElement), pointer, intent(inout) :: elements(:)
     type(tElectrode), pointer, intent(inout) :: electrodes(:)
     real(8), pointer, intent(inout) :: omega(:)
 

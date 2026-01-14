@@ -10,7 +10,6 @@ module mNode
     !! Voltage at the node (V)
   end type
 contains
-
   function newNode(id, p) result(this)
     !! Constructor function to create a tNode instance
     !! @param[in] id Node identifier

@@ -8,7 +8,7 @@ module mStructure
 
   type :: tElementNode
     !! Linked list node for elements
-    class(tElement), pointer :: elem => null()
+    class(tElement), allocatable :: elem
     type(tElementNode), pointer :: next => null()
   end type
 
@@ -81,12 +81,11 @@ contains
 
   subroutine addElementToStructure(this, element)
     class(tStructure), intent(inout) :: this
-    class(tElement), pointer, intent(inout) :: element
+    class(tElement), allocatable, intent(inout) :: element
     type(tElementNode), pointer :: node
 
     allocate(node)
-    node%elem => element
-    nullify(element)
+    call move_alloc(element, node%elem)
 
     node%next => this%elements
     this%elements => node
@@ -189,7 +188,7 @@ contains
     p => this%elements
     do while (associated(p))
       next => p%next
-      if (associated(p%elem)) deallocate(p%elem)
+      deallocate(p%elem)
       deallocate(p)
       p => next
     end do

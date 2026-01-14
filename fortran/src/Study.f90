@@ -1,6 +1,8 @@
 module mStudy
   use mMesh
   use mStructure
+  use mElement
+  use mResult
   implicit none
 
   type :: tStudy
@@ -9,36 +11,41 @@ module mStudy
     type(tStructure) :: structure
     type(tMesh) :: mesh
     class(tElement), pointer :: element => null()
-    type(tResult), allocatable :: results(:)
-    !! Array of results to be extracted and postprocessing
+    class(tResult), allocatable :: results(:)
+    !! Array of results to be extracted and postprocessing]
+  contains
+    procedure :: report
   end type tStudy
 contains
-  subroutine report(study)
+  subroutine report(this)
     !! Print a summary report of the study
     implicit none
-    type(tStudy), intent(in) :: study
+    class(tStudy), intent(in) :: this
+    integer :: i
+    class(tElement), pointer :: element => null()
+
     print *, "========================================="
     print *, "Example Study Initialization"
     print *, "========================================="
-    print *, "Study Title: ", trim(study%title)
+    print *, "Study Title: ", trim(this%title)
     print *, ""
-    print *, "Number of Nodes: ", study%structure%getNodeCount()
-    print *, "Number of Materials: ", study%structure%getMaterialCount()
-    print *, "Number of Elements: ", study%structure%getElementCount()
+    print *, "Number of Nodes: ", this%structure%getNodeCount()
+    print *, "Number of Materials: ", this%structure%getMaterialCount()
+    print *, "Number of Elements: ", this%structure%getElementCount()
     print *, ""
     print *, "Nodes:"
-    do i = 1, study%structure%getNodeCount()
-      print *, "  ", trim(study%structure%nodes(i)%id), &
-        " at (", study%structure%nodes(i)%p(1), ", ", &
-        study%structure%nodes(i)%p(2), ", ", &
-        study%structure%nodes(i)%p(3), ")"
+    do i = 1, this%structure%getNodeCount()
+      print *, "  ", trim(this%structure%nodes(i)%id), &
+        " at (", this%structure%nodes(i)%p(1), ", ", &
+        this%structure%nodes(i)%p(2), ", ", &
+        this%structure%nodes(i)%p(3), ")"
     end do
     print *, ""
     print *, "Elements:"
-    do i = 1, study%structure%getElementCount()
-      element = study%structure%getElement(i)
-      print *, "  ", trim(element%id), &
-        " - Length: ", element%length, " m"
+    do i = 1, this%structure%getElementCount()
+      element => this%structure%getElement(i)
+      print *, "  ", trim(element%id), " with material ", &
+        trim(element%material%id), " and ", element%nNodes, " nodes."
     end do
     print *, "========================================="
   end subroutine report
