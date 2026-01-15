@@ -24,7 +24,7 @@ pipx install fortls
 * run `build.sh` (assuming Gfortran) to:
     * get and compile the [SLATEC lib](https://github.com/carloskleber/slatec);
     * Compile the main project with full optimization.
-
+* Run the provided examples with `fpm run --example`.
 
 ### Linux
 

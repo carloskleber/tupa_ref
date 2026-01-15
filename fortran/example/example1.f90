@@ -3,16 +3,19 @@ program example1
   use mNode
   use mMaterial
   use mElementLine
+  use mCtes
   implicit none
 
   type(tStudy) :: study
   type(tNode) :: node1, node2, node3
   type(tLinear) :: copper, soil
   type(tLine) :: line1, line2
-  integer :: i
   class(tElement), allocatable :: elem
   !! Temporary element
+  class(tMaterial), allocatable :: mat
+  integer :: i
 
+  print *, color_green, "Starting Example 1: buried bare conductor", color_reset
   ! Initialize study
   study%title = "Example 1 - buried bare conductor"
 
@@ -22,7 +25,8 @@ program example1
   call study%structure%addNode(newNode("Node_3", [20.d0, 0.d0, -0.5d0]))
 
   ! Add materials to structure
-  call study%structure%addMaterial(newMaterialLinear("copper", 1.d0, 1.d0, 5.96d7))
+  mat = newMaterialLinear("copper", 1.d0, 1.d0, 5.96d7)
+  call study%structure%addMaterial(mat)
   study%structure%soil = newMaterialLinear("", 1.d0, 1.d0, 1d-2)
 
   ! Create 2 tLine elements
@@ -33,5 +37,5 @@ program example1
 
   ! Print summary
   call study%report()
-
+  print *, color_green, "Example 1 completed.", color_reset
 end program example1

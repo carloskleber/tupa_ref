@@ -12,6 +12,12 @@ module mStructure
     type(tElementNode), pointer :: next => null()
   end type
 
+  type :: tMaterialNode
+    !! Linked list node for materials
+    class(tMaterial), allocatable :: material
+    type(tMaterialNode), pointer :: next => null()
+  end type
+
   type, public :: tStructure
     type(tNode), allocatable :: nodes(:)
     !! Array of main nodes
@@ -19,7 +25,7 @@ module mStructure
     !! Array of electrodes
     type(tElementNode), pointer :: elements => null()
     !! Array of elements
-    class(tMaterial), allocatable :: materials(:)
+    class(tMaterialNode), pointer :: materials => null()
     !! Array of conductive materials to be applied in elements
     class(tMaterial), allocatable :: soil
     !! Soil electrical properties.
@@ -125,35 +131,15 @@ contains
 
   subroutine addMaterialToStructure(this, material)
     class(tStructure), intent(inout) :: this
-    class(tMaterial), intent(in) :: material
-    class(tMaterial), allocatable :: temp(:)
-    integer :: newSize
-    integer :: i
+    class(tMaterial), allocatable, intent(inout) :: material
+    type(tMaterialNode), pointer :: node
 
-    if (.not. allocated(this%materials)) then
-      ! First allocation: initial capacity of 10
-      allocate(this%materials(10), source=material)
-      this%materialCount = 0
-    end if
+    allocate(node)
+    call move_alloc(material, node%material)
 
-    if (this%materialCount >= size(this%materials)) then
-      ! Array is full, expand it (double the size)
-      newSize = size(this%materials) * 2
-      allocate(temp(newSize), source=material)
-      do i = 1, this%materialCount
-        allocate(temp(i), source=this%materials(i))
-      end do
-      deallocate(this%materials)
-      allocate(this%materials(newSize), source=material)
-      do i = 1, this%materialCount
-        allocate(this%materials(i), source=temp(i))
-      end do
-      deallocate(temp)
-    end if
-
-    ! Add new material
+    node%next => this%materials
+    this%materials => node
     this%materialCount = this%materialCount + 1
-    allocate(this%materials(this%materialCount), source=material)
   end subroutine addMaterialToStructure
 
   function getMaterialCountStructure(this) result(count)
@@ -177,7 +163,8 @@ contains
 
   subroutine finalizeStructure(this)
     type(tStructure), intent(inout) :: this
-    type(tElementNode), pointer :: p, next
+    type(tElementNode), pointer :: pElem, nextElem
+    type(tMaterialNode), pointer :: pMat, nextMat
 
     if (allocated(this%nodes)) then
       deallocate(this%nodes)
@@ -185,17 +172,22 @@ contains
     if (allocated(this%electrodes)) then
       deallocate(this%electrodes)
     end if
-    p => this%elements
-    do while (associated(p))
-      next => p%next
-      deallocate(p%elem)
-      deallocate(p)
-      p => next
+    pElem => this%elements
+    do while (associated(pElem))
+      nextElem => pElem%next
+      deallocate(pElem%elem)
+      deallocate(pElem)
+      pElem => nextElem
     end do
     nullify(this%elements)
-    if (allocated(this%materials)) then
-      deallocate(this%materials)
-    end if
+    pMat => this%materials
+    do while (associated(pMat))
+      nextMat => pMat%next
+      deallocate(pMat%material)
+      deallocate(pMat)
+      pMat => nextMat
+    end do
+    nullify(this%materials)
     this%materialCount = 0
     this%nodeCount = 0
     this%elementCount = 0

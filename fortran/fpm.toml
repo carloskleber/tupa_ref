@@ -26,3 +26,8 @@ test = false
 implicit-typing = false
 implicit-external = false
 source-form = "free"
+
+[[example]]
+name = "example1"
+main = "example1.f90"
+
