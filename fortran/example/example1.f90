@@ -4,6 +4,7 @@ program example1
   use mMaterial
   use mElementLine
   use mCtes
+  use stdlib_version
   implicit none
 
   type(tStudy) :: study
@@ -14,6 +15,9 @@ program example1
   !! Temporary element
   class(tMaterial), allocatable :: mat
   integer :: i
+
+  ! debug - stdlib version
+  print *, stdlib_version_string
 
   print *, color_green, "Starting Example 1: buried bare conductor", color_reset
   ! Initialize study

@@ -44,6 +44,7 @@ module mStructure
     procedure :: getElement => getElementFromStructure
     procedure :: getElementCount => getElementCountStructure
     procedure :: addMaterial => addMaterialToStructure
+    procedure :: getMaterial => getMaterialFromStructure
     procedure :: getMaterialCount => getMaterialCountStructure
     final :: finalizeStructure
   end type tStructure
@@ -141,6 +142,30 @@ contains
     this%materials => node
     this%materialCount = this%materialCount + 1
   end subroutine addMaterialToStructure
+
+  function getMaterialFromStructure(this, index) result(material)
+    !! Retrieve pointer to material by index
+    class(tStructure), intent(in) :: this
+    integer, intent(in) :: index
+    class(tMaterial), pointer :: material
+    type(tMaterialNode), pointer :: p
+    integer :: i
+
+    p => this%materials
+    do i = 1, index - 1
+      if (associated(p)) then
+        p => p%next
+      else
+        exit
+      end if
+    end do
+
+    if (associated(p)) then
+      material => p%material
+    else
+      nullify(material)
+    end if
+  end function getMaterialFromStructure
 
   function getMaterialCountStructure(this) result(count)
     class(tStructure), intent(in) :: this

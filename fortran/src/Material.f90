@@ -1,5 +1,5 @@
 module mMaterial
-  use mCtes, only: PI, MU0, EPSILON0
+  use mCtes, only: PI, MU0, EPSILON0, newl
   implicit none
   private
 
@@ -13,6 +13,7 @@ module mMaterial
     complex(8) propagationConstant
   contains
     procedure(material_interface), deferred :: calcPropagationConstant
+    procedure(print_interface), deferred :: report
   end type tMaterial
 
   abstract interface
@@ -23,6 +24,14 @@ module mMaterial
     end subroutine material_interface
   end interface
 
+  abstract interface
+    subroutine print_interface(this, str)
+      import :: tMaterial
+      class(tMaterial), intent(in) :: this
+      character(:), allocatable, intent(inout) :: str
+    end subroutine print_interface
+  end interface
+
   type, extends(tMaterial), public :: tLinear
     real(8) epsilonr
     !! Relative permittivity
@@ -30,6 +39,7 @@ module mMaterial
     !! Conductivity (S/m)
   contains
     procedure :: calcPropagationConstant => calcPropagationConstant_linear
+    procedure :: report => report_linear
   end type tLinear
 
   type, extends(tMaterial), public :: tSoilFreq
@@ -37,6 +47,7 @@ module mMaterial
     real(8) kr
   contains
     procedure :: calcPropagationConstant => calcPropagationConstant_freq
+    procedure :: report => report_freq
   end type tSoilFreq
 contains
   function newMaterialLinear(id, epsilonr, mur, sigma) result(this)
@@ -45,7 +56,7 @@ contains
     !! @param[in] mur relative Permeability
     !! @param[in] sigma Conductivity (S/m)
     !! @return Instantiated tLinear object
-    character(*), intent(in) :: id
+    character(len=*), intent(in) :: id
     real(8), intent(in) :: epsilonr, mur, sigma
     type(tLinear) :: this
 
@@ -62,7 +73,7 @@ contains
     !! @param[in] alpha0 Frequency-dependent parameter
     !! @param[in] kr Frequency-dependent parameter
     !! @return Instantiated tSoilFreq object
-    character(*), intent(in) :: id
+    character(len=*), intent(in) :: id
     real(8), intent(in) :: mur, alpha0, kr
     type(tSoilFreq) :: this
 
@@ -91,5 +102,19 @@ contains
 
     this%propagationConstant = cmplx(0, 0, kind=8) !! TODO temporary initialization
   end subroutine calcPropagationConstant_freq
+
+  subroutine report_linear(this, str)
+    class(tLinear), intent(in) :: this
+    character(:), allocatable, intent(inout) :: str
+
+    str = str // "linear material" // newl
+  end subroutine report_linear
+
+  subroutine report_freq(this, str)
+    class(tSoilFreq), intent(in) :: this
+    character(:), allocatable, intent(inout) :: str
+
+    str = str // "frequency-dependent material" // newl
+  end subroutine report_freq
 
 end module mMaterial

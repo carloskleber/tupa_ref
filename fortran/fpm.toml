@@ -4,10 +4,8 @@ license = "GPL"
 author = "Carlos Kleber C. Arruda"
 maintainer = "carloskleber@gmail.com"
 copyright = "Copyright 2026, Carlos Kleber"
-
-[dependencies]
-stdlib = "*"
-feh = { git = "https://github.com/samharrison7/fortran-error-handler" }
+dependencies.stdlib = "*"
+dependencies.feh = { git = "https://github.com/samharrison7/fortran-error-handler" }
 
 [build]
 auto-executables = true

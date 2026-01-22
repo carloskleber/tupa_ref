@@ -19,6 +19,7 @@ module mElement
     !! Default radius for each segment (m)
   contains
     procedure(assemble_interface), deferred :: assemble
+    procedure(print_interface), deferred :: report
   end type
 
   abstract interface
@@ -30,4 +31,11 @@ module mElement
     end subroutine assemble_interface
   end interface
   
+  abstract interface
+    subroutine print_interface(this, str)
+      import :: tElement
+      class(tElement), intent(in) :: this
+      character(:), allocatable, intent(inout) :: str
+    end subroutine print_interface
+  end interface
 end module
