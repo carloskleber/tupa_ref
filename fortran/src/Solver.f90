@@ -9,9 +9,9 @@ subroutine solMalha (zLong, zTrans, topA, topB, topDmenosC, topDmaisC, nSeg, nNo
   ! Variables
   integer nSeg, nNos
   integer pivot(nNos)
-  double complex topA(nSeg, nNos), topB(nSeg, nNos), topDmaisC(nNos, nSeg), topDmenosC(nNos, nSeg)
-  double complex zLong(nSeg, nSeg), zTrans(nSeg, nSeg), facZ(nSeg, nSeg), S1(nNos, nSeg), S2(nNos, nSeg)
-  double complex Yg(nNos, nSeg), invZlA(nSeg, nNos), invZtB(nSeg, nNos)
+  complex(8) topA(nSeg, nNos), topB(nSeg, nNos), topDmaisC(nNos, nSeg), topDmenosC(nNos, nSeg)
+  complex(8) zLong(nSeg, nSeg), zTrans(nSeg, nSeg), facZ(nSeg, nSeg), S1(nNos, nSeg), S2(nNos, nSeg)
+  complex(8) Yg(nNos, nSeg), invZlA(nSeg, nNos), invZtB(nSeg, nNos)
 
   ! Body of solMalha
   !invZlA = topA .xi. zLong

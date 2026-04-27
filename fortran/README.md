@@ -22,9 +22,14 @@ pipx install fortls
 * `code .`;
 * Install the recommended "VS Code Server for Linux";
 * run `build.sh` (assuming Gfortran) to:
-    * get and compile the [SLATEC lib](https://github.com/carloskleber/slatec);
-    * Compile the main project with full optimization.
+  * get and compile the [SLATEC lib](https://github.com/carloskleber/slatec);
+  * Compile the main project with full optimization.
 * Run the provided examples with `fpm run --example`.
 
 ### Linux
 
+* Go directly to the bash procedure, install fpm and fortls.
+
+#### Arch
+
+Look for `gcc-fortran`

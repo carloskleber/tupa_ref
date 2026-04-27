@@ -1,4 +1,4 @@
-program example1
+program example2
   use mStudy
   use mNode
   use mMaterial
@@ -19,25 +19,27 @@ program example1
   ! debug - stdlib version
   print *, stdlib_version_string
 
-  print *, color_green, "Starting Example 1: buried bare conductor", color_reset
+  print *, color_green, "Starting Example 2: buried bare conductor, longer", color_reset
   ! Initialize study
-  study%title = "Example 1 - buried bare conductor"
+  study%title = "Example 2 - buried bare conductor"
 
+  ! Create 3 nodes
   call study%structure%addNode(newNode("Node_1", [0.d0, 0.d0, -0.5d0]))
-  call study%structure%addNode(newNode("Node_2", [2.d0, 0.d0, -0.5d0]))
+  call study%structure%addNode(newNode("Node_2", [10.d0, 0.d0, -0.5d0]))
+  call study%structure%addNode(newNode("Node_3", [20.d0, 0.d0, -0.5d0]))
 
+  ! Add materials to structure
   mat = newMaterialLinear("copper", 1.d0, 1.d0, 5.96d7)
   call study%structure%addMaterial(mat)
   study%structure%soil = newMaterialLinear("", 1.d0, 1.d0, 1d-2)
 
-  ! Create tLine element
-  elem = newElementLine("Line_1", "Node_1", "Node_2", 0.01d0, 2, "copper")
+  ! Create 2 tLine elements
+  elem = newElementLine("Line_1", "Node_1", "Node_2", 0.01d0, 10, "copper")
   call study%structure%addElement(elem)
-
-  ! Run the study
-  call study%run()
+  elem = newElementLine("Line_2", "Node_2", "Node_3", 0.01d0, 10, "copper")
+  call study%structure%addElement(elem)
 
   ! Print summary
   call study%report()
-  print *, color_green, "Example 1 completed.", color_reset
-end program example1
+  print *, color_green, "Example 2 completed.", color_reset
+end program example2

@@ -1,5 +1,6 @@
 module mMesh
   !! Mesh configuration: topology and impedances matrix
+  use mCtes
   implicit none
 
   ! Explicit interface for LAPACK ZGESV (double complex linear solve)
@@ -15,8 +16,6 @@ module mMesh
       complex(8), intent(inout) :: b(ldb, *)
     end subroutine zgesv
   end interface
-  real(8), parameter :: pi = acos(-1.)
-  real(8), parameter :: quatropi =  4. * acos(-1.)
   
   type :: tMesh
     complex(8), allocatable :: tensao(:)
@@ -57,10 +56,10 @@ contains
     allocate(mesh%Zlong(ns, ns))
     !allocate(mesh%Yg(nn, nn))
     allocate(mesh%Zeq(nn+2*ns, nn+2*ns))
-    mesh%A(:,:) = cmplx(0.,0.,kind=8)
-    mesh%B(:,:) = cmplx(0.,0.,kind=8)
-    mesh%C(:,:) = cmplx(0.,0.,kind=8)
-    mesh%D(:,:) = cmplx(0.,0.,kind=8)
+    mesh%A(:,:) = ZERO_CPLX
+    mesh%B(:,:) = ZERO_CPLX
+    mesh%C(:,:) = ZERO_CPLX
+    mesh%D(:,:) = ZERO_CPLX
   end function
   
 
@@ -73,11 +72,11 @@ contains
     
     do i1 = 1,ns
       mesh%A(i1, n1(i1)+1) = cmplx(-1.,0.,kind=8)
-      mesh%A(i1, n2(i1)+1) = cmplx(1.,0.,kind=8)
+      mesh%A(i1, n2(i1)+1) = ONE_CPLX
       mesh%B(i1, n1(i1)+1) = cmplx(-0.5,0.,kind=8)
       mesh%B(i1, n2(i1)+1) = cmplx(-0.5,0.,kind=8)
-      mesh%C(n1(i1)+1, i1) = cmplx(1.,0.,kind=8)
-      mesh%D(n2(i1)+1, i1) = cmplx(1.,0.,kind=8) ! Na verdade esta fazendo -D, ja para economizar conta
+      mesh%C(n1(i1)+1, i1) = ONE_CPLX
+      mesh%D(n2(i1)+1, i1) = ONE_CPLX ! Na verdade esta fazendo -D, ja para economizar conta
     enddo
   end subroutine
   
@@ -94,10 +93,10 @@ contains
     real(8), intent(in), value :: omega, epsAr, muAr, sigmaAr, epsSolo, muSolo, sigmaSolo
     type(tMesh), pointer :: mesh
 
-    mesh%cteEletAr = 1. / (quatropi * cmplx(sigmaAr, omega * epsAr,kind=8))
-    mesh%cteEletSolo = 1. / (quatropi * cmplx(sigmaSolo, omega * epsSolo,kind=8))
-    mesh%cteMagAr = cmplx(0., omega * muAr / quatropi, kind=8)
-    mesh%cteMagSolo = cmplx(0., omega * muSolo / quatropi, kind=8)
+    mesh%cteEletAr = 1. / (FOUR_PI * cmplx(sigmaAr, omega * epsAr,kind=8))
+    mesh%cteEletSolo = 1. / (FOUR_PI * cmplx(sigmaSolo, omega * epsSolo,kind=8))
+    mesh%cteMagAr = cmplx(0., omega * muAr / FOUR_PI, kind=8)
+    mesh%cteMagSolo = cmplx(0., omega * muSolo / FOUR_PI, kind=8)
     mesh%propAr = sqrt(cmplx(muAr * epsAr * omega * omega, -muAr * sigmaAr * omega,kind=8));
     mesh%propSolo = sqrt(cmplx(muSolo * epsSolo * omega * omega, -muSolo * sigmaSolo * omega,kind=8));
   end subroutine
@@ -215,18 +214,20 @@ contains
     mesh%Zeq((ns+1):(2*ns), 1:nn          ) = mesh%B
     mesh%Zeq((ns+1):(2*ns), (nn+1):(nn+ns)) = mesh%Ztrans
     mesh%Zeq((ns+1):(2*ns), (nn+ns+1):n   ) = mesh%Ztrans
-    mesh%Zeq((2*ns+1):n,    1:nn          ) = cmplx(0.,0.,kind=8)
+    mesh%Zeq((2*ns+1):n,    1:nn          ) = ZERO_CPLX
     mesh%Zeq((2*ns+1):n,    (nn+1):(nn+ns)) = mesh%C
     mesh%Zeq((2*ns+1):n,    (nn+ns+1):n   ) = mesh%D
   end subroutine calcFreq2
 
   integer(4) function injetaSinalF(mesh, nsig, pos, sig)
     !! Injeta o sinal
+    type(tMesh), pointer :: mesh
+      !! Mesh element
     integer(4), intent(in), value :: nsig
+      !! Número de sinais a injetar
     integer(4), intent(in) :: pos(nsig)
     complex(8), intent(in) :: sig(nsig)
     complex(8), allocatable :: y(:)
-    type(tMesh), pointer :: mesh
     integer INFO, nn, ns, n
     integer, allocatable :: IPIV(:)
     
@@ -268,8 +269,8 @@ contains
     write (*,*)
     write (*,*) desc
     do i = 1,m
-      write( * , "(1x,*(g10.3))") ((real(a(i,j))," ",j=1,n), j=1,n)
-      write( * , "(1x,*(g10.3))") ((aimag(a(i,j))," ",j=1,n), j=1,n)
+      write(*, "(1x,*(g10.3))") ((real(a(i,j))," ",j=1,n), j=1,n)
+      write(*, "(1x,*(g10.3))") ((aimag(a(i,j))," ",j=1,n), j=1,n)
     enddo
   end subroutine printM
 end module

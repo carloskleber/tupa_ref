@@ -18,8 +18,20 @@ module mStudy
     !! Array of results to be extracted and postprocessing]
   contains
     procedure :: report
+    procedure :: run
   end type tStudy
 contains
+  subroutine run(this)
+    !! Main routine to run the study (mesh generation, calculations, etc.)
+    implicit none
+    class(tStudy), intent(inout) :: this
+
+    ! For now, just generate the mesh and print a message
+    call this%mesh%generate(this%structure)
+    print *, "Mesh generated with ", this%mesh%getNodeCount(), " nodes and ", &
+             this%mesh%getElementCount(), " elements."
+  end subroutine run
+
   subroutine report(this)
     !! Print a summary report of the study
     implicit none
