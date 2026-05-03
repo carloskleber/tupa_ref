@@ -1,0 +1,26 @@
+{
+  "title": "Example 1 - buried bare conductor",
+  "soil": {
+    "conductivity": 0.01,
+    "permittivity": 1.0,
+    "permeability": 1.0
+  },
+  "nodes": [
+    { "id": "Node_1", "position": [0.0, 0.0, -0.5] },
+    { "id": "Node_2", "position": [2.0, 0.0, -0.5] }
+  ],
+  "materials": [
+    { "id": "copper", "epsilonr": 1.0, "mur": 1.0, "sigma": 5.96e7 }
+  ],
+  "elements": [
+    {
+      "type": "line",
+      "id": "Line_1",
+      "from": "Node_1",
+      "to": "Node_2",
+      "radius": 0.01,
+      "segments": 2,
+      "material": "copper"
+    }
+  ]
+}

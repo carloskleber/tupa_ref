@@ -33,3 +33,29 @@ pipx install fortls
 #### Arch
 
 Look for `gcc-fortran`
+
+## Code documentation
+
+Using [FORD](https://forddocs.readthedocs.io/en/stable/). A Python is needed, but only if you need to generated the docs.
+
+Config the enviroment:
+
+### Windows
+
+```powershell
+python.exe -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python.exe -m pip install ford lxml
+python.exe -m ford Tupa.md
+```
+
+### Linux
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install ford lxml
+python -m ford Tupa.md
+```
+
+After that the docs can be accessed in [doc/index.html](doc/index.html).
