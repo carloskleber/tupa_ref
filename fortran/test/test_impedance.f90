@@ -8,6 +8,7 @@ program test_impedance
   real(8) :: za1(3), zb1(3), zva(3), zvb(3), zla, zlb
   real(8) :: x, y
   integer :: i
+  real(8) :: result1, result2
 
   ! ----------------------------------------------------------------
   ! Test 1: FUNCBARRA - Distância entre pontos paralelos
@@ -88,14 +89,14 @@ program test_impedance
   result = integrate_1d(quadratic, 0.0d0, 1.0d0, 0.0d0, 1.0d-12)
   call test_ok("∫₀¹ x² dx = 1/3", &
                abs(result - expected) < tolerance, &
-               "Resultado: " // trim(adjustl(real_to_str(result)))
+               "Resultado: " // trim(adjustl(real_to_str(result))))
 
   ! Integral de sin(x) de 0 a pi
   expected = 2.0d0
   result = integrate_1d(sin_func, 0.0d0, acos(-1.0d0), 0.0d0, 1.0d-12)
   call test_ok("∫₀ᵠ sin(x) dx = 2", &
                abs(result - expected) < tolerance, &
-               "Resultado: " // trim(adjustl(real_to_str(result)))
+               "Resultado: " // trim(adjustl(real_to_str(result))))
 
   ! ----------------------------------------------------------------
   ! Test 5: Integração 2D - TWODQ
@@ -111,7 +112,7 @@ program test_impedance
                          result, "∫₀¹∫₀¹ x·y dy dx = 0.25")
   call test_ok("∫₀¹∫₀¹ x·y dy dx = 0.25", &
                abs(result - expected) < tolerance, &
-               "Resultado: " // trim(adjustl(real_to_str(result)))
+               "Resultado: " // trim(adjustl(real_to_str(result))))
 
   ! Integral de x^2 + y^2 sobre retângulo [0,1]x[0,2]
   expected = 10.0d0/3.0d0  ! = 3.333...
@@ -120,7 +121,7 @@ program test_impedance
                          result, "∫₀¹∫₀² (x²+y²) dy dx = 10/3")
   call test_ok("∫₀¹∫₀² (x²+y²) dy dx = 10/3", &
                abs(result - expected) < tolerance, &
-               "Resultado: " // trim(adjustl(real_to_str(result)))
+               "Resultado: " // trim(adjustl(real_to_str(result))))
 
   ! ----------------------------------------------------------------
   ! Test 6: IMPMUTUA - Casos de geometria simples
@@ -201,7 +202,6 @@ program test_impedance
   zlb = 3.0d0
 
   ! IMPMUTUA deve ser simétrica
-  real(8) :: result1, result2
   call IMPMUTUA(za1, zva, zla, zb1, zvb, zlb, result1)
   call IMPMUTUA(zb1, zvb, zlb, za1, zva, zla, result2)
 

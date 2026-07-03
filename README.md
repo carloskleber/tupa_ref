@@ -28,6 +28,13 @@ Independently from the language, what is expected:
 * One Mesh object which with an array of Nodes and Electrodes constitues a interconneced mesh, which implements one specific MoM implementation, solving a system of voltages and currents in frequency domain;
 * One Collector object, containing an array of Outputs, defined beforehand, to extrack and postprocess data from the Mesh solution.
 
+## Documentation
+
+Project-level documentation lives in [docs/](docs/): the [theory reference](docs/theory.md),
+[bibliography](docs/references.md), [implementation plan](docs/implementation-plan.md)
+and [architecture decision records](docs/README.md#adr-index). Build instructions for each
+implementation stay in its own folder (e.g. [fortran/README.md](fortran/README.md)).
+
 ## How to
 
 The project can be applied standalone using the existing projects, or adapted as a library, connecting with frontends.

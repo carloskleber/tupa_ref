@@ -24,9 +24,13 @@ class tLinear {
     +calcPropagationConstant(omega: real) : void
 }
 
-class tSoilFreq {
+class tPortelaSoil {
     +calcPropagationConstant(omega: real) : void
 }
+
+' Per ADR 0007, further dispersive-soil subtypes (tLongmireSmithSoil,
+' tVisacroAlipioSoil, ...) are siblings of tPortelaSoil under tMaterial,
+' not variants folded into a single generic soil class.
 
 ' Concrete Element implementation
 class tLine {
@@ -109,9 +113,9 @@ class mNode_createNode {
 }
 
 ' Inheritance relationships
-tLinear -(up)-|> tMaterial
-tSoilFreq -(up)-|> tMaterial
-tLine -(up)-|> tElement
+tLinear --> tMaterial
+tPortelaSoil --> tMaterial
+tLine --> tElement
 
 ' Composition/Association relationships
 tElement --> tMaterial : has

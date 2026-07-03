@@ -7,13 +7,17 @@ module mMaterial
   !! ω.  Two concrete types are provided:
   !!
   !! - `tLinear`: constant-parameter medium (air, simple soil, copper, …).
-  !! - `tSoilFreq`: frequency-dependent soil using the Longmire-Smith model
-  !!   (currently a placeholder — full implementation is planned).
+  !! - `tPortelaSoil`: frequency-dependent soil using Portela's minimum-phase
+  !!   power-law model (currently a placeholder — full implementation is
+  !!   planned). Per ADR 0007, this is the first of several `tMaterial`
+  !!   dispersive-soil subtypes; further models (e.g. `tLongmireSmithSoil`)
+  !!   are added as siblings, each named after its original reference —
+  !!   never folded into this one under a generic name.
   use mCtes, only: PI, MU0, EPSILON0, newl
   implicit none
   private
 
-  public :: newMaterialLinear, newMaterialFreq
+  public :: newMaterialLinear, newMaterialPortela
 
   ! ------------------------------------------------------------------
   ! Abstract base type
@@ -72,8 +76,11 @@ module mMaterial
     procedure :: report                  => report_linear
   end type tLinear
 
-  type, extends(tMaterial), public :: tSoilFreq
-    !! Frequency-dependent soil model (Longmire-Smith formulation).
+  type, extends(tMaterial), public :: tPortelaSoil
+    !! Frequency-dependent soil model (Portela's minimum-phase power-law
+    !! formulation — ADR 0007). Other dispersion models (Longmire-Smith,
+    !! Visacro-Alipio, ...) are separate `tMaterial` subtypes, not variants
+    !! of this one.
     !!
     !! Full implementation is pending; `calcPropagationConstant` is currently
     !! a placeholder that returns zero.
@@ -84,7 +91,7 @@ module mMaterial
   contains
     procedure :: calcPropagationConstant => calcPropagationConstant_freq
     procedure :: report                  => report_freq
-  end type tSoilFreq
+  end type tPortelaSoil
 
 contains
 
@@ -111,8 +118,8 @@ contains
     this%propagationConstant = cmplx(0.0d0, 0.0d0, kind=8)
   end function newMaterialLinear
 
-  function newMaterialFreq(id, mur, alpha0, kr) result(this)
-    !! Construct a `tSoilFreq` material with Longmire-Smith parameters.
+  function newMaterialPortela(id, mur, alpha0, kr) result(this)
+    !! Construct a `tPortelaSoil` material with Portela power-law parameters.
     character(len=*), intent(in) :: id
     !! Material identifier
     real(8), intent(in) :: mur
@@ -121,14 +128,14 @@ contains
     !! Power-law frequency exponent α₀
     real(8), intent(in) :: kr
     !! Loss-tangent scaling factor kr
-    type(tSoilFreq) :: this
+    type(tPortelaSoil) :: this
 
     this%id                  = id
     this%mur                 = mur
     this%alpha0              = alpha0
     this%kr                  = kr
     this%propagationConstant = cmplx(0.0d0, 0.0d0, kind=8)
-  end function newMaterialFreq
+  end function newMaterialPortela
 
   ! ------------------------------------------------------------------
   ! calcPropagationConstant implementations
@@ -146,17 +153,17 @@ contains
   end subroutine calcPropagationConstant_linear
 
   subroutine calcPropagationConstant_freq(this, omega)
-    !! Compute γ for frequency-dependent soil (Longmire-Smith).
+    !! Compute γ for frequency-dependent soil (Portela power-law, ADR 0007).
     !!
     !! **Not yet implemented** — currently initialises to zero.
-    class(tSoilFreq), intent(inout) :: this
+    class(tPortelaSoil), intent(inout) :: this
     real(8), intent(in) :: omega
     !! Angular frequency ω (rad/s)
     real(8) :: ki
 
     ki = this%kr * tan(0.5d0 * PI * this%alpha0)
 
-    this%propagationConstant = cmplx(0.0d0, 0.0d0, kind=8) ! TODO: implement Longmire-Smith
+    this%propagationConstant = cmplx(0.0d0, 0.0d0, kind=8) ! TODO: implement Portela power-law
   end subroutine calcPropagationConstant_freq
 
   ! ------------------------------------------------------------------
@@ -174,7 +181,7 @@ contains
 
   subroutine report_freq(this, str)
     !! Append a one-line description of the frequency-dependent material to `str`.
-    class(tSoilFreq), intent(in) :: this
+    class(tPortelaSoil), intent(in) :: this
     character(:), allocatable, intent(inout) :: str
     !! Accumulator string — text is appended
 
