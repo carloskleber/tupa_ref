@@ -248,8 +248,101 @@ conductor, with the convention audit done first. Priority order:
 
 | Decision | Status |
 | --- | --- |
-| Soil dispersion model | ADR 0007 **proposed** (Portela power-law first) — confirm |
+| Soil dispersion model | ADR 0007 **proposed** (Portela power-law first) — confirm; see P5 in §7 |
 | Voltage-source handling | current-injection equivalent vs constraint rows — decide in Phase 3 |
-| FFT dependency | stdlib vs FFTW — decide in Phase 6 |
+| FFT dependency | stdlib vs FFTW — decide in Phase 6; NLT proposed on top (P4 in §7) |
 | JSON schema v1 | draft with Phase 5; freeze before Python port |
 | Reduced `Z_g` solver | deferred optimisation (ADR 0003) |
+
+---
+
+## 7. Proposals from the open-source HEM comparison (July 2026)
+
+Three companion open-source codes were inspected side by side with this
+repository (see "Related open-source implementations" in
+[references.md](references.md)):
+
+- **TAGS** (pedrohnv, C99) — HEM/mHEM grounding solver, NLT time domain,
+  field/potential post-processing;
+- **PRTL-mHEM** (VitorLima1990, Python) — mHEM grounding inside a full line
+  lightning-performance chain;
+- **PRTL** (acslima, Wolfram/CDF) — the original open framework the Python
+  port derives from.
+
+Headline finding: TUPÃ's geometry-factor separation (theory.md §4.1, from the
+2003 dissertation) is the same optimisation published as **mHEM** by Lima et
+al. (references.md [11]) and used by TAGS/PRTL-mHEM — so the core design is
+independently validated in the literature. TAGS's closed-form self integral
+is identical to theory.md's `g_self`, confirming the gap-8 fix. The concrete
+proposals, in priority order:
+
+### P1 — mHEM single-integral kernel for `g(a,b)` (Phase 2, low effort)
+
+Replace the default 2-D Gauss–Kronrod evaluation of the geometry factor with
+the 1-D form now stated in theory.md §4.2: the inner integral over the sender
+segment is the closed-form log term, leaving one adaptive quadrature. Same
+quantity, cheaper and better conditioned for close segments. Keep the 2-D
+path as the test oracle (already exists in `Impedance.f90`/`Geometry.f90`).
+
+### P2 — Frequency-dependent image reflection coefficient (Phase 2/4, low effort)
+
+Promote Γ(ω) from "planned refinement" to the default for buried conductors:
+`Γ_t(ω) = (W_soil − jωε₀)/(W_soil + jωε₀)`, `Γ_ℓ = 1` (theory.md §5). Both
+reference codes use it even with constant soil parameters; it needs only the
+medium constants already computed in `calcParam` and multiplies the image
+parcel. The ideal ±1 table remains as its low-frequency limit and as a test
+pin. Validation impact: Portela 1997 curves should still match; Grcev-grid
+MHz-range behaviour will not without it.
+
+### P3 — Cross-code validation against TAGS (Phase 2 milestone, medium effort)
+
+TAGS builds locally (C99 + Cubature + LAPACK) and takes arbitrary electrode
+lists. Add a validation step that runs the Phase 2 buried conductor (and later
+the Grcev grid) through both codes and compares input impedance over the
+sweep. This gives an executable oracle *now*, independent of digitised paper
+curves. Caveats in theory.md §9.6: compare physical outputs only — TAGS uses
+`|cosθ|` and different incidence/system conventions internally.
+
+### P4 — Numerical Laplace Transform for the time domain (Phase 6, medium effort)
+
+Adopt the NLT (complex frequency `s = c + jω`, damping `c ≈ ln(N²)/T`, window
+filter before the inverse transform — Gómez & Uribe, references.md [17])
+instead of the plain FFT drive, as TAGS and PRTL do. The physics kernels are
+untouched (they already take complex medium constants); only the sweep driver
+and the inverse-transform step change. Plain FFT is the `c = 0` special case
+and remains for tests.
+
+### P5 — Concretise the dispersive-soil subtypes (Phase 4, feeds ADR 0007)
+
+The comparison supplies exact, citable formulas and parameter tables:
+`tVisacroAlipioSoil` per Alipio & Visacro 2014 [14] (with the mean /
+relatively conservative / conservative sets — the default in both reference
+codes), `tLongmireSmithSoil` per Longmire & Smith [15] as parametrised by
+Cavka et al. [16]. Keep `tPortelaSoil` first (matches the project validation
+curves); implement `tVisacroAlipioSoil` second since it enables direct
+comparison with TAGS/PRTL-mHEM outputs.
+
+### P6 — Parallelise over frequencies, not the matrix fill (Phase 3, decision)
+
+TAGS deliberately multithreads the frequency loop and pins BLAS to one thread
+("this is important"), since frequencies are embarrassingly parallel and the
+per-frequency work (fill + `ZGESV`) shares nothing. With geometry factors
+precomputed once, TUPÃ's frequency loop has the same shape. Proposal: measure
+both, but expect frequency-level OpenMP to supersede the fill-loop OpenMP
+currently pencilled in (CLAUDE.md hook to be updated if confirmed).
+
+### P7 — Field/potential post-processing (Phase 7+, new feature)
+
+TAGS computes scalar potential, electric field and path voltages at arbitrary
+points from the solved `I_t`/`I_ℓ` (touch and step voltages, GPR profiles).
+Maps cleanly onto new `tResult` subtypes; useful the moment grids are
+simulated. Not needed for the near-term milestone.
+
+### Explicitly *not* proposed
+
+- Adopting TAGS's symmetric `(u, I_ℓ, I_t)` immittance block system — TUPÃ's
+  `(u, i₁, i₂)` form is equivalent, already ported, and pinned by theory.md
+  §6; noted in §9.6 as a consistency-check option only.
+- The transmission-line performance chain of PRTL/PRTL-mHEM (towers, spans,
+  flashover, outage rate) — out of scope for the grounding-solver milestone;
+  revisit after Phase 8 (it is the dissertation's original application).

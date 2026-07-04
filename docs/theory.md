@@ -149,10 +149,30 @@ propagation factors. This is the decisive optimisation over the plain HEM
 segment length: the approximation requires segments short compared to the
 wavelength in the medium (in practice $\lesssim \lambda/10$, a few metres for soil at 1 MHz).
 
+The same separation was published independently by Lima et al. [11] as the
+**modified HEM (mHEM)**, with error analysis and validation against the full
+HEM on grounding grids; it is the default integration mode of the open-source
+TAGS and PRTL-mHEM codes (references.md). Their published results are an
+external validation of this optimisation.
+
 ### 4.2 Evaluating the geometry factor
 
-- **General position**: adaptive 2-D quadrature (nested Gauss–Kronrod 7/15) of
-  $1/R_{ab}$ over both segments. The integrand is smooth unless segments touch.
+- **Single-integral (mHEM) form** — preferred. The inner integral over a
+  straight segment $b$ has a closed form: for a field point $p$ on segment
+  $a$, with $r_1, r_2$ the distances from $p$ to the two ends of $b$,
+
+  $$\int_0^{l_b} \frac{d\ell_b}{R} = \ln\left(\frac{r_1 + r_2 + l_b}{r_1 + r_2 - l_b}\right)$$
+
+  (constant-$R$ sum defines prolate-spheroidal coordinates around $b$), so
+
+  $$g(a,b) = \int_0^{l_a} \ln\left(\frac{r_1 + r_2 + l_b}{r_1 + r_2 - l_b}\right) d\ell_a$$
+
+  — a 1-D adaptive quadrature of a smooth integrand [11]. Cheaper and
+  better-conditioned than the double quadrature, especially for close
+  segments.
+- **General position, 2-D**: adaptive 2-D quadrature (nested Gauss–Kronrod
+  7/15) of $1/R_{ab}$ over both segments. The integrand is smooth unless
+  segments touch. Kept as the test oracle for the single-integral form.
 - **Parallel segments** and **orthogonal segments**: closed-form expressions
   exist (logarithms and arctangents of the corner distances); see [3, annex]
   for the derivation. Used both as fast paths and as quadrature test oracles.
@@ -162,7 +182,10 @@ wavelength in the medium (in practice $\lesssim \lambda/10$, a few metres for so
   $$g_{\text{self}} = 2 \left[ l \ln\left(\frac{l + \sqrt{l^2 + r_0^2}}{r_0}\right) - \sqrt{l^2 + r_0^2} + r_0 \right]$$
 
   Note $\ln\left(\frac{l+h}{h-l}\right) = 2 \ln\left(\frac{l+h}{r_0}\right)$ for $h = \sqrt{l^2+r_0^2}$, which explains
-  the equivalent forms found in the literature.
+  the equivalent forms found in the literature. The identical expression is
+  used by the open-source TAGS implementation (`self_integral`), an
+  independent confirmation of this formula (the original C++ TUPÃ had it
+  wrong by a factor of 2 — see the implementation plan, gap 8).
 
 ### 4.3 Self impedances
 
@@ -214,10 +237,23 @@ ideal limits, which gives the sign rules:
 Rationale: for buried conductors the air above is (nearly) non-conducting, so
 the leakage current sees a "current mirror" of equal sign; for conductors in
 air above a conducting soil, the soil approaches a potential boundary and the
-image charge/current has opposite sign. The general treatment with
-frequency-dependent Fresnel-type reflection coefficients $\Gamma(\omega)$ (Portela [1]
-§2.4, [3]) is a planned refinement; the cross-media coupling (air segment ↔
-buried segment) is second-order and is neglected, as in the original code.
+image charge/current has opposite sign.
+
+The general treatment uses frequency-dependent, quasi-static Fresnel-type
+reflection coefficients (Portela [1] §2.4, [3]). For segments buried in soil
+with immittance $W_s = \sigma_s + j\omega\varepsilon_s$, both TAGS and PRTL-mHEM
+(references.md) use
+
+$$\Gamma_t(\omega) = \frac{W_s - j\omega\varepsilon_0}{W_s + j\omega\varepsilon_0}, \qquad \Gamma_\ell = 1$$
+
+applied to the image terms of $Z_t$ **and** $Z_\ell$ (PRTL-mHEM applies
+$\Gamma_t$ to both; TAGS keeps them independent parameters). The ideal sign
+rules in the table are the $|W_s| \gg \omega\varepsilon_0$ limit of these
+coefficients; they degrade for high-resistivity soils toward the MHz range,
+where $\Gamma_t$ acquires magnitude < 1 and phase. Implementing $\Gamma(\omega)$
+is a planned refinement (implementation plan §7); the cross-media coupling
+(air segment ↔ buried segment) is second-order and is neglected, as in the
+original code.
 
 For the **self** terms the "mutual with the own image" appears with distance
 $\bar{R}_i = 2h$ (twice the depth/height of the segment centre).
@@ -299,9 +335,14 @@ to this model (`kr` scaling the dispersive parcel, $\tan(\pi\alpha/2)$ tying the
 imaginary part). Per [ADR 0007](adr/0007-soil-dispersion-model.md), `tMaterial` admits
 several dispersive-soil subtypes side by side, each named after its original
 reference — `tPortelaSoil` (implemented first, matches the validation curves),
-`tLongmireSmithSoil` (a 13-term Debye expansion, an alternative parametrisation
-targeted by lightning studies), `tVisacroAlipioSoil`, etc. All must reduce to the
-constant-parameter (`tLinear`) medium as $\omega \to 0$.
+`tLongmireSmithSoil` (the 13-term Debye expansion of Longmire & Smith [15], as
+parametrised by Cavka et al. [16], an alternative targeted by lightning
+studies), `tVisacroAlipioSoil` (the measurement-based causal model of Visacro
+& Alipio [13], condensed in [14] with recommended *mean* / *relatively
+conservative* / *conservative* parameter sets — the default soil of the TAGS
+and PRTL-mHEM codes), etc. All must reduce to the constant-parameter
+(`tLinear`) medium as $\omega \to 0$. Cavka et al. [16] compare these models
+side by side and are the reference for cross-checking any implementation.
 
 ---
 
@@ -318,6 +359,18 @@ for lightning impulses; for large structures, the smooth behaviour of $H(\omega)
 allows computing a reduced set of frequencies and interpolating (analytic
 fitting), drastically cutting run time. Logarithmic frequency spacing is the
 project default for broadband sweeps.
+
+**Numerical Laplace Transform (NLT) refinement.** TAGS, PRTL and PRTL-mHEM
+solve at complex frequencies $s = c + j\omega$ instead of $j\omega$, with damping
+constant $c \approx \ln(N^2)/T$ (N samples, window $T$) and a data window
+(Hanning, Blackman, …) applied before the inverse transform (Gómez & Uribe
+[17]). The damping suppresses aliasing of the late-time response and Gibbs
+oscillations; the plain FFT drive is the $c = 0$ special case. Since every
+frequency-domain routine already takes a complex constant, supporting NLT
+only changes the sweep driver, not the physics kernels. Note the two sweep
+modes serve different purposes and use different axes: *harmonic response*
+(log-spaced, real $\omega$) and *transient* (linearly spaced $s_k$, as the
+IFFT/NLT grid requires).
 
 ---
 
@@ -339,3 +392,13 @@ Every implementation must reproduce, within stated tolerance:
 4. **Internal consistency**: full $Z_{\text{eq}}$ solve vs. reduced $Z_g$ form;
    quadrature geometry factor vs. closed-form parallel/orthogonal formulas;
    reciprocity ($Z_t$, $Z_\ell$ symmetric); passivity ($\text{Re}\{Z_{\text{in}}\} \geq 0$).
+5. **Grcev & Heimbach 1997 [18]**: harmonic impedance of square grounding
+   grids — exercises many segments, right angles and the image terms; the
+   TAGS examples reproduce it, enabling a three-way comparison.
+6. **Cross-code check**: TAGS (references.md) is open source, builds locally,
+   and accepts the same geometries — run identical cases and compare input
+   impedance and node voltages. Compare *physical outputs only*, not raw
+   matrices: TAGS assembles $Z_\ell$ with $|\cos\theta|$ and its own incidence
+   conventions (a valid convention set paired with its solver, but different
+   from §2), and its "immittance" system uses unknowns $(\mathbf{u}, I_\ell, I_t)$
+   in a symmetric block layout rather than §6's $(\mathbf{u}, \mathbf{i}_1, \mathbf{i}_2)$.
