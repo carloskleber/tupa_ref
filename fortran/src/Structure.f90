@@ -42,6 +42,8 @@ module mStructure
 
     integer :: nodeCount = 0
     !! Current number of nodes in the `nodes` array
+    integer :: electrodeCount = 0
+    !! Current number of electrodes in the `electrodes` array
     integer :: elementCount = 0
     !! Current number of elements in the linked list
     integer :: materialCount = 0
@@ -51,6 +53,12 @@ module mStructure
     !! Append a new node to the `nodes` array (with dynamic expansion)
     procedure :: getNodeCount      => getNodeCountStructure
     !! Return the current number of nodes
+    procedure :: findNodeIndex     => findNodeIndexInStructure
+    !! Look up a node's 1-based index by its user-assigned ID (0 if not found)
+    procedure :: addElectrode      => addElectrodeToStructure
+    !! Append a new electrode to the `electrodes` array (with dynamic expansion)
+    procedure :: getElectrodeCount => getElectrodeCountStructure
+    !! Return the current number of electrodes
     procedure :: addElement        => addElementToStructure
     !! Append an element to the linked list
     procedure :: getElement        => getElementFromStructure
@@ -61,8 +69,12 @@ module mStructure
     !! Append a material to the linked list
     procedure :: getMaterial       => getMaterialFromStructure
     !! Retrieve pointer to material by 1-based linked-list index
+    procedure :: findMaterial      => findMaterialByIdInStructure
+    !! Look up a material pointer by its user-assigned ID (null if not found)
     procedure :: getMaterialCount  => getMaterialCountStructure
     !! Return the current number of materials
+    procedure :: assembleStructure => assembleStructureImpl
+    !! Discretise all elements into nodes and electrodes
     final :: finalizeStructure
     !! Destructor: deallocate all linked lists and arrays
   end type tStructure
@@ -110,6 +122,66 @@ contains
 
     count = this%nodeCount
   end function getNodeCountStructure
+
+  function findNodeIndexInStructure(this, id) result(idx)
+    !! Look up a node's 1-based index by its user-assigned ID.
+    !!
+    !! Returns 0 if no node with that ID exists.
+    class(tStructure), intent(in) :: this
+    character(len=*), intent(in) :: id
+    !! User-assigned node identifier
+    integer :: idx
+    integer :: i
+
+    idx = 0
+    do i = 1, this%nodeCount
+      if (trim(this%nodes(i)%id) == trim(id)) then
+        idx = i
+        return
+      end if
+    end do
+  end function findNodeIndexInStructure
+
+  ! =====================================================================
+  ! Electrode management (dynamic array)
+  ! =====================================================================
+
+  subroutine addElectrodeToStructure(this, electrode)
+    !! Append a tElectrode to the `electrodes` array, expanding if necessary.
+    !!
+    !! Uses the same doubling growth strategy as `addNodeToStructure`.
+    class(tStructure), intent(inout) :: this
+    type(tElectrode), intent(in) :: electrode
+    !! Electrode to append
+    type(tElectrode), allocatable :: temp(:)
+    integer :: newSize
+
+    if (.not. allocated(this%electrodes)) then
+      allocate(this%electrodes(10))
+      this%electrodeCount = 0
+    end if
+
+    if (this%electrodeCount >= size(this%electrodes)) then
+      newSize = size(this%electrodes) * 2
+      allocate(temp(newSize))
+      temp(1:this%electrodeCount) = this%electrodes(1:this%electrodeCount)
+      deallocate(this%electrodes)
+      allocate(this%electrodes(newSize))
+      this%electrodes(1:this%electrodeCount) = temp(1:this%electrodeCount)
+      deallocate(temp)
+    end if
+
+    this%electrodeCount = this%electrodeCount + 1
+    this%electrodes(this%electrodeCount) = electrode
+  end subroutine addElectrodeToStructure
+
+  function getElectrodeCountStructure(this) result(count)
+    !! Return the current number of electrodes.
+    class(tStructure), intent(in) :: this
+    integer :: count
+
+    count = this%electrodeCount
+  end function getElectrodeCountStructure
 
   ! =====================================================================
   ! Element management (linked list)
@@ -211,6 +283,27 @@ contains
     end if
   end function getMaterialFromStructure
 
+  function findMaterialByIdInStructure(this, id) result(material)
+    !! Look up a material pointer by its user-assigned ID.
+    !!
+    !! Returns a null pointer if no material with that ID exists.
+    class(tStructure), intent(in) :: this
+    character(len=*), intent(in) :: id
+    !! User-assigned material identifier
+    class(tMaterial), pointer :: material
+    type(tMaterialNode), pointer :: p
+
+    p => this%materials
+    do while (associated(p))
+      if (trim(p%material%id) == trim(id)) then
+        material => p%material
+        return
+      end if
+      p => p%next
+    end do
+    nullify(material)
+  end function findMaterialByIdInStructure
+
   function getMaterialCountStructure(this) result(count)
     !! Return the current number of materials.
     class(tStructure), intent(in) :: this
@@ -223,7 +316,7 @@ contains
   ! Assembly and finalisation
   ! =====================================================================
 
-  subroutine assembleStructure(this)
+  subroutine assembleStructureImpl(this)
     !! Discretise all elements: resolve pointers and create nodes and electrodes.
     !!
     !! Iterates through the linked list of elements and calls each element's
@@ -237,7 +330,7 @@ contains
       call p%elem%assemble(this)
       p => p%next
     end do
-  end subroutine assembleStructure
+  end subroutine assembleStructureImpl
 
   subroutine finalizeStructure(this)
     !! Destructor: deallocate all linked lists and arrays.
@@ -273,9 +366,10 @@ contains
     end do
     nullify(this%materials)
 
-    this%materialCount = 0
-    this%nodeCount     = 0
-    this%elementCount  = 0
+    this%materialCount  = 0
+    this%nodeCount      = 0
+    this%electrodeCount = 0
+    this%elementCount   = 0
   end subroutine finalizeStructure
 
 end module mStructure

@@ -14,7 +14,19 @@ module mImpedance
   !! pass integration parameters between nested functions. This avoids allocatable
   !! component issues in older compilers and preserves historical code structure.
   !! A modern refactoring could use module-level pointers instead.
+  use mCtes, only: PI, MU0
+  use mError, only: raiseError
   implicit none
+
+  ! Explicit interface for SLATEC ZBESI (complex modified Bessel function I)
+  interface
+    subroutine zbesi(zr, zi, fnu, kode, n, cyr, cyi, nz, ierr)
+      real(8), intent(in) :: zr, zi, fnu
+      integer, intent(in) :: kode, n
+      real(8), intent(out) :: cyr(n), cyi(n)
+      integer, intent(out) :: nz, ierr
+    end subroutine zbesi
+  end interface
 
   ! =====================================================================
   ! Abstract interfaces for function pointers
@@ -79,9 +91,55 @@ module mImpedance
   integer, parameter :: igauss(7) = [2, 4, 6, 8, 10, 12, 14]
   !! Indices in xgk/wgk that correspond to the 7-point Gauss rule
 
-  public :: IMPMUTUA, FUNCBARRA, LIMINF, LIMSUP, TWODQ
+  public :: IMPMUTUA, FUNCBARRA, LIMINF, LIMSUP, TWODQ, internalImpedance
 
 contains
+
+  ! =====================================================================
+  ! Internal (skin-effect) impedance of a solid cylindrical conductor
+  ! =====================================================================
+
+  complex(8) function internalImpedance(radius, length, omega, sigma, mur) result(Zint)
+    !! Internal impedance of a solid cylindrical conductor (theory.md §4.3):
+    !!
+    !!     z_int = sqrt(j*omega*mu/sigma) / (2*pi*r0) * I0(rho) / I1(rho)
+    !!     rho   = r0 * sqrt(j*omega*mu*sigma),  Zint = z_int * l
+    !!
+    !! I0, I1 are modified Bessel functions of the first kind (complex
+    !! argument), evaluated via SLATEC ZBESI. For |rho| > 500 the ratio is
+    !! taken as 1 (its asymptotic limit) to avoid unnecessary/unstable
+    !! evaluation at large argument, matching the original implementation.
+    real(8), intent(in) :: radius
+    !! Conductor radius r0 (m)
+    real(8), intent(in) :: length
+    !! Segment length l (m)
+    real(8), intent(in) :: omega
+    !! Angular frequency omega (rad/s)
+    real(8), intent(in) :: sigma
+    !! Conductor conductivity sigma_c (S/m)
+    real(8), intent(in) :: mur
+    !! Conductor relative permeability mu_r
+    complex(8) :: rho, ratio, zPerLength
+    real(8) :: cyr(2), cyi(2)
+    integer :: nz, ierr
+    character(len=8) :: ierrStr
+
+    rho = radius * sqrt(cmplx(0.0d0, omega, kind=8) * mur * MU0 * sigma)
+
+    if (abs(rho) > 500.0d0) then
+      ratio = cmplx(1.0d0, 0.0d0, kind=8)
+    else
+      call zbesi(real(rho, kind=8), aimag(rho), 0.0d0, 1, 2, cyr, cyi, nz, ierr)
+      if (ierr /= 0 .and. ierr /= 3) then
+        write(ierrStr, '(I0)') ierr
+        call raiseError("internalImpedance: ZBESI failed with IERR=" // trim(ierrStr))
+      end if
+      ratio = cmplx(cyr(1), cyi(1), kind=8) / cmplx(cyr(2), cyi(2), kind=8)
+    end if
+
+    zPerLength = sqrt(cmplx(0.0d0, omega, kind=8) * mur * MU0 / sigma) / (2.0d0 * PI * radius) * ratio
+    Zint = zPerLength * length
+  end function internalImpedance
 
   ! =====================================================================
   ! Public entry point for mutual impedance

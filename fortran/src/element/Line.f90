@@ -10,6 +10,7 @@ module mElementLine
   use mNode
   use mMaterial
   use mElectrode
+  use mError, only: raiseError
   use mCtes, only: newl
   implicit none
   private
@@ -68,20 +69,78 @@ contains
   end function newElementLine
 
   subroutine assembleLine(this, structure)
-    !! **Not yet implemented** — placeholder for discretisation logic.
+    !! Discretise the line into `nElectrodes` equally-spaced cylindrical segments.
     !!
-    !! When implemented, this should:
-    !! 1. Resolve `this%nodeStart` and `this%nodeEnd` pointers using the structure.
-    !! 2. Create `nElectrodes-1` internal nodes equally-spaced along the line.
-    !! 3. Create `nElectrodes` electrode segments connecting consecutive nodes.
-    !! 4. Resolve the material pointer and allocate `this%material`.
-    !! 5. Register new nodes with the parent structure.
-    class(tLine), intent(inout) :: this
+    !! Resolves the boundary node and material IDs against the parent structure,
+    !! creates `nElectrodes-1` internal nodes equally spaced between them, and
+    !! creates `nElectrodes` electrode segments connecting consecutive nodes.
+    !! New nodes and electrodes are registered both locally (`this%nodes`,
+    !! `this%electrodes`, for reporting) and globally (`structure%nodes`,
+    !! `structure%electrodes`, for the mesh solver).
+    class(tLine), intent(inout), target :: this
     class(*), intent(inout) :: structure
+    integer(4) :: idxStart, idxEnd
+    class(tMaterial), pointer :: mat
+    real(8) :: pStart(3), pEnd(3), inc(3)
+    integer(4), allocatable :: nodeIdx(:)
+    type(tElectrode) :: electrode
+    type(tNode) :: internalNode
+    character(len=256) :: buf
+    integer(4) :: k
 
     select type (structure)
     type is (tStructure)
-      ! TODO: implement discretisation
+      idxStart = structure%findNodeIndex(trim(this%idNodeStart))
+      if (idxStart == 0) then
+        call raiseError("tLine '" // trim(this%id) // "': start node '" // &
+          trim(this%idNodeStart) // "' not found")
+        return
+      end if
+
+      idxEnd = structure%findNodeIndex(trim(this%idNodeEnd))
+      if (idxEnd == 0) then
+        call raiseError("tLine '" // trim(this%id) // "': end node '" // &
+          trim(this%idNodeEnd) // "' not found")
+        return
+      end if
+
+      mat => structure%findMaterial(trim(this%idMaterial))
+      if (.not. associated(mat)) then
+        call raiseError("tLine '" // trim(this%id) // "': material '" // &
+          trim(this%idMaterial) // "' not found")
+        return
+      end if
+      allocate(this%material, source=mat)
+
+      pStart = structure%nodes(idxStart)%p
+      pEnd   = structure%nodes(idxEnd)%p
+      inc    = (pEnd - pStart) / real(this%nElectrodes, kind=8)
+
+      ! Build the chain of node indices spanning the line: boundary, internal..., boundary
+      allocate(nodeIdx(this%nElectrodes + 1))
+      nodeIdx(1) = idxStart
+      nodeIdx(this%nElectrodes + 1) = idxEnd
+
+      if (this%nElectrodes > 1) then
+        allocate(this%nodes(this%nElectrodes - 1))
+        do k = 1, this%nElectrodes - 1
+          write(buf, '(A,"_n",I0)') trim(this%id), k
+          internalNode = newNode(trim(buf), pStart + real(k, kind=8) * inc)
+          call structure%addNode(internalNode)
+          nodeIdx(k + 1) = structure%getNodeCount()
+          this%nodes(k) = internalNode
+        end do
+      end if
+
+      allocate(this%electrodes(this%nElectrodes))
+      do k = 1, this%nElectrodes
+        write(buf, '(A,"_e",I0)') trim(this%id), k
+        electrode = newElectrode(trim(buf), nodeIdx(k), nodeIdx(k + 1))
+        electrode%radius = this%radius
+        electrode%material => this%material
+        call structure%addElectrode(electrode)
+        this%electrodes(k) = electrode
+      end do
     end select
   end subroutine assembleLine
 

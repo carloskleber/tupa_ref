@@ -11,7 +11,9 @@
 	},
 	"extensions": {
 		"recommendations": [
-			"gruntfuggly.todo-tree"
+			"gruntfuggly.todo-tree",
+			"jebbs.plantuml",
+			"fortran-lang.linter-gfortran"
 		]
 	}
 }

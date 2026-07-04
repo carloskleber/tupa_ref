@@ -10,6 +10,10 @@ module mMesh
   !! 3. **Frequency-domain solve**: Assemble full matrix Zeq and solve for voltages/currents
   !!    via ZGESV (LU factorisation).
   !!
+  !! All indices (nodes, segments) are 1-based, in the ordinary Fortran convention.
+  !! Sign and propagation conventions follow theory.md §2, §5, §6 (ADR 0008); this
+  !! module must not be edited to match any single paper's convention in isolation.
+  !!
   !! Portuguese variable names are retained per the project standard (legacy from MATLAB).
   !!
   !! **References:**
@@ -74,7 +78,7 @@ module mMesh
     complex(8) :: cteMagSolo
     !! Magnetic constant for soil: jω·μ_soil/(4π)
     complex(8) :: propAr
-    !! Propagation constant for air (γ = α + jβ)
+    !! Propagation constant for air: γ = sqrt(jωμ(σ+jωε)), Re γ ≥ 0 (theory.md §2)
     complex(8) :: propSolo
     !! Propagation constant for soil
 
@@ -91,14 +95,12 @@ contains
   ! Memory allocation and initialisation
   ! =====================================================================
 
-  function alocaMalha(nn, ns) result(mesh)
-    !! Allocate and initialise a tMesh for nn nodes and ns segments.
-    integer(4), value :: nn, ns
+  subroutine initMesh(mesh, nn, ns)
+    !! Initialise a tMesh for nn nodes and ns segments (allocates all components).
+    type(tMesh), intent(inout) :: mesh
+    integer(4), intent(in), value :: nn, ns
     !! Number of nodes and segments
-    type(tMesh), pointer :: mesh
-    !! Newly allocated mesh
 
-    allocate(mesh)
     mesh%nno  = nn
     mesh%nseg = ns
 
@@ -117,33 +119,33 @@ contains
     mesh%B    = ZERO_CPLX
     mesh%C    = ZERO_CPLX
     mesh%D    = ZERO_CPLX
-  end function alocaMalha
+  end subroutine initMesh
 
   ! =====================================================================
   ! Topology matrix assembly
   ! =====================================================================
 
-  subroutine calcTopologia(mesh, nn, ns, n1, n2)
-    !! Assemble topology matrices A, B, C, D from node index arrays.
+  subroutine calcTopologia(mesh, ns, n1, n2)
+    !! Assemble topology matrices A, B, C, D from node index arrays (theory.md §6).
     !!
-    !! Builds the relationship between node voltages and electrode currents.
-    !! Sets (i,j) entries in A, B, C, D according to the connectivity of segment i
-    !! to nodes n1(i) and n2(i).
-    integer(4), value :: nn, ns
+    !! Row j (segment j) of A has -1 at column n1(j), +1 at n2(j); row j of B has
+    !! -1/2 at both n1(j) and n2(j); column j of C has +1 at row n1(j); column j
+    !! of D has +1 at row n2(j).
+    integer(4), intent(in), value :: ns
     integer(4), intent(in) :: n1(ns)
     !! 1-based node index for the start of each segment
     integer(4), intent(in) :: n2(ns)
     !! 1-based node index for the end of each segment
-    type(tMesh), pointer :: mesh
+    type(tMesh), intent(inout) :: mesh
     integer(4) :: i1
 
     do i1 = 1, ns
-      mesh%A(i1, n1(i1)+1) = cmplx(-1.0d0, 0.0d0, kind=8)
-      mesh%A(i1, n2(i1)+1) = ONE_CPLX
-      mesh%B(i1, n1(i1)+1) = cmplx(-0.5d0, 0.0d0, kind=8)
-      mesh%B(i1, n2(i1)+1) = cmplx(-0.5d0, 0.0d0, kind=8)
-      mesh%C(n1(i1)+1, i1) = ONE_CPLX
-      mesh%D(n2(i1)+1, i1) = ONE_CPLX
+      mesh%A(i1, n1(i1)) = cmplx(-1.0d0, 0.0d0, kind=8)
+      mesh%A(i1, n2(i1)) = ONE_CPLX
+      mesh%B(i1, n1(i1)) = cmplx(-0.5d0, 0.0d0, kind=8)
+      mesh%B(i1, n2(i1)) = cmplx(-0.5d0, 0.0d0, kind=8)
+      mesh%C(n1(i1), i1) = ONE_CPLX
+      mesh%D(n2(i1), i1) = ONE_CPLX
     end do
   end subroutine calcTopologia
 
@@ -156,7 +158,7 @@ contains
     !!
     !! Not yet implemented. When done, this will obtain the geometric connectivity
     !! and construct the topology matrices A, B, C, D.
-    type(tMesh), pointer :: mesh
+    type(tMesh), intent(inout) :: mesh
   end subroutine calcBase
 
   ! =====================================================================
@@ -174,16 +176,17 @@ contains
     !! Air permittivity (F/m), permeability (H/m), conductivity (S/m)
     real(8), intent(in), value :: epsSolo, muSolo, sigmaSolo
     !! Soil permittivity (F/m), permeability (H/m), conductivity (S/m)
-    type(tMesh), pointer :: mesh
+    type(tMesh), intent(inout) :: mesh
 
     mesh%cteEletAr   = 1.0d0 / (FOUR_PI * cmplx(sigmaAr, omega * epsAr, kind=8))
     mesh%cteEletSolo = 1.0d0 / (FOUR_PI * cmplx(sigmaSolo, omega * epsSolo, kind=8))
     mesh%cteMagAr    = cmplx(0.0d0, omega * muAr / FOUR_PI, kind=8)
     mesh%cteMagSolo  = cmplx(0.0d0, omega * muSolo / FOUR_PI, kind=8)
-    mesh%propAr      = sqrt(cmplx(muAr * epsAr * omega * omega, &
-                                   -muAr * sigmaAr * omega, kind=8))
-    mesh%propSolo    = sqrt(cmplx(muSolo * epsSolo * omega * omega, &
-                                   -muSolo * sigmaSolo * omega, kind=8))
+    ! theory.md §2: gamma = sqrt(j*omega*mu*(sigma + j*omega*eps)), Re(gamma) >= 0
+    mesh%propAr      = sqrt(cmplx(0.0d0, omega, kind=8) * muAr &
+                             * cmplx(sigmaAr, omega * epsAr, kind=8))
+    mesh%propSolo    = sqrt(cmplx(0.0d0, omega, kind=8) * muSolo &
+                             * cmplx(sigmaSolo, omega * epsSolo, kind=8))
   end subroutine calcParam
 
   ! =====================================================================
@@ -195,7 +198,7 @@ contains
     !!
     !! Uses symmetry: if i ≠ j, also sets the transposed elements.
     integer(4), intent(in), value :: i, j
-    type(tMesh), pointer :: mesh
+    type(tMesh), intent(inout) :: mesh
     complex(8), intent(in), value :: zl, zt
     !! Longitudinal and transversal impedance values
 
@@ -216,29 +219,29 @@ contains
     !! Compute self-impedance of a cylindrical segment using image theory.
     !!
     !! Accounts for proximity to the air–soil interface. Sets both
-    !! `mesh%Zlong(i+1, i+1)` and `mesh%Ztrans(i+1, i+1)`.
+    !! `mesh%Zlong(i, i)` and `mesh%Ztrans(i, i)`.
     integer(4), intent(in) :: i, pos
-    !! Segment index and position (1 = air, 2 = soil, 0 = boundary)
+    !! 1-based segment index and position (1 = air, 2 = soil, 0 = boundary)
     real(8), intent(in) :: h, fgl, fgli, fgt, fgti
     !! 2× height, Sommerfeld integrals (direct and image contributions)
     complex(8), intent(in) :: zint
     !! Internal impedance of the segment
-    type(tMesh), pointer :: mesh
+    type(tMesh), intent(inout) :: mesh
     complex(8) :: fpropi
 
     if (pos == 1) then
-      ! Segment in air: use air propagation constant
-      fpropi = exp(cmplx(0.0d0, h, kind=8) * mesh%propAr)
-      mesh%Ztrans(i+1, i+1) = mesh%cteEletAr * &
+      ! Segment in air: use air propagation constant. Image sign is "-" (theory.md §5)
+      fpropi = exp(-cmplx(h, 0.0d0, kind=8) * mesh%propAr)
+      mesh%Ztrans(i, i) = mesh%cteEletAr * &
         (cmplx(fgt, 0.0d0, kind=8) - fpropi * cmplx(fgti, 0.0d0, kind=8))
-      mesh%Zlong(i+1, i+1) = mesh%cteMagAr * &
-        (cmplx(fgl, 0.0d0, kind=8) + fpropi * cmplx(fgli, 0.0d0, kind=8)) + zint
+      mesh%Zlong(i, i) = mesh%cteMagAr * &
+        (cmplx(fgl, 0.0d0, kind=8) - fpropi * cmplx(fgli, 0.0d0, kind=8)) + zint
     else
-      ! Segment in soil: use soil propagation constant
-      fpropi = exp(cmplx(0.0d0, h, kind=8) * mesh%propSolo)
-      mesh%Ztrans(i+1, i+1) = mesh%cteEletSolo * &
+      ! Segment in soil: use soil propagation constant. Image sign is "+" (theory.md §5)
+      fpropi = exp(-cmplx(h, 0.0d0, kind=8) * mesh%propSolo)
+      mesh%Ztrans(i, i) = mesh%cteEletSolo * &
         (cmplx(fgt, 0.0d0, kind=8) + fpropi * cmplx(fgti, 0.0d0, kind=8))
-      mesh%Zlong(i+1, i+1) = mesh%cteMagSolo * &
+      mesh%Zlong(i, i) = mesh%cteMagSolo * &
         (cmplx(fgl, 0.0d0, kind=8) + fpropi * cmplx(fgli, 0.0d0, kind=8)) + zint
     end if
   end subroutine calcZPropria
@@ -251,79 +254,49 @@ contains
     !! Compute mutual impedance between two segments using image theory.
     !!
     !! Accounts for different segment positions (air or soil) and proximity
-    !! to the air–soil interface. Sets both `mesh%Zlong(i+1,j+1)` and
-    !! `mesh%Ztrans(i+1,j+1)`, using symmetry.
+    !! to the air–soil interface. Sets both `mesh%Zlong(i,j)` and
+    !! `mesh%Ztrans(i,j)`, using symmetry.
     integer(4), intent(in), value :: i, j, pos1, pos2
+    !! 1-based segment indices, positions (1 = air, 2 = soil)
     real(8), intent(in), value :: d, di, fgl, fgli, fgt, fgti
-    !! Segment indices, positions, distances (direct and image)
-    type(tMesh), pointer :: mesh
+    !! Distances (direct and image), geometry factors
+    type(tMesh), intent(inout) :: mesh
     complex(8) :: fprop, fpropi, zt, zl
 
     if (pos1 == 1 .and. pos2 == 1) then
-      ! Both in air
-      fprop  = exp(cmplx(0.0d0, d, kind=8) * mesh%propAr)
-      fpropi = exp(cmplx(0.0d0, di, kind=8) * mesh%propAr)
+      ! Both in air. Image sign is "-" for both Zt and Zl (theory.md §5)
+      fprop  = exp(-cmplx(d, 0.0d0, kind=8) * mesh%propAr)
+      fpropi = exp(-cmplx(di, 0.0d0, kind=8) * mesh%propAr)
       zt = mesh%cteEletAr * &
         (fprop * cmplx(fgt, 0.0d0, kind=8) - fpropi * cmplx(fgti, 0.0d0, kind=8))
       zl = mesh%cteMagAr * &
-        (fprop * cmplx(fgl, 0.0d0, kind=8) + fpropi * cmplx(fgli, 0.0d0, kind=8))
+        (fprop * cmplx(fgl, 0.0d0, kind=8) - fpropi * cmplx(fgli, 0.0d0, kind=8))
     else if (pos1 == 2 .and. pos2 == 2) then
-      ! Both in soil
-      fprop  = exp(cmplx(0.0d0, d, kind=8) * mesh%propSolo)
-      fpropi = exp(cmplx(0.0d0, di, kind=8) * mesh%propSolo)
+      ! Both in soil. Image sign is "+" for both Zt and Zl (theory.md §5)
+      fprop  = exp(-cmplx(d, 0.0d0, kind=8) * mesh%propSolo)
+      fpropi = exp(-cmplx(di, 0.0d0, kind=8) * mesh%propSolo)
       zt = mesh%cteEletSolo * &
         (fprop * cmplx(fgt, 0.0d0, kind=8) + fpropi * cmplx(fgti, 0.0d0, kind=8))
       zl = mesh%cteMagSolo * &
         (fprop * cmplx(fgl, 0.0d0, kind=8) + fpropi * cmplx(fgli, 0.0d0, kind=8))
     else
-      ! Mixed: no coupling
+      ! Mixed media: coupling neglected (theory.md §5)
       zt = cmplx(0.0d0, 0.0d0, kind=8)
       zl = cmplx(0.0d0, 0.0d0, kind=8)
     end if
-    mesh%Ztrans(i+1, j+1) = zt
-    mesh%Ztrans(j+1, i+1) = zt
-    mesh%Zlong(i+1, j+1)  = zl
-    mesh%Zlong(j+1, i+1)  = zl
+    mesh%Ztrans(i, j) = zt
+    mesh%Ztrans(j, i) = zt
+    mesh%Zlong(i, j)  = zl
+    mesh%Zlong(j, i)  = zl
   end subroutine calcZMutua
-
-  ! =====================================================================
-  ! Frequency-domain solve (experimental)
-  ! =====================================================================
-
-  integer(4) function calcFreqF(mesh)
-    !! **Experimental/incomplete**: compute frequency-domain solution (Phase 2).
-    !!
-    !! Calls ZGESV twice on Zlong and Ztrans separately. Halts with `error stop`
-    !! to indicate that full Zeq assembly and injection are needed.
-    !! Returns ZGESV INFO code on error.
-    type(tMesh), pointer :: mesh
-    integer :: INFO
-    integer, allocatable :: IPIV(:)
-
-    allocate(IPIV(mesh%nseg))
-    call zgesv(mesh%nseg, mesh%nno, mesh%Zlong, mesh%nseg, IPIV, &
-               mesh%A, mesh%nseg, INFO)
-    if (INFO /= 0) then
-      calcFreqF = INFO
-      return
-    end if
-    call zgesv(mesh%nseg, mesh%nno, mesh%Ztrans, mesh%nseg, IPIV, &
-               mesh%B, mesh%nseg, INFO)
-    if (INFO /= 0) then
-      calcFreqF = INFO
-      return
-    end if
-
-    error stop "calcFreqF: incomplete implementation — use calcFreq2 and injetaSinalF"
-    calcFreqF = 0
-  end function calcFreqF
 
   ! =====================================================================
   ! Full system matrix assembly
   ! =====================================================================
 
   subroutine calcFreq2(mesh)
-    !! Assemble the full system matrix Zeq from topology and impedance matrices.
+    !! Assemble the full system matrix Zeq from topology and impedance matrices
+    !! (theory.md §6).
     !!
     !! Builds the augmented (nno + 2*nseg) × (nno + 2*nseg) matrix:
     !!
@@ -336,9 +309,8 @@ contains
     !!     └─────────────────────────────────┘
     !!
     !! This matrix is then solved by ZGESV in `injetaSinalF`.
-    type(tMesh), pointer :: mesh
-    integer :: INFO, nn, ns, n
-    integer, allocatable :: IPIV(:)
+    type(tMesh), intent(inout) :: mesh
+    integer :: nn, ns, n
 
     nn = mesh%nno
     ns = mesh%nseg
@@ -367,7 +339,7 @@ contains
     !! and both longitudinal and transversal electrode currents.
     !!
     !! Returns ZGESV INFO code (0 = success).
-    type(tMesh), pointer :: mesh
+    type(tMesh), intent(inout) :: mesh
     !! Mesh element
     integer(4), intent(in), value :: nsig
     !! Number of source injections
@@ -412,7 +384,7 @@ contains
     !! Output longitudinal electrode currents
     complex(8), intent(out) :: i2(ns)
     !! Output transversal electrode currents
-    type(tMesh), pointer :: mesh
+    type(tMesh), intent(in) :: mesh
 
     v = mesh%tensao
     i1 = mesh%corrente1
@@ -426,7 +398,7 @@ contains
   subroutine printM(desc, m, n, a)
     !! Print a complex matrix for debugging: real and imaginary parts on separate lines.
     character*(*) :: desc
-    integer :: m, n, lda
+    integer :: m, n
     complex(8) :: a(m, n)
     integer :: i, j
 

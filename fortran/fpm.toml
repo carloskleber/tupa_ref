@@ -12,7 +12,7 @@ auto-executables = true
 auto-tests = true
 auto-examples = true
 module-naming = false
-link = ["lapack", "blas"]
+link = ["lapack", "blas", "slatec"]
 external-modules = ["slatec"]
 
 [install]

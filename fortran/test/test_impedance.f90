@@ -1,6 +1,7 @@
 program test_impedance
   use mImpedance
   use check
+  use, intrinsic :: ieee_arithmetic, only: ieee_is_nan
   implicit none
 
   ! Test suite variables
@@ -15,10 +16,13 @@ program test_impedance
   ! ----------------------------------------------------------------
   call test_init("FUNCBARRA function tests")
 
-  ! Pontos coincidentes na origem
+  ! Ponto A percorre o eixo x a partir da origem; ponto B fixo na origem.
+  ! zva precisa ser não-nulo para que a distância varie com X (bug anterior:
+  ! zva=zvb=[0,0,0] tornava FUNCBARRA(X,Y) constante, quebrando o teste de
+  ! monotonicidade abaixo).
   za1 = [0.0d0, 0.0d0, 0.0d0]
   zb1 = [0.0d0, 0.0d0, 0.0d0]
-  zva = [0.0d0, 0.0d0, 0.0d0]
+  zva = [1.0d0, 0.0d0, 0.0d0]
   zvb = [0.0d0, 0.0d0, 0.0d0]
   zla = 1.0d0
   zlb = 1.0d0
@@ -26,7 +30,6 @@ program test_impedance
   ! Configurar common block para teste
   call set_params(za1, zb1, zva, zvb, zlb)
 
-  ! x=0, y=0 -> distância 0, 1/0 = infinito - vamos testar caso não singular
   x = 1.0d0
   y = 0.0d0
 
@@ -148,7 +151,11 @@ program test_impedance
                result > 0.1d0 .and. result < 10.0d0, &
                "Resultado deve ser finito e positivo")
 
-  ! Caso 2: Segmentos coincidentes (singular, mas deve ser tratado)
+  ! Caso 2: Segmentos exatamente coincidentes — integral genuinamente
+  ! divergente (int 1/|x-y| sobre a diagonal do quadrado não é finita sem um
+  ! deslocamento de raio finito). IMPMUTUA não deve ser usada para o termo
+  ! próprio; esse é o papel de mGeometry%selfGeometryFactor (fórmula fechada
+  ! com deslocamento eixo-superfície r0), testado em test_geometry.f90.
   za1 = [0.0d0, 0.0d0, 0.0d0]
   zb1 = [0.0d0, 0.0d0, 0.0d0]
   zva = [1.0d0, 0.0d0, 0.0d0]
@@ -157,9 +164,9 @@ program test_impedance
   zlb = 1.0d0
 
   call IMPMUTUA(za1, zva, zla, zb1, zvb, zlb, result)
-  call test_ok("IMPMUTUA - segmentos coincidentes (singular)", &
-               result > 0.0d0, &
-               "Integral singular deve convergir")
+  call test_ok("IMPMUTUA em segmentos exatamente coincidentes diverge (esperado)", &
+               ieee_is_nan(result) .or. result > 1.0d6, &
+               "sem raio finito a integral diverge; o termo proprio usa mGeometry%selfGeometryFactor")
 
   ! Caso 3: Segmentos afastados
   za1 = [0.0d0, 0.0d0, 0.0d0]
@@ -332,9 +339,8 @@ contains
     real(8), intent(out) :: result
     character(len=*), intent(in) :: description
     real(8) :: errest
-    integer, parameter :: irule = 2  ! not used
 
-    call TWODQ(f, a, b, g, h, epsabs, epsrel, irule, result, errest)
+    call TWODQ(f, a, b, g, h, epsabs, epsrel, result, errest)
   end subroutine test_twodq_simple
 
   ! Convert real(8) to string for output

@@ -17,6 +17,11 @@ cd "$REPO_DIR"
 git pull
 fpm install --profile release --flag "-std=legacy -Wno-argument-mismatch -fallow-invalid-boz"
 
+# `fpm install` above places libslatec.a in the default prefix (~/.local/lib),
+# which is not on the linker's default search path — needed since Impedance.f90
+# links against SLATEC's ZBESI for internal (skin-effect) impedance.
+export LIBRARY_PATH="$HOME/.local/lib:$LIBRARY_PATH"
+
 # Build main project
 cd "$SCRIPT_DIR"
 fpm build --profile release --flag "-O3 -funroll-loops -ffast-math -fopt-info-vec-optimized -finline-functions -ftree-vectorize -march=native -mtune=native -fopenmp -fno-range-check -ffree-line-length-none"

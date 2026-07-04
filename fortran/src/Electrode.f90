@@ -7,8 +7,11 @@ module mElectrode
   !! Both currents are complex-valued frequency-domain quantities solved by
   !! `Mesh.injetaSinalF`.
   use mNode
+  use mMaterial, only: tMaterial
   implicit none
   private
+
+  public :: newElectrode
 
   type, public :: tElectrode
     !! Cylindrical conductor segment between two nodes.
@@ -20,6 +23,10 @@ module mElectrode
     !! Pointer to the start node (set by Structure%assemble)
     type(tNode), pointer :: node2 => null()
     !! Pointer to the end node (set by Structure%assemble)
+    real(8) :: radius = 0.0d0
+    !! Cylindrical radius of the electrode (m)
+    class(tMaterial), pointer :: material => null()
+    !! Conductor material (points into the owning element's material)
     complex(8) :: il
     !! Longitudinal current through the electrode (A)
     complex(8) :: it

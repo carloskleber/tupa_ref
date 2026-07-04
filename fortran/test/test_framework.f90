@@ -3,9 +3,16 @@ module check
   private
   public :: test_ok, test_fail, test_init, test_summary, test_close
 
+  ! Per-section counts (reset by test_init, used only for the section itself)
   integer :: npass = 0
   integer :: nfail = 0
   integer :: ntests = 0
+  ! Whole-program cumulative counts (never reset) — test_summary reports and
+  ! gates the process exit code on these, so failures in earlier sections are
+  ! never masked by a later, passing test_init() block.
+  integer :: totalPass = 0
+  integer :: totalFail = 0
+  integer :: totalTests = 0
 
 contains
 
@@ -23,11 +30,14 @@ contains
     character(len=*), intent(in), optional :: msg
 
     ntests = ntests + 1
+    totalTests = totalTests + 1
     if (condition) then
       npass = npass + 1
+      totalPass = totalPass + 1
       print *, "  [PASS] ", trim(name)
     else
       nfail = nfail + 1
+      totalFail = totalFail + 1
       print *, "  [FAIL] ", trim(name)
       if (present(msg)) print *, "         ", trim(msg)
     end if
@@ -38,15 +48,17 @@ contains
     character(len=*), intent(in), optional :: msg
 
     ntests = ntests + 1
+    totalTests = totalTests + 1
     nfail = nfail + 1
+    totalFail = totalFail + 1
     print *, "  [FAIL] ", trim(name)
     if (present(msg)) print *, "         ", trim(msg)
   end subroutine test_fail
 
   subroutine test_summary()
     print *, ""
-    print *, "Results: ", ntests, " tests, ", npass, " passed, ", nfail, " failed"
-    if (nfail == 0) then
+    print *, "Results: ", totalTests, " tests, ", totalPass, " passed, ", totalFail, " failed"
+    if (totalFail == 0) then
       print *, "ALL TESTS PASSED!"
     else
       print *, "SOME TESTS FAILED!"
@@ -55,7 +67,7 @@ contains
   end subroutine test_summary
 
   subroutine test_close()
-    if (nfail > 0) stop 1
+    if (totalFail > 0) stop 1
   end subroutine test_close
 
 end module check

@@ -47,7 +47,7 @@ module mElement
       !! 4. Call `structure%addNode()` and/or other structure methods to register
       !!    the new geometry so that the parent can build the global mesh.
       import :: tElement
-      class(tElement), intent(inout) :: this
+      class(tElement), intent(inout), target :: this
       class(*), intent(inout) :: structure
       !! Parent tStructure — intended use is `select type (structure); type is (tStructure)`.
     end subroutine assemble_interface

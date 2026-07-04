@@ -33,41 +33,56 @@ Elements → Structure (nodes+segments) → geometry factors (G, Gi, R̄, R̄i, 
         → Collector/outputs → (FFT ↔ time domain)
 ```
 
-Gaps in this repository, in dependency order:
+Gaps in this repository, in dependency order (1–4, 7, 8 resolved by Phases
+0–1; see §3 for what changed):
 
-1. **Geometry-factor layer is absent.** The original precomputes, per segment
-   pair: mean distances (direct + image), geometry factors `g` (direct +
-   image), direction cosines, and the self factor from a closed formula. Here
-   only the raw quadrature exists; nothing computes or stores these matrices,
-   and nothing computes image geometry. This is the biggest missing piece
-   (theory.md §4–5, ADR 0004).
-2. **Sign-convention divergences.** The port changed signs relative to the
-   original in at least: `calcParam` propagation constant (imag part negated),
-   propagation factor exponent (`exp(+j·d·γ)` vs `exp(−d·k)`), air-image
-   longitudinal sign in `calcZPropria`/`calcZMutua`, and C/D topology entries
-   (+1 here vs −1 original). Some may be equivalent under conjugation — they
-   must be audited against theory.md, not eyeballed (ADR 0008).
-3. **`tLine%assemble` is a stub** — no discretisation, no electrode creation,
-   no node/material resolution; `tStructure%electrodes` is never populated and
-   `assembleStructure` isn't reachable from `tStudy%run` (also a stub).
-4. **Internal impedance missing** — Bessel-function `Z_int` (solid conductor)
-   not ported (original had dedicated impedance-function classes).
+1. ~~**Geometry-factor layer is absent.**~~ **Resolved (Phase 1)** —
+   `Geometry.f90` (`mGeometry`) computes mean/image distances, `g`/`g_self`
+   (direct + image), and direction cosines; see `test/test_geometry.f90`.
+2. ~~**Sign-convention divergences.**~~ **Resolved (Phase 0)** — `calcParam`,
+   the propagation factor, and the air-image longitudinal sign now match
+   theory.md exactly (see `test/test_mesh.f90`). The C/D topology entries
+   already matched theory.md; no change was needed there.
+3. ~~**`tLine%assemble` is a stub**~~ **Resolved (Phase 1)** — discretises,
+   resolves node/material IDs, and populates `tStructure%electrodes`.
+   `tStudy%run` still doesn't call `assembleStructure` (Phase 2).
+4. ~~**Internal impedance missing**~~ **Resolved (Phase 1)**, solid conductor
+   only (`mImpedance%internalImpedance`, SLATEC `ZBESI`); tubular is Phase 7.
 5. **No frequency sweep, no sources, no outputs** — `tResult` types are
    declared but never filled; no signal waveforms; no CSV/JSON writers.
 6. **`tPortelaSoil` is a placeholder** (returns zero) — see ADR 0007. It is
    the first of several planned dispersive-soil `tMaterial` subtypes
    (`tLongmireSmithSoil`, `tVisacroAlipioSoil`, ...), not the only one.
-7. **Leftover C-interop artifacts** — 0-based `+1` index shifts in `Mesh.f90`,
-   pointer-returning `alocaMalha`, dead `calcFreqF`/`solMalha` stubs with
-   `error stop` (violates the feh rule).
-8. **Suspicious self geometry factor in the original** — the C++
-   `fatorGeometriaPropria()` returns `r − h + l·log((1+h)/r)`; theory gives
-   `2[l·ln((l+√(l²+r₀²))/r₀) − √(l²+r₀²) + r₀]` (factor 2, and `l`, not `1`,
-   in the log). Do **not** port it blindly; derive and test (theory.md §4.2).
+7. ~~**Leftover C-interop artifacts**~~ **Resolved (Phase 0)** — indices
+   naturalised, `alocaMalha` replaced by `initMesh` (no pointer), `calcFreqF`
+   and `Solver.f90` (`solMalha`) deleted.
+8. ~~**Suspicious self geometry factor in the original**~~ **Resolved
+   (Phase 1)** — confirmed wrong (missing factor of 2) by re-deriving the
+   defining integral from scratch; theory.md's formula matches and is
+   implemented as `mGeometry%selfGeometryFactor`, tested against quadrature.
 
 Housekeeping: stray `*.mod` files at `fortran/` root and the `.history/`
-folder should be gitignored; `fortran/test/test_impedance.f90` has uncommitted
-changes to review.
+folder are gitignored (no longer an issue in practice — stray `.mod` files
+from old builds can still shadow fresh ones in gfortran's search path if not
+removed before a rebuild). `test_impedance.f90`'s pending diff was already
+resolved before Phase 0; found instead: `test_twodq_simple` passed a bogus
+extra argument to `TWODQ`, and a test-runner bug (`check.f90`'s per-section
+counters were never accumulated into the whole-program total, so `fpm test`
+could report "ALL TESTS PASSED" / exit 0 even with failing assertions
+earlier in the same file) — both fixed.
+
+**Phase 0 status: done.** Items 1–3, 7 above are fixed in `Mesh.f90` (propagation
+constant, propagation-factor exponent, air-image longitudinal sign, C-interop
+index/pointer/dead-code cleanup), pinned by `fortran/test/test_mesh.f90`. Item 8
+(self geometry factor) is unaffected — no self-factor code exists yet — and
+still applies to Phase 1. Two pre-existing, unrelated issues were found while
+getting `fpm test` green and are left for whoever picks up Phase 1/geometry
+work: `test_impedance.f90`'s `check` module resets its pass/fail counters on
+every `test_init`, so only the last block's failures affect the exit code —
+earlier `[FAIL]` lines don't fail the build; and two of its assertions
+currently fail (`FUNCBARRA` decreasing-with-distance, using a degenerate
+all-zero direction vector in the test setup; and `IMPMUTUA` on coincident
+segments, consistent with gap 8 — no self-term regularisation exists yet).
 
 ---
 
@@ -86,36 +101,59 @@ changes to review.
 
 ## 3. Phases
 
-### Phase 0 — Convention audit and cleanup (prerequisite)
+### Phase 0 — Convention audit and cleanup (prerequisite) — **done**
 
-1. Audit `Mesh.f90` sign conventions against theory.md §2/§5/§6; fix toward
-   the doc. Unit-test: propagation factor decays; `Zlong`/`Ztrans` symmetric.
-2. Naturalise the mesh module: 1-based indices, no pointer-returning
+1. ~~Audit `Mesh.f90` sign conventions against theory.md §2/§5/§6; fix toward
+   the doc. Unit-test: propagation factor decays; `Zlong`/`Ztrans` symmetric.~~
+   Fixed: propagation constant now `sqrt(j*omega*mu*(sigma+j*omega*eps))`,
+   propagation factor `exp(-gamma*R)`, air-image longitudinal sign corrected
+   to "−". C/D topology signs already matched theory.md (no change needed).
+   Pinned by `test/test_mesh.f90`.
+2. ~~Naturalise the mesh module: 1-based indices, no pointer-returning
    allocator, delete `calcFreqF`/`solMalha` dead code, replace `error stop`
-   with feh errors.
-3. Gitignore `.history/` and stray `.mod`; resolve the pending
-   `test_impedance.f90` diff.
+   with feh errors.~~ Done: `alocaMalha` → `initMesh` (intent(inout), no
+   pointer), all `+1` C-interop index shifts removed, `calcFreqF` and
+   `Solver.f90` (`solMalha`) deleted (no callers).
+3. ~~Gitignore `.history/` and stray `.mod`; resolve the pending
+   `test_impedance.f90` diff.~~ `.gitignore` already covered these; the
+   pending diff had already been resolved before this pass. Found instead:
+   `test_twodq_simple` passed a bogus extra argument to `TWODQ` (compile
+   error) — fixed.
 
-**Exit criterion**: `fpm test` green; mesh module has no C-legacy artifacts.
+**Exit criterion met**: `fpm test` green; mesh module has no C-legacy artifacts.
 
-### Phase 1 — Geometry layer (structure → matrices)
+### Phase 1 — Geometry layer (structure → matrices) — **done**
 
-1. `tLine%assemble`: resolve node/material IDs, create internal nodes and
+1. ~~`tLine%assemble`: resolve node/material IDs, create internal nodes and
    `nElectrodes` segments, register with `tStructure` (flat arrays + `n1`/`n2`
-   connectivity).
-2. Geometry-factor computation (new module or extension of `Impedance.f90`):
-   - mean distances `R̄`, image distances `R̄ᵢ` (mirror through z = 0);
-   - `g(a,b)` by Gauss–Kronrod quadrature; `g_self` closed formula (derived,
-     tested against quadrature with axis-to-surface offset — item 8 above);
-   - direction cosines, incl. image direction (z-component flipped);
-   - same-medium test; mixed pairs skipped (ADR 0005).
-3. Internal impedance `Z_int`: solid conductor Bessel formula (SLATEC or
-   stdlib Bessel); tubular later.
-4. Tests: closed-form parallel-segments factor vs quadrature; self factor vs
-   quadrature; image distances for a buried horizontal wire.
+   connectivity).~~ Done, including new `tStructure%findNodeIndex` /
+   `%findMaterial` lookups and the previously-unpopulated `tStructure%electrodes`
+   array (`%addElectrode`). Tested in `test/test_assemble.f90`.
+2. Geometry-factor computation (new module `Geometry.f90`, `mGeometry`):
+   - ~~mean distances `R̄`, image distances `R̄ᵢ` (mirror through z = 0);~~ done.
+   - ~~`g(a,b)` by Gauss–Kronrod quadrature; `g_self` closed formula (derived,
+     tested against quadrature with axis-to-surface offset — item 8 above);~~
+     done — **the original C++ formula was confirmed wrong** (missing a
+     factor of 2; see gap 8 below). theory.md's formula was independently
+     re-derived from the defining integral and verified against quadrature.
+   - ~~direction cosines, incl. image direction (z-component flipped);~~ done.
+   - same-medium test; mixed pairs skipped (ADR 0005): **not implemented in
+     mGeometry** — this is medium/position information, not a geometric
+     property (theory.md §5), so it correctly lives in `Mesh.f90`'s
+     `calcZPropria`/`calcZMutua` (`pos1`/`pos2` args), not the geometry layer.
+3. ~~Internal impedance `Z_int`: solid conductor Bessel formula (SLATEC or
+   stdlib Bessel); tubular later.~~ Done for the solid conductor
+   (`mImpedance%internalImpedance`, SLATEC `ZBESI`); tubular deferred (Phase 7).
+   `fpm.toml`/`build.sh` updated to link SLATEC and export `LIBRARY_PATH` —
+   `fpm build`/`fpm test` need `LIBRARY_PATH=$HOME/.local/lib:$LIBRARY_PATH`
+   if not run via `build.sh` (fpm's `link` list alone doesn't add `-L`).
+4. ~~Tests: closed-form parallel-segments factor vs quadrature; self factor vs
+   quadrature; image distances for a buried horizontal wire.~~ Done in
+   `test/test_geometry.f90`, plus internal-impedance DC/high-frequency limit
+   checks.
 
-**Exit criterion**: for a 10 m line in 10 segments, geometry matrices match
-independent (scripted) numerical integration to 1e−6 relative.
+**Exit criterion met**: for a 10 m line in 10 segments, geometry matrices
+match independent (scripted) numerical integration to 1e−6 relative.
 
 ### Phase 2 — End-to-end single-frequency solve
 
@@ -184,10 +222,10 @@ Rust later, same contract.
 **Phases 0–2**: validated single-frequency solve for the Portela 1997 buried
 conductor, with the convention audit done first. Priority order:
 
-1. [ ] Phase 0 audit + cleanup
-2. [ ] `tLine%assemble` + structure arrays
-3. [ ] Geometry-factor module (direct + image) + tests
-4. [ ] `Z_int` Bessel internal impedance
+1. [x] Phase 0 audit + cleanup
+2. [x] `tLine%assemble` + structure arrays
+3. [x] Geometry-factor module (direct + image) + tests
+4. [x] `Z_int` Bessel internal impedance
 5. [ ] `Zlong`/`Ztrans` fill from geometry matrices
 6. [ ] `tStudy%run` wiring + current injection
 7. [ ] DC-limit test, then Portela curve test
