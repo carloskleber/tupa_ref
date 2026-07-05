@@ -215,7 +215,7 @@ $\lambda/10$; the project default stays $\lambda/10$, with coarsening per
   with a literal `1` (one metre, dimensionally inconsistent) where $l$
   belongs in the log argument, so it is exact only for $l = 1$ m even after
   doubling — and the C++ port carries the same expression verbatim (see the
-  implementation plan, gap 8).
+  ROADMAP, gap 8).
 
 ### 4.3 Self impedances
 
@@ -290,7 +290,7 @@ C++ port dropped this and kept only the ideal limits. The ideal sign
 rules in the table are the $|W_s| \gg \omega\varepsilon_0$ limit of these
 coefficients; they degrade for high-resistivity soils toward the MHz range,
 where $\Gamma_t$ acquires magnitude < 1 and phase. Implementing $\Gamma(\omega)$
-in the Fortran code is a planned refinement (implementation plan §7 P2) that
+in the Fortran code is a planned refinement (ROADMAP §7 P2) that
 *restores* reference behaviour rather than adding to it; the cross-media
 coupling (air segment ↔ buried segment) is second-order and is neglected, as
 in both legacy codes (the Matlab returns zero for its "transmission"
@@ -347,7 +347,7 @@ $$\begin{bmatrix}
 
 solved by dense LU (LAPACK `ZGESV`) once per frequency. Voltage sources are
 converted to equivalent current injections (or handled by constraint rows) —
-see the implementation plan.
+see the ROADMAP.
 
 **Reduced form.** Eliminating $\mathbf{i}_1, \mathbf{i}_2$ yields the nodal admittance relation used
 when only $\mathbf{u}$ is needed and $n_n \ll n_s$:
@@ -399,7 +399,10 @@ $W = \sigma_0 + \Delta_i[\cot(\pi\alpha/2) + j](\omega/2\pi \cdot 10^6)^{\alpha}
 which is the same family rewritten with
 $\Delta\sigma = \Delta_i \cot(\pi\alpha/2)$ at $\omega_0 = 2\pi \cdot 1$ MHz;
 any `tPortelaSoil` parameter set must state which reference frequency its
-`kr` assumes. Per [ADR 0007](adr/0007-soil-dispersion-model.md), `tMaterial` admits
+`kr` assumes. **Decision (ADR 0007, accepted 2026-07-05): `tPortelaSoil`
+adopts the Lima–Portela form [31] with $\omega_0 = 2\pi \cdot 1$ MHz** —
+legacy Matlab `kr` values (at $\omega_0 = 1$ rad/s) must be converted before
+reuse. Per [ADR 0007](adr/0007-soil-dispersion-model.md), `tMaterial` admits
 several dispersive-soil subtypes side by side, each named after its original
 reference — `tPortelaSoil` (implemented first, matches the validation curves),
 `tLongmireSmithSoil` (the 13-term Debye expansion of Longmire & Smith [15], as
@@ -472,9 +475,14 @@ Every implementation must reproduce, within stated tolerance:
    — the low-frequency asymptote of the full model.
 2. **Portela 1997 [2]** application curves: harmonic input impedance of a 10 m
    buried conductor, 0.5 m depth, $\sigma = 0.01\, \text{S/m}$, $\varepsilon_r \approx 10$, from 100 Hz to 1 MHz
-   (project reference test; 5 % tolerance).
-3. **Visacro & Soares 2005 [5]**: HEM validation cases for grounding
-   electrodes (harmonic impedance and impulse response).
+   (project reference test; 5 % tolerance). **Data caveat** (author,
+   2026-07-05): no tabulated reference data exists — only the published
+   equations and figures — so until further validation references are
+   supplied, the executable oracle for this case is the cross-code check
+   (item 6); status in [BENCHMARKS.md](BENCHMARKS.md).
+3. **Visacro & Soares 2005 [5]**: formulation reference only — the paper
+   carries no data usable for quantitative comparison (author, 2026-07-05);
+   dropped as a data anchor.
 4. **Internal consistency**: full $Z_{\text{eq}}$ solve vs. reduced $Z_g$ form;
    quadrature geometry factor vs. closed-form parallel/orthogonal formulas;
    reciprocity ($Z_t$, $Z_\ell$ symmetric); passivity ($\text{Re}\{Z_{\text{in}}\} \geq 0$).
@@ -496,7 +504,7 @@ Every implementation must reproduce, within stated tolerance:
 Methodology and premises of this model against Harrington's original Method
 of Moments [6] and the three open-source companion codes inspected in
 references.md. TUPÃ column = the model specified by this document (planned
-items marked). See the implementation plan §7 for the adoption proposals that
+items marked). See the ROADMAP §7 for the adoption proposals that
 came out of this comparison.
 
 | Aspect | Harrington MoM [6] | **TUPÃ (this doc)** | TAGS (C99) | PRTL-mHEM (Python) | PRTL (Wolfram/CDF) |

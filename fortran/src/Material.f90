@@ -142,14 +142,18 @@ contains
   ! ------------------------------------------------------------------
 
   subroutine calcPropagationConstant_linear(this, omega)
-    !! Compute γ = √(μr·μ₀·(σ + jω·εr·ε₀)·jω) for a linear medium.
+    !! Compute γ = √(jωμ·(σ + jωε)), Re γ ≥ 0, for a linear medium
+    !! (theory.md §2, engineering convention e^{+jωt}).
+    !!
+    !! Expanded: γ² = −ω²με + jωμσ. The principal complex square root
+    !! guarantees Re γ ≥ 0 (decaying propagation factor e^{−γR}).
     class(tLinear), intent(inout) :: this
     real(8), intent(in) :: omega
     !! Angular frequency ω (rad/s)
 
     this%propagationConstant = sqrt(cmplx( &
-      this%mur * MU0 * this%epsilonr * EPSILON0 * omega * omega, &
-      this%mur * MU0 * this%sigma * omega, kind=8))
+      -this%mur * MU0 * this%epsilonr * EPSILON0 * omega * omega, &
+       this%mur * MU0 * this%sigma * omega, kind=8))
   end subroutine calcPropagationConstant_linear
 
   subroutine calcPropagationConstant_freq(this, omega)

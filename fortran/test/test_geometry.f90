@@ -1,6 +1,6 @@
 program test_geometry
   !! Tests for the geometry-factor layer (mGeometry) and internal impedance
-  !! (mImpedance%internalImpedance), per implementation-plan.md Phase 1.
+  !! (mImpedance%internalImpedance), per ROADMAP.md Phase 1.
   use mCtes
   use mGeometry
   use mImpedance, only: internalImpedance
@@ -25,7 +25,7 @@ program test_geometry
   ! by r0 (a genuinely independent code path: adaptive 2D quadrature via
   ! IMPMUTUA, vs. the closed-form selfGeometryFactor). This also directly
   ! disproves the original C++ `fatorGeometriaPropria` formula (missing a
-  ! factor of 2) noted in implementation-plan.md gap 8.
+  ! factor of 2) noted in ROADMAP.md gap 8.
   ! ----------------------------------------------------------------
   call test_init("selfGeometryFactor vs quadrature oracle (theory.md §4.2)")
 
@@ -103,7 +103,7 @@ program test_geometry
 
   ! ----------------------------------------------------------------
   ! Full 10 m / 10-segment buried line: matrix symmetry and per-pair wiring
-  ! (implementation-plan.md Phase 1 exit criterion)
+  ! (ROADMAP.md Phase 1 exit criterion)
   ! ----------------------------------------------------------------
   call test_init("buildGeometryMatrices: 10 m line, 10 segments")
 

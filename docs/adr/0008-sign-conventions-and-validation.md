@@ -43,7 +43,7 @@ Sign errors here don't crash — they produce plausible-looking wrong answers.
 ## Consequences
 
 - The existing Fortran port must be **audited against theory.md** before any
-  new solver work (implementation plan, Phase 0); discrepancies are resolved
+  new solver work (ROADMAP, Phase 0); discrepancies are resolved
   toward theory.md, not toward whichever source file was copied last.
 - Cross-language implementations verify convention compliance for free by
   running the common reference cases.

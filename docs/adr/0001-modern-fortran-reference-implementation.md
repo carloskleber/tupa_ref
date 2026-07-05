@@ -33,7 +33,7 @@ remains available for special functions.
 - One language for physics *and* orchestration eliminates the C↔Fortran
   interop layer (raw pointers, `bind(c)` index conversions) that the original
   needed. Legacy 0-based index conversions inherited from that layer must be
-  removed during the port (see implementation plan).
+  removed during the port (see ROADMAP).
 - Fortran's ecosystem is weak for I/O (JSON, plotting); those parts need more
   effort than they would in Python (see ADR 0006).
 - The dissertation-era numerics (Gauss–Kronrod quadrature, Bessel functions)

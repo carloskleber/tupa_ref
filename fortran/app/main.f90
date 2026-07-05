@@ -44,6 +44,7 @@ program main
   !!   }
   !!   ```
   use tupa, only: runFromFile
+  use mError, only: raiseError
   implicit none
 
   character(len=512) :: filename
@@ -54,7 +55,7 @@ program main
   call get_command_argument(1, filename, status=ios)
   if (ios /= 0 .or. len_trim(filename) == 0) then
     print *, "Usage: tupa <study.json>"
-    error stop
+    call raiseError("missing study file argument")
   end if
 
   call runFromFile(trim(filename))

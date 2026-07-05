@@ -243,7 +243,7 @@ Companion codes of the same model family, useful as executable cross-checks
     only the ideal-image limits. The user manual (WIP) lives with it.
   - known shared defect: the legacy self geometry factor (Matlab, ported
     verbatim to C++) is half the correct value and carries a `1`-for-`l`
-    typo in its log argument — see theory.md §4.2 and implementation plan
+    typo in its log argument — see theory.md §4.2 and ROADMAP
     gap 8. The model itself is fully specified by the public references
     above.
 - TUPÃ's geometry-factor separation (theory.md §4.1, from [3], 2003) and the

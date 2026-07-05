@@ -1,17 +1,23 @@
-# TUPÃ — Implementation Plan
+# TUPÃ — Roadmap
 
 Reference electromagnetic transient solver (HEM / Method of Moments).
 Fortran implementation first; object model and test cases shared with future
 Python/Rust implementations (see [ADR 0002](adr/0002-language-agnostic-object-model.md)).
 
-This plan supersedes the previous `IMPLEMENTATION_PLAN.md`. It is based on a
-side-by-side analysis of this repository against the legacy (private)
-implementations and the theory now consolidated in [theory.md](theory.md).
-Originally the comparison target was the C++/Fortran hybrid; since July 2026
-the **original Matlab code** (the dissertation implementation) is available
-alongside it and is the **model reference of record** — see §8 for what its
-re-inspection changed, and "Related implementation notes" in
-[references.md](references.md) for the two codes' contents.
+This roadmap (formerly `implementation-plan.md`, which it supersedes together
+with the earlier `IMPLEMENTATION_PLAN.md`) is based on a side-by-side analysis
+of this repository against the legacy (private) implementations and the theory
+consolidated in [theory.md](theory.md). Originally the comparison target was
+the C++/Fortran hybrid; since July 2026 the **original Matlab code** (the
+dissertation implementation) is available alongside it and is the **model
+reference of record** — see §8 for what its re-inspection changed, and
+"Related implementation notes" in [references.md](references.md) for the two
+codes' contents. §9 records the author-interview decisions of 2026-07-05.
+
+**MVP scope**: tower-footing grounding under lightning. Full transmission
+lines and substation grids are the follow-on application tier (§9). The
+project's primary role is a **scientifically citable reference
+implementation**; usability as an engineering tool is secondary.
 
 ---
 
@@ -55,6 +61,13 @@ Gaps in this repository, in dependency order (1–4, 7, 8 resolved by Phases
    only (`mImpedance%internalImpedance`, SLATEC `ZBESI`); tubular is Phase 7.
 5. **No frequency sweep, no sources, no outputs** — `tResult` types are
    declared but never filled; no signal waveforms; no CSV/JSON writers.
+   *Partially advanced (2026-07-05)*: the impedance-fill interface is now
+   fixed by [ADR 0009](adr/0009-impedance-fill-interface.md) —
+   `calcZPropria`/`calcZMutua` take raw `mGeometry` outputs and apply every
+   theory factor (propagation, direction cosines, length normalisation,
+   including the direct-term `e^{−γr₀}` of theory.md §4.3) internally,
+   pinned by hand-evaluated values in `test_mesh.f90`. The per-frequency
+   fill *loop* and the sweep driver remain to be written.
 6. **`tPortelaSoil` is a placeholder** (returns zero) — see ADR 0007. It is
    the first of several planned dispersive-soil `tMaterial` subtypes
    (`tLongmireSmithSoil`, `tVisacroAlipioSoil`, ...), not the only one.
@@ -167,11 +180,12 @@ match independent (scripted) numerical integration to 1e−6 relative.
 
 1. Wire `tStudy%run`: assemble → topology → per-frequency
    (`calcParam` from `tMaterial`s → `Zlong`/`Ztrans` fill from geometry
-   matrices → `calcFreq2` → inject → extract). Legacy trap to not replicate:
-   the C++ self-term call passes its *longitudinal* image geometry factor in
-   the *transversal*-image argument slot (copy-paste at the `calcZPropria`
-   call site) — cross-check the fill against the Matlab reference, whose
-   self/mutual factor bookkeeping is consistent.
+   matrices → `calcFreq2` → inject → extract). The legacy trap here — the
+   C++ self-term call passed its *longitudinal* image geometry factor in the
+   *transversal*-image argument slot — motivated [ADR 0009](adr/0009-impedance-fill-interface.md):
+   `calcZPropria`/`calcZMutua` now consume the raw `mGeometry` matrices
+   directly (no caller-side pre-scaling), removing that class of bug. Still
+   cross-check the assembled fill against the Matlab reference on moduli.
 2. Current-source injection at named nodes (voltage sources deferred).
 3. **Validation test (the milestone)**: buried horizontal conductor
    (10 m, r₀ = 5–7 mm, 0.5 m depth, σ = 0.01 S/m, εr = 10):
@@ -193,9 +207,11 @@ impedance-vs-frequency table.
 
 ### Phase 4 — Dispersive soil
 
-1. Implement `tPortelaSoil` per ADR 0007 (Portela power-law proposed; confirm).
-   Mind the reference-frequency caveat (theory.md §7): the legacy Matlab's
-   `kr` is referenced to ω₀ = 1 rad/s, the Lima–Portela variant to 2π·1 MHz.
+1. Implement `tPortelaSoil` per ADR 0007 (**accepted 2026-07-05**): the
+   Lima–Portela parametrisation of references.md [31], reference frequency
+   ω₀ = 2π·1 MHz. Requires adding a `sigma0` field to the type (it currently
+   carries only `alpha0`/`kr`). Do **not** reuse legacy Matlab `kr` values
+   unconverted — they are referenced to ω₀ = 1 rad/s (theory.md §7).
 2. DC-limit convergence test against `tLinear`; repeat Phase 2 validation with
    dispersion on (Portela 1997 dispersive curves).
 
@@ -204,8 +220,8 @@ impedance-vs-frequency table.
 1. Freeze the input schema v1 (title, media, materials, elements, sources,
    frequencies, outputs) — documented next to the cases.
 2. `common/` folder: JSON inputs + expected CSV outputs for (at least) the
-   Phase 2 conductor, a vertical rod, and a small grid; run as integration
-   tests in CI (GitHub Actions + `fpm test`).
+   Phase 2 conductor, a vertical rod, and a small grid; run locally as
+   integration tests via `fpm test` (no hosted CI — decision §9).
 3. Parser: stay within the minimal-parser subset; escape hatch per ADR 0006.
 
 ### Phase 6 — Sources and time domain
@@ -250,8 +266,9 @@ conductor, with the convention audit done first. Priority order:
 2. [x] `tLine%assemble` + structure arrays
 3. [x] Geometry-factor module (direct + image) + tests
 4. [x] `Z_int` Bessel internal impedance
-5. [ ] `Zlong`/`Ztrans` fill from geometry matrices
-6. [ ] `tStudy%run` wiring + current injection
+5. [x] `Zlong`/`Ztrans` fill *interface* (ADR 0009, theory factors internal);
+       fill loop over the geometry matrices still pending
+6. [ ] `tStudy%run` wiring + current injection (ADR 0010)
 7. [ ] DC-limit test, then Portela curve test
 8. [ ] `example1` prints the result table
 
@@ -264,7 +281,20 @@ conductor, with the convention audit done first. Priority order:
 | Unit | `fortran/test/` | quadrature vs closed forms; sign/decay pins; Bessel `Z_int` vs tables; dispersion DC limit |
 | Integration | `fortran/test/` | end-to-end DC resistance; full vs reduced solve (when both exist); reciprocity, passivity |
 | Reference | `common/` | JSON in → CSV out, compared with tolerance; shared across languages |
-| CI | GitHub Actions | `fpm build && fpm test` per push; reference cases on PR |
+| Benchmarks | `benchmarks/` (proposed) | TAGS and PRTL-mHEM as git submodules; cross-code runs per [BENCHMARKS.md](BENCHMARKS.md) |
+
+There is **no hosted CI** (decision §9): the gate is a local
+`fpm build && fpm test` before merging. Practical caveats, measured 2026-07-05:
+
+- In the default (debug) profile the quadrature-heavy suites are effectively
+  un-runnable — `test_geometry`'s 10×10 fill exceeded 9 minutes without
+  completing, dominated by the adaptive 2-D Gauss–Kronrod calls plus
+  `-fcheck` array-temporary copies. **Run the slow suites under
+  `--profile release`** (as `build.sh` builds), or split tests into fast
+  (mesh/assemble: seconds) and slow (geometry/impedance) tiers and run the
+  slow tier before merges only.
+- A cold `fpm test` also pays several minutes of stdlib compilation; keep the
+  build cache.
 
 ---
 
@@ -272,11 +302,13 @@ conductor, with the convention audit done first. Priority order:
 
 | Decision | Status |
 | --- | --- |
-| Soil dispersion model | ADR 0007 **proposed** (Portela power-law first) — confirm; see P5 in §7 |
-| Voltage-source handling | current-injection equivalent vs constraint rows — decide in Phase 3 |
+| Soil dispersion model | **Decided** — ADR 0007 accepted 2026-07-05: `tPortelaSoil` first, Lima–Portela [31] parametrisation, ω₀ = 2π·1 MHz |
+| Voltage-source handling | **Decided** — current-injection equivalent ([ADR 0010](adr/0010-sources-as-current-injections.md)) |
+| Impedance-fill interface | **Decided** — theory factors inside `calcZ*` ([ADR 0009](adr/0009-impedance-fill-interface.md)) |
 | FFT dependency | stdlib vs FFTW — decide in Phase 6; NLT proposed on top (P4 in §7) |
 | JSON schema v1 | draft with Phase 5; freeze before Python port |
 | Reduced `Z_g` solver | deferred optimisation (ADR 0003) |
+| Quadrature tolerances | `errrel = min(la,lb)·10⁻⁶`, `maxint = 500` are dissertation-era values, open to revision (interview §9) — revisit with the P1 mHEM kernel |
 
 ---
 
@@ -357,7 +389,8 @@ TAGS deliberately multithreads the frequency loop and pins BLAS to one thread
 per-frequency work (fill + `ZGESV`) shares nothing. With geometry factors
 precomputed once, TUPÃ's frequency loop has the same shape. Proposal: measure
 both, but expect frequency-level OpenMP to supersede the fill-loop OpenMP
-currently pencilled in (CLAUDE.md hook to be updated if confirmed).
+currently pencilled in ([CONVENTIONS.md](CONVENTIONS.md) records the current
+default; update it if confirmed).
 
 ### P7 — Field/potential post-processing (Phase 7+, new feature)
 
@@ -449,3 +482,33 @@ established, beyond what is already folded into the sections above:
    (`.caso`/`.est`); XML was a C++ addition. Neither constrains the JSON
    schema (ADR 0006), but the Matlab case files are the natural source when
    porting reference cases to `common/`.
+
+---
+
+## 9. Author-interview decisions (2026-07-05)
+
+Recorded from the documentation-reconstruction interview; where a decision
+changed a document or the code, the change is already applied and referenced.
+
+| Topic | Decision |
+| --- | --- |
+| Application scope | MVP: tower-footing grounding. Full application tier: complete lines or substations. |
+| Project role | Scientifically citable reference implementation (docs tone, validation rigour follow from this). |
+| Convention authority | theory.md remains normative with the **engineering convention** (`e^{+jωt}`); Portela's papers (physics convention) are mapped through the §2 conjugation table, never followed directly. |
+| Validated models | **None yet** — no end-to-end physics validation has run; only unit-level convention pins. |
+| Soil dispersion | ADR 0007 accepted: `tPortelaSoil` first, Lima–Portela [31] parametrisation, ω₀ = 2π·1 MHz. |
+| Proposals P1/P2/P4 | Confirmed as written (mHEM 1-D kernel; Γ(ω) images; NLT). |
+| Sources | Current-injection equivalents (ADR 0010). |
+| Fill interface | Theory factors inside `calcZPropria`/`calcZMutua` (ADR 0009); `corrente1/corrente2` documented as end currents `i₁`/`i₂`. |
+| Quadrature tolerances | Dissertation-era values kept for now, open to revision. |
+| Stable vs fluid modules | Stable: `mMesh` conventions, `mGeometry`, `mImpedance`. Fluid: `tResult`, `mJsonParser`, `tStudy%run`. |
+| Public contract | JSON schema + `common/` cases only; all Fortran module APIs are internal and changeable. |
+| Compilers | Latest gfortran; keep ifx-compatible. |
+| CI | No hosted CI (no GitHub Actions); local `fpm build && fpm test` gate (§5). |
+| Release process | Proposed (delegated): semver; **0.1.0 = validated Phase 2 milestone** (Portela-curve case within tolerance); annotated git tags + a CHANGELOG; no package-registry publishing planned. |
+| SLATEC | The **cloned** `fortran/slatec/` checkout (from the author's fork, fetched by `build.sh`) is canonical and may be fine-tuned in place. |
+| Benchmarks | TAGS and PRTL-mHEM to be added as git submodules under `benchmarks/` (see [BENCHMARKS.md](BENCHMARKS.md)); they are the executable validation oracles until curated reference datasets arrive. |
+| Validation data | No tabulated data from Portela 1997 exists — only the equations; further validation references to be supplied by the author. Visacro & Soares 2005 [5] has no usable comparison data. No legacy-output fixtures for now. |
+| Precision | `dp` kind added to `mCtes`; new code uses it, legacy `kind=8` migrates gradually. |
+| Error handling | All `error stop` converted to feh (`raiseError`), including the JSON parser and the CLI entry point. |
+| Housekeeping | `check.f90` stub test and `calcBase` placeholder deleted. |

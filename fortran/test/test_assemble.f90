@@ -1,6 +1,6 @@
 program test_assemble
   !! Tests for tLine%assemble and the tStructure node/electrode wiring it
-  !! relies on (implementation-plan.md Phase 1, item 1).
+  !! relies on (ROADMAP.md Phase 1, item 1).
   use mStructure
   use mElement
   use mElementLine

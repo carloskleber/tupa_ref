@@ -1,6 +1,6 @@
 name = "Tupa"
 version = "0.0.1"
-license = "GPL"
+license = "GPL-3.0-or-later"
 author = "Carlos Kleber C. Arruda"
 maintainer = "carloskleber@gmail.com"
 copyright = "Copyright 2026, Carlos Kleber"

@@ -24,6 +24,7 @@ module mJsonParser
   !! - Maximum 64 items per object or array (MAX_ITEMS)
   !! - Maximum 256 characters per object key (MAX_KEY_LEN)
   !! - Not reentrant (single global parse buffer)
+  use mError, only: raiseError
   implicit none
   private
 
@@ -104,7 +105,10 @@ contains
     character(len=4096) :: line
 
     open(newunit=iunit, file=filename, status='old', action='read', iostat=ios)
-    if (ios /= 0) error stop "mJsonParser: cannot open file"
+    if (ios /= 0) then
+      call raiseError("mJsonParser: cannot open file '" // trim(filename) // "'")
+      return
+    end if
 
     g_buf = ''
     do
@@ -200,7 +204,10 @@ contains
         end if
         call skip_ws()
         n = n + 1
-        if (n > MAX_ITEMS) error stop "mJsonParser: object exceeds MAX_ITEMS"
+        if (n > MAX_ITEMS) then
+          call raiseError("mJsonParser: object exceeds MAX_ITEMS (ADR 0006: switch to json-fortran)")
+          return
+        end if
         tmp_keys(n) = key
         call parse_value(v%items(n))
       end select
@@ -239,7 +246,10 @@ contains
         g_pos = g_pos + 1
       case default
         n = n + 1
-        if (n > MAX_ITEMS) error stop "mJsonParser: array exceeds MAX_ITEMS"
+        if (n > MAX_ITEMS) then
+          call raiseError("mJsonParser: array exceeds MAX_ITEMS (ADR 0006: switch to json-fortran)")
+          return
+        end if
         call parse_value(v%items(n))
       end select
     end do

@@ -50,7 +50,7 @@ contains
     !! point y). Differs from the original C++ `fatorGeometriaPropria`
     !! (`r0 - h + l*log((1+h)/r0)`, missing the factor 2 and using "1" instead
     !! of "l" in the log) — that formula does not satisfy the defining
-    !! integral; see implementation-plan.md gap 8 and test_geometry.f90, which
+    !! integral; see ROADMAP.md gap 8 and test_geometry.f90, which
     !! checks this formula against the same integral evaluated by quadrature.
     real(8), intent(in) :: l, r0
     !! Segment length and conductor radius (m)

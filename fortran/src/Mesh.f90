@@ -39,13 +39,16 @@ module mMesh
   type :: tMesh
     !! Discretised electromagnetic mesh for frequency-domain HEM solution.
 
-    ! Solution vectors
+    ! Solution vectors — the augmented unknown x = [u, i1, i2] of theory.md §6
     complex(8), allocatable :: tensao(:)
-    !! Complex node voltages V (V), size nno
+    !! Complex node voltages u (V), size nno
     complex(8), allocatable :: corrente1(:)
-    !! Longitudinal electrode currents (A), size nseg
+    !! End currents i1 at node n1 of each segment (A), positive INTO the
+    !! segment (theory.md §2), size nseg
     complex(8), allocatable :: corrente2(:)
-    !! Transversal (leakage) electrode currents (A), size nseg
+    !! End currents i2 at node n2 of each segment (A), positive INTO the
+    !! segment, size nseg. The physical currents are derived quantities:
+    !! longitudinal Il = (i1 - i2)/2, transversal (leakage) It = i1 + i2.
 
     ! Topology matrices
     complex(8), allocatable :: A(:,:)
@@ -150,18 +153,6 @@ contains
   end subroutine calcTopologia
 
   ! =====================================================================
-  ! Base matrix computation (placeholder)
-  ! =====================================================================
-
-  subroutine calcBase(mesh)
-    !! **Placeholder**: compute base geometry matrices from the structure.
-    !!
-    !! Not yet implemented. When done, this will obtain the geometric connectivity
-    !! and construct the topology matrices A, B, C, D.
-    type(tMesh), intent(inout) :: mesh
-  end subroutine calcBase
-
-  ! =====================================================================
   ! Frequency-dependent medium parameters
   ! =====================================================================
 
@@ -215,74 +206,96 @@ contains
   ! Self-impedance calculation (using image theory)
   ! =====================================================================
 
-  subroutine calcZPropria(mesh, i, pos, h, zint, fgl, fgli, fgt, fgti)
-    !! Compute self-impedance of a cylindrical segment using image theory.
+  subroutine calcZPropria(mesh, i, pos, d, di, l, zint, g, gi, cosThetaI)
+    !! Compute the self-impedance of a cylindrical segment with its own image
+    !! (theory.md §4.3, §5; ADR 0009). Sets `mesh%Zlong(i,i)` and
+    !! `mesh%Ztrans(i,i)`:
     !!
-    !! Accounts for proximity to the air–soil interface. Sets both
-    !! `mesh%Zlong(i, i)` and `mesh%Ztrans(i, i)`.
+    !!     Ztrans(i,i) = cteElet * (e^{-γd} g ± e^{-γdi} gi) / l²
+    !!     Zlong(i,i)  = cteMag  * (e^{-γd} g ± cosThetaI e^{-γdi} gi) + zint
+    !!
+    !! All theory factors (propagation at the mean distances, direction cosine
+    !! of the image, 1/l² length normalisation) are applied HERE; callers pass
+    !! the raw outputs of mGeometry%buildGeometryMatrices. The direct-term
+    !! direction cosine is identically 1 for a segment against itself.
+    !! Image sign: "-" in air, "+" in soil (theory.md §5).
     integer(4), intent(in) :: i, pos
-    !! 1-based segment index and position (1 = air, 2 = soil, 0 = boundary)
-    real(8), intent(in) :: h, fgl, fgli, fgt, fgti
-    !! 2× height, Sommerfeld integrals (direct and image contributions)
+    !! 1-based segment index and position (1 = air, 2 = soil)
+    real(8), intent(in) :: d
+    !! Direct mean distance: the conductor radius r0 (field point on the
+    !! surface, theory.md §4.3)
+    real(8), intent(in) :: di
+    !! Image mean distance: twice the height/depth of the segment centre (m)
+    real(8), intent(in) :: l
+    !! Segment length (m)
+    real(8), intent(in) :: g, gi
+    !! Direct and image geometry factors (m)
+    real(8), intent(in) :: cosThetaI
+    !! Direction cosine between the segment and its own image (+1 horizontal,
+    !! -1 vertical)
     complex(8), intent(in) :: zint
-    !! Internal impedance of the segment
+    !! Internal (skin-effect) impedance of the segment
     type(tMesh), intent(inout) :: mesh
-    complex(8) :: fpropi
+    complex(8) :: prop, cteE, cteM, fprop, fpropi
+    real(8) :: s
 
     if (pos == 1) then
-      ! Segment in air: use air propagation constant. Image sign is "-" (theory.md §5)
-      fpropi = exp(-cmplx(h, 0.0d0, kind=8) * mesh%propAr)
-      mesh%Ztrans(i, i) = mesh%cteEletAr * &
-        (cmplx(fgt, 0.0d0, kind=8) - fpropi * cmplx(fgti, 0.0d0, kind=8))
-      mesh%Zlong(i, i) = mesh%cteMagAr * &
-        (cmplx(fgl, 0.0d0, kind=8) - fpropi * cmplx(fgli, 0.0d0, kind=8)) + zint
+      prop = mesh%propAr;   cteE = mesh%cteEletAr;   cteM = mesh%cteMagAr;   s = -1.0d0
     else
-      ! Segment in soil: use soil propagation constant. Image sign is "+" (theory.md §5)
-      fpropi = exp(-cmplx(h, 0.0d0, kind=8) * mesh%propSolo)
-      mesh%Ztrans(i, i) = mesh%cteEletSolo * &
-        (cmplx(fgt, 0.0d0, kind=8) + fpropi * cmplx(fgti, 0.0d0, kind=8))
-      mesh%Zlong(i, i) = mesh%cteMagSolo * &
-        (cmplx(fgl, 0.0d0, kind=8) + fpropi * cmplx(fgli, 0.0d0, kind=8)) + zint
+      prop = mesh%propSolo; cteE = mesh%cteEletSolo; cteM = mesh%cteMagSolo; s = +1.0d0
     end if
+    fprop  = exp(-d  * prop)
+    fpropi = exp(-di * prop)
+
+    mesh%Ztrans(i, i) = cteE * (fprop * g + s * fpropi * gi) / (l * l)
+    mesh%Zlong(i, i)  = cteM * (fprop * g + s * cosThetaI * fpropi * gi) + zint
   end subroutine calcZPropria
 
   ! =====================================================================
   ! Mutual impedance calculation
   ! =====================================================================
 
-  subroutine calcZMutua(mesh, i, j, pos1, pos2, d, di, fgl, fgli, fgt, fgti)
-    !! Compute mutual impedance between two segments using image theory.
+  subroutine calcZMutua(mesh, i, j, pos1, pos2, d, di, la, lb, g, gi, cosTheta, cosThetaI)
+    !! Compute the mutual impedance between two segments with image theory
+    !! (theory.md §4.1, §5; ADR 0009). Sets `mesh%Zlong(i,j)` and
+    !! `mesh%Ztrans(i,j)` plus their symmetric counterparts:
     !!
-    !! Accounts for different segment positions (air or soil) and proximity
-    !! to the air–soil interface. Sets both `mesh%Zlong(i,j)` and
-    !! `mesh%Ztrans(i,j)`, using symmetry.
+    !!     Ztrans(i,j) = cteElet * (e^{-γd} g ± e^{-γdi} gi) / (la·lb)
+    !!     Zlong(i,j)  = cteMag  * (cosTheta e^{-γd} g ± cosThetaI e^{-γdi} gi)
+    !!
+    !! All theory factors (propagation at the mean distances, direction
+    !! cosines, 1/(la·lb) length normalisation) are applied HERE; callers pass
+    !! the raw outputs of mGeometry%buildGeometryMatrices. Image sign: "-"
+    !! both in air, "+" both in soil; mixed-media pairs are neglected (zero),
+    !! per theory.md §5 / ADR 0005.
     integer(4), intent(in), value :: i, j, pos1, pos2
     !! 1-based segment indices, positions (1 = air, 2 = soil)
-    real(8), intent(in), value :: d, di, fgl, fgli, fgt, fgti
-    !! Distances (direct and image), geometry factors
+    real(8), intent(in), value :: d, di
+    !! Mean distances between segment midpoints, direct and image (m)
+    real(8), intent(in), value :: la, lb
+    !! Segment lengths (m)
+    real(8), intent(in), value :: g, gi
+    !! Direct and image geometry factors (m)
+    real(8), intent(in), value :: cosTheta, cosThetaI
+    !! Direction cosines, direct and against the image of segment j
     type(tMesh), intent(inout) :: mesh
-    complex(8) :: fprop, fpropi, zt, zl
+    complex(8) :: prop, cteE, cteM, fprop, fpropi, zt, zl
+    real(8) :: s
 
-    if (pos1 == 1 .and. pos2 == 1) then
-      ! Both in air. Image sign is "-" for both Zt and Zl (theory.md §5)
-      fprop  = exp(-cmplx(d, 0.0d0, kind=8) * mesh%propAr)
-      fpropi = exp(-cmplx(di, 0.0d0, kind=8) * mesh%propAr)
-      zt = mesh%cteEletAr * &
-        (fprop * cmplx(fgt, 0.0d0, kind=8) - fpropi * cmplx(fgti, 0.0d0, kind=8))
-      zl = mesh%cteMagAr * &
-        (fprop * cmplx(fgl, 0.0d0, kind=8) - fpropi * cmplx(fgli, 0.0d0, kind=8))
-    else if (pos1 == 2 .and. pos2 == 2) then
-      ! Both in soil. Image sign is "+" for both Zt and Zl (theory.md §5)
-      fprop  = exp(-cmplx(d, 0.0d0, kind=8) * mesh%propSolo)
-      fpropi = exp(-cmplx(di, 0.0d0, kind=8) * mesh%propSolo)
-      zt = mesh%cteEletSolo * &
-        (fprop * cmplx(fgt, 0.0d0, kind=8) + fpropi * cmplx(fgti, 0.0d0, kind=8))
-      zl = mesh%cteMagSolo * &
-        (fprop * cmplx(fgl, 0.0d0, kind=8) + fpropi * cmplx(fgli, 0.0d0, kind=8))
+    if (pos1 == pos2) then
+      if (pos1 == 1) then
+        prop = mesh%propAr;   cteE = mesh%cteEletAr;   cteM = mesh%cteMagAr;   s = -1.0d0
+      else
+        prop = mesh%propSolo; cteE = mesh%cteEletSolo; cteM = mesh%cteMagSolo; s = +1.0d0
+      end if
+      fprop  = exp(-d  * prop)
+      fpropi = exp(-di * prop)
+      zt = cteE * (fprop * g + s * fpropi * gi) / (la * lb)
+      zl = cteM * (cosTheta * fprop * g + s * cosThetaI * fpropi * gi)
     else
       ! Mixed media: coupling neglected (theory.md §5)
-      zt = cmplx(0.0d0, 0.0d0, kind=8)
-      zl = cmplx(0.0d0, 0.0d0, kind=8)
+      zt = ZERO_CPLX
+      zl = ZERO_CPLX
     end if
     mesh%Ztrans(i, j) = zt
     mesh%Ztrans(j, i) = zt

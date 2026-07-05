@@ -5,8 +5,12 @@ module mCtes
   !! the same kind. Import only the symbols you need via `use mCtes, only: ...`.
   implicit none
   private
-  public :: PI, FOUR_PI, MU0, EPSILON0, SQRT2, IMAG_I, ZERO_CPLX, ONE_CPLX, newl, &
+  public :: dp, PI, FOUR_PI, MU0, EPSILON0, SQRT2, IMAG_I, ZERO_CPLX, ONE_CPLX, newl, &
             color_red, color_green, color_yellow, color_blue, color_reset
+
+  integer, parameter :: dp = kind(1.0d0)
+  !! Working real/complex kind (double precision). New code declares
+  !! `real(dp)`/`complex(dp)`; legacy `kind=8` declarations migrate gradually.
 
   real(8), parameter :: PI = acos(-1.0d0)
   !! Pi (π ≈ 3.14159…)

@@ -1,0 +1,6 @@
+[submodule "benchmarks/tags"]
+	path = benchmarks/tags
+	url = https://github.com/pedrohnv/transient-analysis-grounding-systems
+[submodule "benchmarks/prtl-mhem"]
+	path = benchmarks/prtl-mhem
+	url = https://github.com/VitorLima1990/PRTL-mHEM

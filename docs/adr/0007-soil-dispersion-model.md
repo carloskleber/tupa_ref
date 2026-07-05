@@ -1,6 +1,6 @@
 # ADR 0007 — Soil dispersion models for tMaterial
 
-- **Status**: Proposed
+- **Status**: Accepted (2026-07-05; proposed 2026-07-03)
 - **Date**: 2026-07-03
 
 ## Context
@@ -17,9 +17,10 @@ Candidate models:
    conductivity; widely used in EMP/lightning studies.
 3. **Cole-Cole / Visacro–Alipio**: alternatives common in recent literature.
 
-The project instructions list Longmire–Smith as preferred; the code and the
-validation data point to Portela's model. Both can coexist behind the
-`tMaterial` abstraction.
+Earlier project instructions (the now-retired CLAUDE.md) listed
+Longmire–Smith as preferred; the code and the validation data point to
+Portela's model. Both can coexist behind the `tMaterial` abstraction; the
+conflict was resolved in Portela's favour by the author (2026-07-05).
 
 > **Update (2026-07-05).** The original Matlab (model reference of record)
 > ships **two** dispersive-soil routines: the Portela power-law with
@@ -36,9 +37,19 @@ validation data point to Portela's model. Both can coexist behind the
 Implement **Portela's power-law model first**, as `tPortelaSoil`, because:
 
 - the reference validation curves (Portela 1997) were produced with it;
-- its `alpha0`/`kr` fields were already declared on the type — no interface
-  change;
+- its `alpha0`/`kr` fields were already declared on the type;
 - it is two lines of complex arithmetic (no root finding, no term tables).
+
+**Accepted parametrisation (2026-07-05, author decision)**: the
+**Lima–Portela form of references.md [31]**, with reference frequency
+**ω₀ = 2π·1 MHz**:
+
+$$W(\omega) = \sigma_0 + \Delta_i \left[ \cot\!\left(\tfrac{\pi\alpha}{2}\right) + j \right] \left(\tfrac{\omega}{2\pi \cdot 10^6}\right)^{\alpha}$$
+
+This requires adding a `sigma0` field to the type (only `alpha0`/`kr` exist
+today); `kr` takes the role of Δᵢ at ω₀ = 2π·1 MHz. Legacy Matlab `kr`
+values (referenced to ω₀ = 1 rad/s, references.md [30]) must be converted
+before reuse — never copied verbatim.
 
 Add **Longmire–Smith** as a second `tMaterial` subtype when lightning-study
 interoperability requires it. Both must converge to the `tLinear` medium as
