@@ -9,7 +9,9 @@ before the code is merged.
 
 The formulation follows Portela [1] and the author's dissertation [3], with the
 matrix assembly as used by Salari et al. [4] and validated against Visacro &
-Soares [5]. See [references.md](references.md) for the full bibliography.
+Soares [5]; Alípio's dissertation [22] derives the same HEM in detail in both
+time and frequency domains and is a useful companion text. See
+[references.md](references.md) for the full bibliography.
 
 ---
 
@@ -155,6 +157,20 @@ HEM on grounding grids; it is the default integration mode of the open-source
 TAGS and PRTL-mHEM codes (references.md). Their published results are an
 external validation of this optimisation.
 
+**Segmentation in practice.** Two families of rules coexist in the
+literature: thin-wire-driven (segment length $\gtrsim 10\, r_0$, so the
+thin-wire approximation holds — the classic HEM prescription [5]) and
+wavelength-driven ($\lesssim \lambda/10$ at the highest frequency of
+interest, as above). Schroeder, Moura & Machado [19] show parametrically
+that, for tower-footing studies, much coarser meshes remain acceptable:
+segments up to $\sim 1000\, r_0$ keep GPR peaks within 10 % and insulator
+overvoltage peaks within 5 % of a fine-mesh reference, with speedups above
+30×, because the outputs of interest are integral quantities insensitive to
+the fine structure of the current distribution. Segment length is therefore
+an accuracy/cost knob bounded below by the thin-wire condition and above by
+$\lambda/10$; the project default stays $\lambda/10$, with coarsening per
+[19] as a documented option for large studies.
+
 ### 4.2 Evaluating the geometry factor
 
 - **Single-integral (mHEM) form** — preferred. The inner integral over a
@@ -255,6 +271,15 @@ is a planned refinement (implementation plan §7); the cross-media coupling
 (air segment ↔ buried segment) is second-order and is neglected, as in the
 original code.
 
+Even with $\Gamma(\omega)$, the image treatment is quasi-static and the HEM
+family is regarded as accurate from DC up to a few MHz [19,20]. Kuhar,
+Arnautovski-Toševa & Grčev [20] push this ceiling by replacing the
+quasi-static images with **complex images** (the finitely conducting earth
+replaced by a perfect conductor at a complex depth), recovering agreement
+with full-wave NEC-4 solutions at higher frequencies. Lightning spectra
+rarely require this, so it is noted as the refinement step *after*
+$\Gamma(\omega)$, not planned work.
+
 For the **self** terms the "mutual with the own image" appears with distance
 $\bar{R}_i = 2h$ (twice the depth/height of the segment centre).
 
@@ -343,6 +368,10 @@ conservative* / *conservative* parameter sets — the default soil of the TAGS
 and PRTL-mHEM codes), etc. All must reduce to the constant-parameter
 (`tLinear`) medium as $\omega \to 0$. Cavka et al. [16] compare these models
 side by side and are the reference for cross-checking any implementation.
+The effect is not confined to grounding: Alipio, Duarte & De Conti [28] show
+it materially changes underground-cable transients for $\rho > 1000\,\Omega\text{m}$
+— dispersive soil should be the default, not the exception, in any transient
+study.
 
 ---
 
@@ -371,6 +400,18 @@ only changes the sweep driver, not the physics kernels. Note the two sweep
 modes serve different purposes and use different axes: *harmonic response*
 (log-spaced, real $\omega$) and *transient* (linearly spaced $s_k$, as the
 IFFT/NLT grid requires).
+
+**Why frequency domain at all.** The frequency-domain route assumes
+linearity: no soil ionisation, arresters or corona. When those matter, the
+HEM family offers a direct time-domain variant, HEM-TD (Pereira & Silveira
+[21]), which carries the dispersive soil as a rational (pole–residue) model
+evaluated in time and is benchmarked against the frequency-domain HEM. TUPÃ
+is linear by design and stays in the frequency domain; the transfer
+functions it produces can instead be *exported* to EMT programs
+(ATP/EMTP/PSCAD) as rational models or frequency-dependent network
+equivalents — fitting topology, order and passivity issues are treated by
+Lima et al. [26] and Salarieh [27]. Such an export is a potential output
+format, not part of the solver.
 
 ---
 
@@ -436,3 +477,25 @@ treatment of the single air–soil interface, dense frequency-domain solve per
 sample, linearity (no soil ionisation). Harrington's MoM is the general
 umbrella: the HEM family fixes basis, testing and kernel choices and adds the
 circuit-level closure (§6) that pure MoM does not have.
+
+### 10.1 Neighbouring model families
+
+The same problem is attacked in the literature by methods that trade accuracy
+for speed (circuit and TL models), extend the HEM's validity (complex images,
+time domain), or sit above it as full-wave oracles. Where TUPÃ stands
+relative to each:
+
+| Model family | Domain | Approach | Relation to TUPÃ | Refs |
+| --- | --- | --- | --- | --- |
+| HEM-TD | Time | HEM physics solved directly in time; dispersive soil via rational (pole–residue) models; time delays computed in time domain | Same physics, other domain; needed only for nonlinear phenomena (soil ionisation, arresters, corona) that TUPÃ excludes by design; benchmarked against frequency-domain HEM | [21] |
+| HEM + complex images | Frequency | Earth replaced by perfect conductor at complex depth instead of quasi-static images | Extends the §5 image treatment beyond the few-MHz ceiling; the refinement step after $\Gamma_t(\omega)$ | [20] |
+| HF circuit models | Frequency / EMT | Lumped RLC (with or without mutual coupling) derived from the MoM equations by successive approximations | Degenerate limit of §4–§6; [23] maps their error vs. a full-wave reference over length, resistivity and frequency — mutual coupling is the decisive HF ingredient (which HEM keeps in full) | [23] |
+| TL-model + FDTD | Time | Per-unit-length parameters (frequency-dependent Z, Y) for counterpoise wires, solved by FDTD | Cheaper special-purpose model for parallel counterpoises; ≤5 % deviation from a full EM model; found effective length independent of wire separation | [24] |
+| FDTD–PEEC hybrid | Time | 1-D FDTD for the line + PEEC for tower and lightning channel | Models the lightning-channel↔tower coupling that HEM-class tools (TUPÃ included) neglect; relevant for tower-surge, not grounding, accuracy | [25] |
+| Full-wave MoM (NEC-4 class) | Frequency | Sommerfeld-integral treatment of the interface, sub-segment current expansion | The accuracy oracle above HEM: [20] and [23] use it as reference; no geometry-factor shortcut, so far costlier | [20,23] |
+| Rational models / FDNE for EMT | s-domain → time | Vector fitting / matrix-pencil approximation of $Z_g(\omega)$, passivity-enforced, plugged into ATP/EMTP/PSCAD | A *consumer* of TUPÃ's output, not a competitor; effective length drives realization order and robustness | [26,27] |
+
+Segmentation guidance ([19], §4.1) and the scope ceiling illustrated by the
+200-MHz SW-TDR diagnostics application [29] round out the picture: below the
+thin-wire limits, circuit models suffice; above a few MHz, complex images or
+full-wave methods take over.

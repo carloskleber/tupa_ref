@@ -338,6 +338,18 @@ points from the solved `I_t`/`I_ℓ` (touch and step voltages, GPR profiles).
 Maps cleanly onto new `tResult` subtypes; useful the moment grids are
 simulated. Not needed for the near-term milestone.
 
+### P8 — Criteria-based segmentation defaults (Phase 2/3, low effort)
+
+From the July 2026 literature batch rather than the code comparison:
+Schroeder, Moura & Machado (references.md [19]) show tower-footing responses
+stay within engineering accuracy (GPR peak +10 %, overvoltage peaks +5 %)
+with segments up to ~1000·r₀ — vastly coarser than the traditional 10·r₀,
+over 30× faster. Proposal: keep λ/10 as the default `Structure.assemble()`
+bound (theory.md §4.1), but expose the segment-length target as a per-study
+input validated by a coarse-vs-fine convergence test, so large grids don't
+pay fine-mesh cost by default. Feeds the same meshing code Phase 2 already
+touches.
+
 ### Explicitly *not* proposed
 
 - Adopting TAGS's symmetric `(u, I_ℓ, I_t)` immittance block system — TUPÃ's
@@ -346,3 +358,13 @@ simulated. Not needed for the near-term milestone.
 - The transmission-line performance chain of PRTL/PRTL-mHEM (towers, spans,
   flashover, outage rate) — out of scope for the grounding-solver milestone;
   revisit after Phase 8 (it is the dissertation's original application).
+- Complex images (Kuhar et al., references.md [20]) — extends HEM validity
+  above a few MHz; lightning studies don't need it, and it only makes sense
+  after P2's Γ(ω) is in and validated. Documented in theory.md §5/§10.1.
+- Time-domain HEM (HEM-TD, references.md [21]) — only pays off for nonlinear
+  phenomena (soil ionisation, arresters, corona), which TUPÃ excludes by
+  design (theory.md §8).
+- Rational-model / FDNE export for EMT programs (references.md [26, 27]) — a
+  natural future *output format* (fit `Z_g(ω)`, enforce passivity, emit an
+  ATP/EMTP/PSCAD equivalent), not solver work; revisit when there are users
+  asking for EMT integration.

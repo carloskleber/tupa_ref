@@ -96,6 +96,93 @@ Numbered as cited in [theory.md](theory.md).
     Grounding-grid harmonic impedance curves; a standard validation case
     reproduced by TAGS.
 
+## HEM refinements and accuracy studies
+
+19. **Schroeder, M. A. O.; Moura, R. A. R.; Machado, V. M.** — "A Discussion on
+    Practical Limits for Segmentation Procedures of Tower-Footing Grounding
+    Modeling for Lightning Responses", *IEEE Trans. Electromagnetic
+    Compatibility*, vol. 62, no. 6, Dec. 2020. DOI: 10.1109/TEMC.2020.2982358.
+    Parametric HEM study of segment-length limits: with acceptance criteria of
+    +10 % on GPR peak and +5 % on insulator-overvoltage peaks (same waveshape),
+    segments up to ~1000·r₀ remain acceptable — far coarser than the
+    traditional 10·r₀ thin-wire prescription — with >30× speedups. Covers
+    soils from 50 to 4000 Ω·m.
+20. **Kuhar, A.; Arnautovski-Toševa, V.; Grčev, L.** — "High Frequency
+    Enhancement of the Hybrid Electromagnetic Model by Implementing Complex
+    Images", *Journal of Electrical Engineering and Information Technologies*
+    (Skopje), vol. 2, no. 2, 2017. Replaces the quasi-static images of §5 with
+    complex images (earth replaced by a perfect conductor at a complex depth),
+    extending HEM agreement with full-wave NEC-4 results beyond the usual
+    couple-of-MHz ceiling.
+21. **Pereira, B.; Silveira, F. H.** — "Improvement of HEM-TD model: Advances
+    on the representation of frequency-dependent soil parameters and on the
+    calculation of time delays", *Electric Power Systems Research*, 2026.
+    The time-domain HEM variant (HEM-TD): dispersive soil via a rational
+    (pole–residue) model evaluated directly in time, plus refined time-delay
+    computation; validated against the frequency-domain HEM and grounding-grid
+    measurements. The time-domain route exists to handle nonlinear phenomena
+    (soil ionisation, surge arresters, corona).
+22. **Alípio, R. S.** — *Modelagem Eletromagnética de Aterramentos Elétricos
+    nos Domínios do Tempo e da Freqüência*, M.Sc. dissertation, CEFET-MG,
+    Belo Horizonte, 2008. Detailed derivation of the HEM in both domains (in
+    Portuguese); a useful companion derivation to [3] and [5].
+
+## Circuit, transmission-line and FDTD alternatives
+
+23. **Grcev, L.; Kuhar, A.; Arnautovski-Toseva, V.; Markovski, B.** —
+    "Evaluation of High-Frequency Circuit Models for Horizontal and Vertical
+    Grounding Electrodes", *IEEE Trans. Power Delivery*, vol. 33, no. 6,
+    pp. 3065–3074, Dec. 2018. Shows the popular HF circuit models are
+    obtainable from the MoM integral equations by successive approximations,
+    and maps their error against a rigorous full-wave model over electrode
+    length, soil resistivity and frequency. Key finding: modelling the mutual
+    coupling between electrode parts is what improves circuit models at HF.
+24. **Duarte, N.; Alipio, R.; Vasconcellos, F.; Rachidi, F.** — "Efficient
+    modeling of parallel counterpoise wires using an FDTD-based transmission
+    line approach", *Electric Power Systems Research*, 2025. TL-theory model
+    of parallel counterpoises solved by FDTD, frequency-dependent Z and Y
+    included; deviations below 5 % against a rigorous electromagnetic model.
+    Notable result: the effective length of counterpoise wires is independent
+    of their separation.
+25. **Cao, J.; Du, Y.; Ding, Y.; et al.** — "Lightning Surge Analysis of
+    Transmission Line Towers with a Hybrid FDTD-PEEC Method", conference
+    paper (venue/year not stated in the available copy; references through
+    2019). 1-D FDTD for the line, PEEC for tower and lightning channel;
+    quantifies the channel–tower coupling that circuit-based (and HEM-class)
+    tools neglect.
+
+## EMT-program integration (rational models / FDNE)
+
+26. **Lima, A. C. S.; Parreiras, T. J. M. A.; Alípio, R.; Correia de Barros,
+    M. T.** — "Realization of Rational Models for Tower-Footing Grounding
+    Systems", *XVI IPST*, Guadalajara, Mexico, Jun. 2025. Rational
+    approximation of the mHEM harmonic impedance vs a frequency-dependent
+    network equivalent (FDNE) for EMT programs (ATP/EMTP/PSCAD): topology,
+    passivity enforcement, minimum order, and the role of the effective
+    length in the robustness of the realization.
+27. **Salarieh, B.** — *Electromagnetic Transient Modelling of Power
+    Transmission Line Tower and Tower-Footing Grounding System*, M.Sc.
+    thesis, University of Manitoba, Winnipeg, 2019. Full-wave
+    frequency-domain models of tower plus footing reduced to time-domain
+    macro-models compatible with EMT simulators (PSCAD/EMTDC), aimed at
+    backflashover prediction.
+
+## Applications and diagnostics
+
+28. **Alipio, R.; Duarte, N.; De Conti, A.** — "Revisiting the Influence of
+    Dispersive Characteristics of Soil Electrical Parameters on Transient
+    Behavior of Underground Cables", *XVI IPST*, Guadalajara, Mexico,
+    Jun. 2025. Dispersive soil matters beyond grounding: for buried cables the
+    effect is pronounced for ρ > 1000 Ω·m and short sections — further
+    evidence for making dispersive soil the default in transient studies.
+29. **Alam, A. K. M. M.; Kandic, M.; Bridges, G. E.** — "Single-Wire Time
+    Domain Reflectometry Technique (SW-TDR): Detecting Faults in Power System
+    Grounding Electrodes", *IEEE Access*, vol. 12, Oct. 2024.
+    DOI: 10.1109/ACCESS.2024.3474478. Surface-wave TDR on vertical rods for
+    corrosion/break detection; needs ~200 MHz bandwidth, i.e. full-wave
+    territory well above HEM validity — cited to delimit the model's scope,
+    not as a target application.
+
 ## Related open-source implementations
 
 Companion codes of the same model family, useful as executable cross-checks

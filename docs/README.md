@@ -2,7 +2,7 @@
 
 | Document | Purpose |
 | --- | --- |
-| [theory.md](theory.md) | Normative physics reference: HEM formulation, conventions, impedance integrals, image method, nodal system, dispersive soil, validation anchors |
+| [theory.md](theory.md) | Normative physics reference: HEM formulation, conventions, impedance integrals, image method, nodal system, dispersive soil, validation anchors, positioning vs. companion codes and neighbouring model families |
 | [references.md](references.md) | Bibliography, numbered as cited in the theory doc |
 | [implementation-plan.md](implementation-plan.md) | Current-state gap analysis and phased plan for the Fortran implementation |
 | [adr/](adr/) | Architecture Decision Records |
