@@ -21,6 +21,16 @@ The project instructions list Longmire–Smith as preferred; the code and the
 validation data point to Portela's model. Both can coexist behind the
 `tMaterial` abstraction.
 
+> **Update (2026-07-05).** The original Matlab (model reference of record)
+> ships **two** dispersive-soil routines: the Portela power-law with
+> `ω₀ = 1 rad/s` — so the legacy `kr` is the dispersive magnitude at
+> 1 rad/s, *not* at 1 MHz (source: references.md [30]) — and the
+> Lima–Portela variant referenced to `2π·1 MHz` with `cot(πα/2)` on the
+> real parcel (references.md [31]), which is the same family under
+> `Δσ = Δᵢ·cot(πα/2)`. `tPortelaSoil` must document which reference
+> frequency its `kr` assumes, and a `tLimaPortelaSoil` parametrisation is a
+> candidate alongside the subtypes below (theory.md §7).
+
 ## Decision
 
 Implement **Portela's power-law model first**, as `tPortelaSoil`, because:

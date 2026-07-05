@@ -17,6 +17,14 @@ The nodal HEM equations admit two solution strategies (theory.md §6):
 The original C++/Fortran code contains both paths; only the augmented one
 (`calcFreq2` + `injetaSinalF`) was completed and used.
 
+> **Update (2026-07-05).** The original Matlab (now the model reference of
+> record) goes further: it exposes the reduced form (two variants), the
+> augmented form (LU and GMRES-fallback variants) *and* a TAGS-style
+> symmetric `(u, I_ℓ, I_t)` block system as switchable solver methods. This
+> strengthens the consequence below: the reduced-vs-augmented equivalence
+> check has reference-of-record precedent, and the symmetric layout is a
+> third cross-check available when validating against TAGS (theory.md §9.6).
+
 ## Decision
 
 The reference implementation solves the **full augmented system** with LAPACK

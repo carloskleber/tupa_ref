@@ -12,6 +12,14 @@ core (mesh matrices, LAPACK solve, impedance quadrature) to Fortran via
 ISO_C_BINDING; the C++ layer contributed object orientation, I/O and
 orchestration.
 
+> **Update (2026-07-05).** The lineage is longer than stated: the C++/Fortran
+> hybrid is itself a port of the **original Matlab implementation** (the one
+> behind the 2003 dissertation), which became available again alongside it
+> and is now the model reference of record (references.md, "Related
+> implementation notes"). The decision is unchanged — the Matlab reinforces
+> it, its physics kernel mapping to modern Fortran at least as naturally as
+> the C++ layer did.
+
 ## Decision
 
 Implement the first complete TUPÃ in **modern Fortran (2008+)**, built with

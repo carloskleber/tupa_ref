@@ -10,6 +10,13 @@ that must remain comparable and mutually validating. The original C++ code
 already factored the domain into Study/Structure/Element/Node/Segment/Mesh/
 Collector objects.
 
+> **Update (2026-07-05).** The factoring predates the C++: the original
+> Matlab code (now the model reference of record) already carries the same
+> decomposition — case/structure/mesh/medium/segment classes plus element,
+> signal and output packages that map one-to-one onto Study, Structure,
+> Mesh, Material, Electrode, Element, source-signal and Result types. The
+> object model is thus validated by three generations of the code, not one.
+
 ## Decision
 
 Fix a single conceptual object model that every implementation maps onto:

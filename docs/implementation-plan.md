@@ -5,8 +5,13 @@ Fortran implementation first; object model and test cases shared with future
 Python/Rust implementations (see [ADR 0002](adr/0002-language-agnostic-object-model.md)).
 
 This plan supersedes the previous `IMPLEMENTATION_PLAN.md`. It is based on a
-side-by-side analysis of this repository against the original (private) C++
-implementation and the theory now consolidated in [theory.md](theory.md).
+side-by-side analysis of this repository against the legacy (private)
+implementations and the theory now consolidated in [theory.md](theory.md).
+Originally the comparison target was the C++/Fortran hybrid; since July 2026
+the **original Matlab code** (the dissertation implementation) is available
+alongside it and is the **model reference of record** — see §8 for what its
+re-inspection changed, and "Related implementation notes" in
+[references.md](references.md) for the two codes' contents.
 
 ---
 
@@ -60,6 +65,9 @@ Gaps in this repository, in dependency order (1–4, 7, 8 resolved by Phases
    (Phase 1)** — confirmed wrong (missing factor of 2) by re-deriving the
    defining integral from scratch; theory.md's formula matches and is
    implemented as `mGeometry%selfGeometryFactor`, tested against quadrature.
+   The July 2026 legacy re-inspection (§8) traced the bug to the Matlab
+   original and found a second defect in the same expression: a literal `1`
+   where `l` belongs in the log argument, carried verbatim into the C++.
 
 Housekeeping: stray `*.mod` files at `fortran/` root and the `.history/`
 folder are gitignored (no longer an issue in practice — stray `.mod` files
@@ -159,7 +167,11 @@ match independent (scripted) numerical integration to 1e−6 relative.
 
 1. Wire `tStudy%run`: assemble → topology → per-frequency
    (`calcParam` from `tMaterial`s → `Zlong`/`Ztrans` fill from geometry
-   matrices → `calcFreq2` → inject → extract).
+   matrices → `calcFreq2` → inject → extract). Legacy trap to not replicate:
+   the C++ self-term call passes its *longitudinal* image geometry factor in
+   the *transversal*-image argument slot (copy-paste at the `calcZPropria`
+   call site) — cross-check the fill against the Matlab reference, whose
+   self/mutual factor bookkeeping is consistent.
 2. Current-source injection at named nodes (voltage sources deferred).
 3. **Validation test (the milestone)**: buried horizontal conductor
    (10 m, r₀ = 5–7 mm, 0.5 m depth, σ = 0.01 S/m, εr = 10):
@@ -182,6 +194,8 @@ impedance-vs-frequency table.
 ### Phase 4 — Dispersive soil
 
 1. Implement `tPortelaSoil` per ADR 0007 (Portela power-law proposed; confirm).
+   Mind the reference-frequency caveat (theory.md §7): the legacy Matlab's
+   `kr` is referenced to ω₀ = 1 rad/s, the Lima–Portela variant to 2π·1 MHz.
 2. DC-limit convergence test against `tLinear`; repeat Phase 2 validation with
    dispersion on (Portela 1997 dispersive curves).
 
@@ -196,8 +210,10 @@ impedance-vs-frequency table.
 
 ### Phase 6 — Sources and time domain
 
-1. Signal waveforms: Heidler, double exponential (the original also had
-   Portela's concave model, sine, step — port as needed).
+1. Signal waveforms: Heidler, double exponential (the Matlab reference ships
+   Heidler, double exponential plus a Jones-parametrised variant, single
+   exponential, impulse/step, Portela's concave model and sine — port as
+   needed).
 2. FFT driver: excitation spectrum → transfer function → IFFT (stdlib FFT or
    FFTW); Hanning taper / analytic-continuation notes in theory.md §8.
 3. Validation: impulse response of the Phase 2 conductor vs published
@@ -208,7 +224,15 @@ impedance-vs-frequency table.
 Priority from the original's inventory: `tCircumference` (grounding rings),
 `tCatenary`, grid/mesh generator element, tubular conductor, insulated
 conductor, series RLC element; reflection-coefficient images and multi-layer
-soil after that.
+soil after that. The Matlab reference's full element inventory, for the
+record: straight lines (three variants), ring, grid, cable, catenary,
+lightning-channel element, helicoidal rod, tube, conduit, solid shapes
+(block/cube/pyramid/tetrahedron), lumped series-RLC "impedance" elements
+(extra unknowns that do not couple electromagnetically — their `Zt` row is
+zeroed), and insulated buried cables (leakage through $j\omega\varepsilon$
+only; placeholder theory, flagged TODO in the legacy code itself). The C++
+adds bundle and L-profile (lattice-member) internal impedances and a
+shielded-wire segment.
 
 ### Phase 8 — Second implementation (Python)
 
@@ -288,10 +312,14 @@ path as the test oracle (already exists in `Impedance.f90`/`Geometry.f90`).
 
 Promote Γ(ω) from "planned refinement" to the default for buried conductors:
 `Γ_t(ω) = (W_soil − jωε₀)/(W_soil + jωε₀)`, `Γ_ℓ = 1` (theory.md §5). Both
-reference codes use it even with constant soil parameters; it needs only the
-medium constants already computed in `calcParam` and multiplies the image
-parcel. The ideal ±1 table remains as its low-frequency limit and as a test
-pin. Validation impact: Portela 1997 curves should still match; Grcev-grid
+open-source companion codes use it even with constant soil parameters; it
+needs only the medium constants already computed in `calcParam` and
+multiplies the image parcel. **Strengthened by the July 2026 re-inspection
+(§8): the original Matlab already implements this coefficient as its default
+mode** (ideal images are its `SOLO_IDEAL` switch; the C++ port dropped it) —
+so this proposal restores reference behaviour, it does not extend it. The
+ideal ±1 table remains as its low-frequency limit and as a test pin.
+Validation impact: Portela 1997 curves should still match; Grcev-grid
 MHz-range behaviour will not without it.
 
 ### P3 — Cross-code validation against TAGS (Phase 2 milestone, medium effort)
@@ -335,8 +363,10 @@ currently pencilled in (CLAUDE.md hook to be updated if confirmed).
 
 TAGS computes scalar potential, electric field and path voltages at arbitrary
 points from the solved `I_t`/`I_ℓ` (touch and step voltages, GPR profiles).
-Maps cleanly onto new `tResult` subtypes; useful the moment grids are
-simulated. Not needed for the near-term milestone.
+The Matlab reference has the same family of outputs (electric fields, 2-D/3-D
+soil-surface potentials, touch potential, mesh potentials, transfer
+functions) — use its output-class inventory to prioritise the `tResult`
+subtypes. Not needed for the near-term milestone.
 
 ### P8 — Criteria-based segmentation defaults (Phase 2/3, low effort)
 
@@ -354,7 +384,9 @@ touches.
 
 - Adopting TAGS's symmetric `(u, I_ℓ, I_t)` immittance block system — TUPÃ's
   `(u, i₁, i₂)` form is equivalent, already ported, and pinned by theory.md
-  §6; noted in §9.6 as a consistency-check option only.
+  §6; noted in §9.6 as a consistency-check option only. (The Matlab original
+  already carries this layout as its solver "método 5" — evidence it is a
+  useful cross-check, still not the primary path.)
 - The transmission-line performance chain of PRTL/PRTL-mHEM (towers, spans,
   flashover, outage rate) — out of scope for the grounding-solver milestone;
   revisit after Phase 8 (it is the dissertation's original application).
@@ -368,3 +400,52 @@ touches.
   natural future *output format* (fit `Z_g(ω)`, enforce passivity, emit an
   ATP/EMTP/PSCAD equivalent), not solver work; revisit when there are users
   asking for EMT integration.
+
+---
+
+## 8. Findings from re-inspecting the legacy implementations (July 2026)
+
+The original repository was re-cloned with **both** legacy MoM
+implementations side by side: the original Matlab code (the dissertation
+implementation) and the C++/Fortran hybrid ported from it. The Matlab
+version is now the **model reference of record**. What the re-inspection
+established, beyond what is already folded into the sections above:
+
+1. **Γ(ω) images are original behaviour.** The Matlab's default mode
+   computes the frequency-dependent image reflection coefficient
+   (equal-permeability Fresnel form, applied to both `Z_t` and `Z_ℓ` image
+   parcels) and keeps ideal images behind a `SOLO_IDEAL` switch; the C++
+   port kept only the ideal limits. Feeds P2 (theory.md §5 updated).
+2. **Self geometry factor bug lineage.** The legacy expression
+   `r − h + l·log((1 + h)/r)`, `h = hypot(l, r)`, originates in the Matlab
+   and was ported verbatim to the C++: it is half the correct `g_self` *and*
+   has a literal `1` where `l` belongs (dimensionally inconsistent; the two
+   coincide only for 1 m segments). Gap 8's fix stands (theory.md §4.2
+   updated).
+3. **C++-only call-site bug.** The C++ self-term call passes the
+   longitudinal image geometry factor in the transversal-image slot — do not
+   use the C++ fill as an oracle for the diagonal terms (warning added to
+   Phase 2).
+4. **All three solver layouts exist in the Matlab** as switchable methods:
+   reduced nodal (two variants), augmented (LU / GMRES fallback), and a
+   TAGS-style symmetric `(u, I_ℓ, I_t)` system ("método 5") — plus
+   commented-out "Portela convention" sign variants. Ready-made
+   consistency-test material for theory.md §6/§9.4.
+5. **Convention mixing is real and must gate cross-validation.** The Matlab
+   uses `σ + jωε` immittance and a decaying `e^{−γR}` (theory conventions),
+   but a `−jωμ/4π` longitudinal constant and a `D` incidence stored as `−1`
+   (compensated in solver assembly). Compare against it on moduli and
+   time-domain waveforms only (theory.md §2 caveat added; reinforces
+   ADR 0008).
+6. **Feature inventory is richer than previously documented**: tubular
+   internal impedance (I/K Bessel) already implemented; two dispersive-soil
+   routines (Portela power-law at ω₀ = 1 rad/s [30]; Lima–Portela at
+   2π·1 MHz [31]); field/soil-potential/touch-voltage output classes (feeds
+   P7); Heidler/double-exp/Jones/exponential/impulse/Portela-concave/sine
+   signals (Phase 6); the element list in Phase 7; a direct inverse-Fourier
+   quadrature over an interpolated spectrum besides the FFT driver
+   (theory.md §8).
+7. **Input formats**: the Matlab reads keyword-based text case files
+   (`.caso`/`.est`); XML was a C++ addition. Neither constrains the JSON
+   schema (ADR 0006), but the Matlab case files are the natural source when
+   porting reference cases to `common/`.

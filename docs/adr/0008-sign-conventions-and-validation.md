@@ -18,6 +18,16 @@ The sources this project draws from use conflicting conventions:
 
 Sign errors here don't crash — they produce plausible-looking wrong answers.
 
+> **Update (2026-07-05).** Re-inspection of the original Matlab (model
+> reference of record) added more examples of exactly this hazard: it mixes
+> conventions term by term (immittance `σ + jωε` and decaying propagation
+> factor per `e^{+jωt}`, but longitudinal constant `−jωμ/4π`), stores the
+> `D` incidence with entries `−1` and compensates in solver assembly, and
+> keeps commented-out "Portela convention" sign variants beside the active
+> code. Consequence for validation: compare against the legacy codes on
+> impedance moduli and time-domain waveforms only, never raw phases
+> (theory.md §2, legacy caveat).
+
 ## Decision
 
 - Adopt **one** convention set, stated in [theory.md](../theory.md) §2:

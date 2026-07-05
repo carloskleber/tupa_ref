@@ -10,6 +10,17 @@ rigorous treatment uses Sommerfeld integrals or frequency-dependent
 reflection/transmission coefficients relating image sources (Portela [1]
 §2.4). The original code implemented the simpler ideal-image limits.
 
+> **Correction (2026-07-05).** The last sentence is true only of the **C++
+> port**. The original Matlab (now the model reference of record)
+> implements the frequency-dependent reflection coefficient Γ(ω) as its
+> *default* mode — equal-permeability Fresnel form, applied to both the
+> transversal and longitudinal image parcels — with ideal images behind a
+> `SOLO_IDEAL` switch; the C++ dropped Γ(ω). The decision below stands for
+> the reference core's first milestone, but Γ(ω) is promoted from "out of
+> scope" to a planned restoration of reference behaviour (implementation
+> plan P2, theory.md §5). Cross-media coupling remains neglected in all
+> generations of the code.
+
 ## Decision
 
 Represent the interface by **ideal images** (theory.md §5):

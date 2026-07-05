@@ -5,7 +5,9 @@
 
 ## Context
 
-The original C++ code used a custom XML dialect (with XSL/CSS for display).
+The original C++ code used a custom XML dialect (with XSL/CSS for display);
+the Matlab before it used keyword-based text case files (`.caso`/`.est`),
+which are the natural source when porting reference cases to `common/`.
 For the rewrite, a language-neutral, human-writable format is needed so the
 same case files drive all implementations. JSON was chosen early. For Fortran,
 the mature option is `json-fortran` (FPM-compatible); the repository currently

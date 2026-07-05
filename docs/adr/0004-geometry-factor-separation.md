@@ -21,7 +21,11 @@ Adopt the geometry-factor separation as the core numerical strategy:
   assembly.
 - Evaluate `g` by adaptive Gauss–Kronrod 7/15 double quadrature in general
   position; use closed-form expressions for the self term (and later for
-  parallel/orthogonal pairs) as fast paths and test oracles.
+  parallel/orthogonal pairs) as fast paths and test oracles. (Precedent in
+  the Matlab reference: closed form for parallel pairs — including collinear
+  special cases — with numeric-quadrature fallback on failure; the
+  orthogonal closed form is a stub there, and its self-term formula is the
+  known-buggy one of theory.md §4.2.)
 
 ## Consequences
 

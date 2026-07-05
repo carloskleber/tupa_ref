@@ -82,6 +82,15 @@ TUPÃ adopts **one** convention set; every routine must conform to it.
 > $\gamma = j \cdot \text{conj}(k)$, and $e^{-\gamma R} = \text{conj}(e^{+ikR})$. Results (impedance moduli,
 > time-domain waveforms) are identical; phases are conjugated. Any code mixing
 > the two conventions in a single expression is wrong.
+>
+> **Legacy caveat.** The original Matlab TUPÃ (the model reference of record,
+> see references.md) mixes the two conventions term by term: its immittance
+> ($\sigma + j\omega\varepsilon$) and propagation factor (decaying
+> $e^{-jkR}$ with $k^2 = \omega^2\mu\varepsilon - j\omega\mu\sigma$, i.e.
+> $e^{-\gamma R}$ exactly) follow the $e^{+j\omega t}$ convention above, but
+> its longitudinal constant is $-j\omega\mu/4\pi$ — the $e^{-i\omega t}$
+> sign. When cross-validating against the legacy codes, compare impedance
+> moduli and time-domain waveforms, never raw phases.
 
 ---
 
@@ -200,8 +209,13 @@ $\lambda/10$; the project default stays $\lambda/10$, with coarsening per
   Note $\ln\left(\frac{l+h}{h-l}\right) = 2 \ln\left(\frac{l+h}{r_0}\right)$ for $h = \sqrt{l^2+r_0^2}$, which explains
   the equivalent forms found in the literature. The identical expression is
   used by the open-source TAGS implementation (`self_integral`), an
-  independent confirmation of this formula (the original C++ TUPÃ had it
-  wrong by a factor of 2 — see the implementation plan, gap 8).
+  independent confirmation of this formula. Both legacy TUPÃ implementations
+  had it wrong: the original Matlab computes
+  $r_0 - h + l \ln\left(\frac{1+h}{r_0}\right)$ — half the correct value,
+  with a literal `1` (one metre, dimensionally inconsistent) where $l$
+  belongs in the log argument, so it is exact only for $l = 1$ m even after
+  doubling — and the C++ port carries the same expression verbatim (see the
+  implementation plan, gap 8).
 
 ### 4.3 Self impedances
 
@@ -221,7 +235,9 @@ $$Z_t(a,a) = Z_{t,\text{ext}} + Z_{t,\text{interface}}$$
 
   with $I_0, I_1$ modified Bessel functions. For tubular conductors (inner
   radius $r_i$) the standard Schelkunoff expression with $I$ and $K$ Bessel
-  functions applies; see [3].
+  functions applies; see [3]. The legacy Matlab reference implements both
+  cases in a single routine (solid when the inner radius is zero), including
+  the large-argument limit of the Bessel ratio for numerical stability.
 
 ---
 
@@ -241,8 +257,9 @@ where $c_E = \frac{1}{4\pi(\sigma+j\omega\varepsilon)}$, $c_M = \frac{j\omega\mu
 image direction (the image of a segment reverses the sign of the z-component of
 its direction vector).
 
-In the current implementation the reflection coefficients are taken at their
-ideal limits, which gives the sign rules:
+In the current Fortran implementation the reflection coefficients are taken
+at their ideal limits (also available as a runtime switch in the legacy
+Matlab reference), which gives the sign rules:
 
 | Configuration            | Transversal image | Longitudinal image |
 | --- | --- | --- |
@@ -263,13 +280,21 @@ with immittance $W_s = \sigma_s + j\omega\varepsilon_s$, both TAGS and PRTL-mHEM
 $$\Gamma_t(\omega) = \frac{W_s - j\omega\varepsilon_0}{W_s + j\omega\varepsilon_0}, \qquad \Gamma_\ell = 1$$
 
 applied to the image terms of $Z_t$ **and** $Z_\ell$ (PRTL-mHEM applies
-$\Gamma_t$ to both; TAGS keeps them independent parameters). The ideal sign
+$\Gamma_t$ to both; TAGS keeps them independent parameters). The **original
+Matlab TUPÃ already implements exactly this coefficient** as its default
+(non-ideal-soil) mode: assuming equal permeabilities it computes
+$\Gamma = (k_1^2 - k_2^2)/(k_1^2 + k_2^2)$ between the media — algebraically
+identical to $(W_1 - W_2)/(W_1 + W_2)$ — per frequency, and multiplies the
+image parcels of both $Z_t$ and $Z_\ell$ by it (the PRTL-mHEM choice); the
+C++ port dropped this and kept only the ideal limits. The ideal sign
 rules in the table are the $|W_s| \gg \omega\varepsilon_0$ limit of these
 coefficients; they degrade for high-resistivity soils toward the MHz range,
 where $\Gamma_t$ acquires magnitude < 1 and phase. Implementing $\Gamma(\omega)$
-is a planned refinement (implementation plan §7); the cross-media coupling
-(air segment ↔ buried segment) is second-order and is neglected, as in the
-original code.
+in the Fortran code is a planned refinement (implementation plan §7 P2) that
+*restores* reference behaviour rather than adding to it; the cross-media
+coupling (air segment ↔ buried segment) is second-order and is neglected, as
+in both legacy codes (the Matlab returns zero for its "transmission"
+condition pairs).
 
 Even with $\Gamma(\omega)$, the image treatment is quasi-static and the HEM
 family is regarded as accurate from DC up to a few MHz [19,20]. Kuhar,
@@ -333,13 +358,21 @@ $$\mathbf{i}_2 = \left(-Z_\ell^{-1}\mathbf{A} + \frac{1}{2} Z_t^{-1}\mathbf{B} \
 
 This trades one $(n_n+2n_s)^2$ solve for two $n_s \times n_s$ solves plus a $n_n \times n_n$ solve
 (cf. [1] eqs. 50–56, [4]). Both forms must give identical results — a useful
-consistency test.
+consistency test. The legacy Matlab reference exposes exactly this check as
+switchable solver methods: the reduced form (backslash and explicit-inverse
+variants), the augmented form (with LU and GMRES-fallback variants), and
+additionally a TAGS-style symmetric block system in the unknowns
+$(\mathbf{u}, I_\ell, I_t)$ (its "método 5").
 
 > **Sign caveat.** The literature differs in the direction assumed for $\mathbf{i}_2$
 > (Portela [1] takes it *out* of the segment at node $n_2$, flipping signs in B,
 > D and the $\mathbf{i}_2$ blocks). The table above is self-consistent with the
 > both-into-segment convention of §2. Implementations must verify against the
-> DC limit (§9), not against any single paper's sign table.
+> DC limit (§9), not against any single paper's sign table. The legacy Matlab
+> illustrates the trap: it stores the **D** incidence with entries $-1$ and
+> compensates by assembling the KCL block as $[\mathbf{0}\ \mathbf{C}\ -\mathbf{D}]$
+> (net effect identical to the table above), and it carries commented-out
+> "Portela convention" sign variants next to the active ones.
 
 ---
 
@@ -357,7 +390,16 @@ with $\sigma_0$ the low-frequency conductivity, $\alpha \in (0,1)$ the dispersio
 and $\Delta\sigma$ the dispersion magnitude at the reference frequency $\omega_0$ (commonly
 $2\pi \cdot 1\, \text{MHz}$). The parameters `alpha0` and `kr` carried by `tPortelaSoil` correspond
 to this model (`kr` scaling the dispersive parcel, $\tan(\pi\alpha/2)$ tying the
-imaginary part). Per [ADR 0007](adr/0007-soil-dispersion-model.md), `tMaterial` admits
+imaginary part). **Reference-frequency caveat**: the legacy Matlab codes this
+model as $W = \sigma_0 + k_r[1 + j\tan(\pi\alpha/2)]\,\omega^\alpha$
+(source: Portela [30]), i.e. $\omega_0 = 1$ rad/s — `kr` is the dispersive
+magnitude at $\omega = 1$ rad/s, *not* at 1 MHz. A second legacy routine
+implements the Lima–Portela variant [31],
+$W = \sigma_0 + \Delta_i[\cot(\pi\alpha/2) + j](\omega/2\pi \cdot 10^6)^{\alpha}$,
+which is the same family rewritten with
+$\Delta\sigma = \Delta_i \cot(\pi\alpha/2)$ at $\omega_0 = 2\pi \cdot 1$ MHz;
+any `tPortelaSoil` parameter set must state which reference frequency its
+`kr` assumes. Per [ADR 0007](adr/0007-soil-dispersion-model.md), `tMaterial` admits
 several dispersive-soil subtypes side by side, each named after its original
 reference — `tPortelaSoil` (implemented first, matches the validation curves),
 `tLongmireSmithSoil` (the 13-term Debye expansion of Longmire & Smith [15], as
@@ -387,7 +429,10 @@ Practical notes from [1] and [3]: 512–8192 frequencies in $[0, 1\, \text{MHz}]
 for lightning impulses; for large structures, the smooth behaviour of $H(\omega)$
 allows computing a reduced set of frequencies and interpolating (analytic
 fitting), drastically cutting run time. Logarithmic frequency spacing is the
-project default for broadband sweeps.
+project default for broadband sweeps. The legacy Matlab implements this
+route literally: besides the plain FFT driver it ships a direct inverse
+Fourier integral evaluated by adaptive quadrature over a spline interpolation
+of the computed spectrum.
 
 **Numerical Laplace Transform (NLT) refinement.** TAGS, PRTL and PRTL-mHEM
 solve at complex frequencies $s = c + j\omega$ instead of $j\omega$, with damping

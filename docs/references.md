@@ -183,6 +183,23 @@ Numbered as cited in [theory.md](theory.md).
     territory well above HEM validity — cited to delimit the model's scope,
     not as a target application.
 
+## Legacy implementation sources
+
+Papers cited inside the legacy TUPÃ code (see "Related implementation notes"
+below) as the sources of its dispersive-soil routines:
+
+30. **Portela, C.** — "Statistical Aspects of Soil Electromagnetic Behavior in
+    Frequency Domain", *Ground'2000 — International Conference on Grounding
+    and Earthing*, Belo Horizonte, Brazil, June 2000. Cited by the legacy
+    Matlab soil routine as the source of the power-law model and its
+    parameter ranges (σ₀ = 50 µS/m–17 mS/m, α = 0.6–0.8,
+    kr = 0.002–0.9 µS/m·s^α); the model behind `tPortelaSoil`.
+31. **Lima, A. C. S.; Portela, C.** — "Inclusion of Frequency-Dependent Soil
+    Parameters in Transmission-Line Modeling", *IEEE Trans. Power Delivery*,
+    vol. 22, no. 1, pp. 492–499, Jan. 2007. The same power-law family
+    referenced to ω₀ = 2π·1 MHz (with cot(πα/2) on the real parcel); the
+    second dispersive-soil routine of the legacy Matlab code.
+
 ## Related open-source implementations
 
 Companion codes of the same model family, useful as executable cross-checks
@@ -207,10 +224,28 @@ Companion codes of the same model family, useful as executable cross-checks
 
 ## Related implementation notes
 
-- The original TUPÃ implementation (C++/Fortran hybrid, private) and its user
-  manual contain the working derivations that this repository's
-  [theory.md](theory.md) consolidates; the model itself is fully specified by
-  the public references above.
+- Two private legacy TUPÃ implementations exist, re-inspected side by side in
+  July 2026 (both outside this repository):
+  - the **original Matlab code** (`mom_matlab`) — the implementation behind
+    the dissertation [3] and, since July 2026, the **model reference of
+    record**: where the two legacy codes disagree, the Matlab decides. It
+    already contains the frequency-dependent image reflection coefficient
+    Γ(ω) (ideal images are a runtime switch), all three solver layouts of
+    theory.md §6 (reduced nodal, augmented, and a TAGS-style symmetric block
+    system) as switchable methods, solid *and* tubular Bessel internal
+    impedances, two dispersive-soil routines ([30] and [31]), and
+    field/soil-potential/touch-voltage outputs. Its methodology notes
+    (LaTeX + Mathematica impedance derivations) are the working derivations
+    that [theory.md](theory.md) consolidates.
+  - the **C++/Fortran hybrid port** (`mom_cpp`) — same physics kernel ported
+    from the Matlab (plus XML input, HTML reports, bundle/L-profile internal
+    impedances and a shielded-wire segment), but it dropped Γ(ω), keeping
+    only the ideal-image limits. The user manual (WIP) lives with it.
+  - known shared defect: the legacy self geometry factor (Matlab, ported
+    verbatim to C++) is half the correct value and carries a `1`-for-`l`
+    typo in its log argument — see theory.md §4.2 and implementation plan
+    gap 8. The model itself is fully specified by the public references
+    above.
 - TUPÃ's geometry-factor separation (theory.md §4.1, from [3], 2003) and the
   mHEM [11] are the same optimisation, arrived at independently; TAGS's
   closed-form self integral is identical to theory.md §4.2's `g_self` — a
