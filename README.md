@@ -68,6 +68,7 @@ yet** (the solver pipeline is being wired) — see
 | [docs/adr/](docs/README.md#adr-index) | Architecture Decision Records |
 | [common/README.md](common/README.md) | Shared JSON cases and schema (the public contract) |
 | [fortran/README.md](fortran/README.md) | Building and testing the Fortran implementation |
+| [gui/README.md](gui/README.md) | Solver-agnostic GUI (viewer); design in [docs/GUI_SDD.md](docs/GUI_SDD.md) |
 
 ## Implementations
 

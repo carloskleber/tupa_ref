@@ -10,6 +10,7 @@
 | [DISTRIBUTION.md](DISTRIBUTION.md) | Build chain, dependency inventory, packaging/release, licensing, security surface |
 | [GLOSSARY.md](GLOSSARY.md) | Main model and software terms |
 | [references.md](references.md) | Bibliography, numbered as cited in the theory doc |
+| [GUI_SDD.md](GUI_SDD.md) | **Proposal** (not accepted as an ADR): shared GUI frontend design — tree/3D input view, 1D/2D output plots. Phases G0/G1 implemented in [../gui/](../gui/README.md) |
 | [adr/](adr/) | Architecture Decision Records |
 | [object-model.plantuml](object-model.plantuml) | Class diagram of the language-agnostic object model |
 
@@ -34,4 +35,5 @@ ARCHITECTURE → theory.md; contributors add CONVENTIONS and ROADMAP.
 Language-specific build documentation stays with each implementation
 (e.g. [../fortran/README.md](../fortran/README.md)); FORD API docs are
 generated from the Fortran sources (`fortran/Tupa.md`). The shared JSON
-cases and schema live in [../common/](../common/README.md).
+cases and schema live in [../common/](../common/README.md). The solver-
+agnostic GUI ([GUI_SDD.md](GUI_SDD.md)) lives in [../gui/](../gui/README.md).

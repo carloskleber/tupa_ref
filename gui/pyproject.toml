@@ -1,0 +1,22 @@
+[project]
+name = "tupa-gui"
+version = "0.0.1"
+description = "TUPA solver-agnostic GUI: view study inputs and results (docs/GUI_SDD.md)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "GPL-3.0-or-later" }
+authors = [{ name = "Carlos Kleber C. Arruda", email = "carloskleber@gmail.com" }]
+dependencies = ["pyside6>=6.7"]
+
+[project.scripts]
+tupa-gui = "tupa_gui.app:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tupa_gui"]

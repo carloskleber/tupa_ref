@@ -3,3 +3,6 @@ mapping.md
 fortran/doc/
 fortran/*.mod
 CLAUDE.local.md
+gui/.venv/
+gui/**/__pycache__/
+gui/.pytest_cache/
