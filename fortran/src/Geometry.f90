@@ -14,6 +14,18 @@ module mGeometry
   public :: segmentVector, selfGeometryFactor, mutualGeometryFactor, &
             directionCosine, imageVector, meanDistance, buildGeometryMatrices
 
+  real(8), parameter :: PARALLEL_TOL = 1.0d-20
+  !! Threshold on |va x vb| below which two unit direction vectors are
+  !! treated as parallel (matches the Matlab reference `barraquad`'s
+  !! `cruz < 1e-20` check). Tight on purpose: only trips the closed-form
+  !! fast path for genuinely (near-machine-precision) parallel segments,
+  !! not merely near-parallel ones, since the formula assumes exact
+  !! parallelism.
+  real(8), parameter :: NUMP = 1.0d-6
+  !! Collinearity/touching-endpoint tolerance used inside the closed-form
+  !! parallel-segment formula, matching the Matlab reference's default
+  !! `NUMP` global (`inicvars.m`).
+
 contains
 
   ! =====================================================================
@@ -60,22 +72,125 @@ contains
     g = 2.0d0 * (l * log((l + h) / r0) - h + r0)
   end function selfGeometryFactor
 
-  subroutine mutualGeometryFactor(a1, a2, b1, b2, g)
-    !! General mutual geometry factor g(a,b) = integral(dl_a dl_b / R_ab) via
-    !! adaptive 2D quadrature (theory.md §4.2). Segments must not be
-    !! coincident or touching (use `selfGeometryFactor` for the diagonal).
+  subroutine mutualGeometryFactor(a1, a2, b1, b2, g, forceNumeric)
+    !! General mutual geometry factor g(a,b) = integral(dl_a dl_b / R_ab)
+    !! (theory.md §4.2). Segments must not be coincident or touching (use
+    !! `selfGeometryFactor` for the diagonal).
+    !!
+    !! Dispatches to the closed-form `parallelGeometryFactor` fast path
+    !! (theory.md §4.2 "Parallel segments"; ported from the Matlab
+    !! reference `barraquad.m`'s `posparal`) whenever `a` and `b` are
+    !! parallel, falling back to adaptive 2D quadrature (`IMPMUTUA`) for
+    !! non-parallel pairs, or if the closed form hits a degenerate
+    !! (NaN/Inf) edge case, exactly as the reference does.
     real(8), intent(in)  :: a1(3), a2(3)
     !! Endpoints of segment a (m)
     real(8), intent(in)  :: b1(3), b2(3)
     !! Endpoints of segment b (m)
     real(8), intent(out) :: g
     !! Geometry factor (m)
+    logical, intent(in), optional :: forceNumeric
+    !! When present and .true., always use quadrature, even for parallel
+    !! segments (matches `barraquad`'s `numerico` flag). Useful for
+    !! testing the closed form against its quadrature oracle.
     real(8) :: va(3), vb(3), la, lb
+    logical :: tryClosedForm, ok
 
     call segmentVector(a1, a2, va, la)
     call segmentVector(b1, b2, vb, lb)
+
+    tryClosedForm = .true.
+    if (present(forceNumeric)) tryClosedForm = .not. forceNumeric
+    if (tryClosedForm) tryClosedForm = (norm2(crossProduct(va, vb)) < PARALLEL_TOL)
+
+    if (tryClosedForm) then
+      call parallelGeometryFactor(a1, a2, la, va, b1, b2, lb, vb, g, ok)
+      if (ok) return
+    end if
+
     call IMPMUTUA(a1, va, la, b1, vb, lb, g)
   end subroutine mutualGeometryFactor
+
+  function crossProduct(u, v) result(w)
+    !! 3-vector cross product.
+    real(8), intent(in) :: u(3), v(3)
+    real(8) :: w(3)
+
+    w(1) = u(2) * v(3) - u(3) * v(2)
+    w(2) = u(3) * v(1) - u(1) * v(3)
+    w(3) = u(1) * v(2) - u(2) * v(1)
+  end function crossProduct
+
+  subroutine parallelGeometryFactor(a1, a2, la, va, b1, b2, lb, vb, g, ok)
+    !! Closed-form mutual geometry factor for two PARALLEL straight
+    !! segments (theory.md §4.2), ported from the Matlab reference
+    !! `barraquad.m`'s `posparal` (mom_matlab, 2003 dissertation). Callers
+    !! must already know `a` and `b` are parallel (`mutualGeometryFactor`
+    !! checks this via `crossProduct`).
+    !!
+    !! `ok = .false.` signals a degenerate (NaN/Inf) result from a
+    !! near-machine-precision edge case in the log terms — the caller
+    !! should then fall back to `IMPMUTUA` quadrature, exactly as the
+    !! reference does (its `isnan(fg)` check in `barraquad`).
+    real(8), intent(in)  :: a1(3), a2(3), la, va(3)
+    real(8), intent(in)  :: b1(3), b2(3), lb, vb(3)
+    real(8), intent(out) :: g
+    logical, intent(out) :: ok
+    real(8) :: posicao, da1b1, da1b2, da2b1, da2b2, x2
+    real(8) :: xi1, xi2, d11, d12, d21, d22, l11, l21, l22, y
+
+    posicao = dot_product(va, vb)
+    da1b1 = norm2(a1 - b1)
+    da1b2 = norm2(a1 - b2)
+    da2b1 = norm2(a2 - b1)
+    da2b2 = norm2(a2 - b2)
+    x2 = la
+
+    if (posicao > 0.0d0) then
+      if (da1b2 > da2b1) then
+        xi1 = dot_product(b1 - a1, va)
+        xi2 = xi1 + lb
+        d11 = da1b1; d12 = da1b2; d21 = da2b1; d22 = da2b2
+      else
+        x2 = lb
+        xi1 = dot_product(a1 - b1, vb)
+        xi2 = xi1 + la
+        d11 = da1b1; d12 = da2b1; d21 = da1b2; d22 = da2b2
+      end if
+    else
+      if (da2b2 > da1b1) then
+        xi1 = dot_product(b2 - a1, vb)
+        xi2 = xi1 + lb
+        d11 = da2b1; d12 = da2b2; d21 = da1b1; d22 = da1b2
+      else
+        x2 = lb
+        xi1 = dot_product(b2 - a1, va)
+        xi2 = xi1 + la
+        d11 = da1b2; d12 = da1b1; d21 = da2b2; d22 = da2b1
+      end if
+    end if
+
+    l11 = xi1
+    l21 = xi1 - x2
+    l22 = xi2 - x2
+    y = sqrt(max(0.0d0, d11 * d11 - l11 * l11)) / la
+
+    if (y < NUMP) then
+      if (abs(xi1 - x2) < NUMP) then
+        g = xi1 * log(-(xi1 - xi2) / xi1) + xi2 * log(-xi2 / (xi1 - xi2))
+      else
+        g = x2 * log((x2 - xi2) / (x2 - xi1)) + xi1 * log(-(x2 - xi1) / xi1) &
+          + xi2 * log(-xi2 / (x2 - xi2))
+      end if
+    else
+      g = d11 - d12 - d21 + d22 + x2 * log((d22 + l22) / (d21 + l21)) &
+        + xi1 * log((d11 - xi1) / (d21 - l21)) + xi2 * log((d22 - l22) / (d12 - xi2))
+    end if
+
+    ok = (g == g) .and. (abs(g) < huge(1.0d0))
+    !! NaN never equals itself; Inf fails the huge() bound. Mirrors
+    !! barraquad's isnan(fg) fallback-to-quadrature check.
+  end subroutine parallelGeometryFactor
 
   ! =====================================================================
   ! Distances and direction cosines
@@ -118,7 +233,7 @@ contains
   ! Full geometry-matrix assembly
   ! =====================================================================
 
-  subroutine buildGeometryMatrices(p1, p2, radius, n, G, Gi, Rbar, Rbari, cosTheta, cosThetaI)
+  subroutine buildGeometryMatrices(p1, p2, radius, n, G, Gi, Rbar, Rbari, cosTheta, cosThetaI, forceNumeric)
     !! Build the full set of n x n geometry matrices for n straight segments
     !! (theory.md §4-5): real geometry factor G, image geometry factor Gi,
     !! mean distance Rbar, image mean distance Rbari, direction cosine
@@ -139,6 +254,9 @@ contains
     !! Segment radii (m)
     real(8), intent(out) :: G(n,n), Gi(n,n), Rbar(n,n), Rbari(n,n)
     real(8), intent(out) :: cosTheta(n,n), cosThetaI(n,n)
+    logical, intent(in), optional :: forceNumeric
+    !! Forwarded to `mutualGeometryFactor` (see there); always use
+    !! quadrature even for parallel segment pairs.
     real(8) :: dir(n,3), len(n), mid(n,3)
     real(8) :: p1i(3), p2i(3), midi(3), diri(3), gij
     integer :: i, j
@@ -155,7 +273,7 @@ contains
           Rbar(i,i)     = radius(i)
           cosTheta(i,i) = 1.0d0
         else
-          call mutualGeometryFactor(p1(i,:), p2(i,:), p1(j,:), p2(j,:), gij)
+          call mutualGeometryFactor(p1(i,:), p2(i,:), p1(j,:), p2(j,:), gij, forceNumeric)
           G(i,j) = gij;                       G(j,i) = gij
           Rbar(i,j) = meanDistance(mid(i,:), mid(j,:))
           Rbar(j,i) = Rbar(i,j)
@@ -168,7 +286,7 @@ contains
         p2i  = imageVector(p2(j,:))
         midi = imageVector(mid(j,:))
         diri = imageVector(dir(j,:))
-        call mutualGeometryFactor(p1(i,:), p2(i,:), p1i, p2i, gij)
+        call mutualGeometryFactor(p1(i,:), p2(i,:), p1i, p2i, gij, forceNumeric)
         Gi(i,j) = gij;                        Gi(j,i) = gij
         Rbari(i,j) = meanDistance(mid(i,:), midi)
         Rbari(j,i) = Rbari(i,j)

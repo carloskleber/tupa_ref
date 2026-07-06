@@ -19,9 +19,9 @@ ifx-compatible.
 ```bash
 sudo apt update
 sudo apt install gfortran
-sudo apt install pipx
-pipx install fpm
-pipx install fortls
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv tool install fpm
+uv tool install fortls
 ```
 
 * `git clone` from inside your `home/username/` folder;

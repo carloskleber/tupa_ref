@@ -136,22 +136,24 @@ contains
   ! =====================================================================
 
   subroutine runFromFile(filename)
-    !! Convenience entry point: load a JSON file, execute the simulation, and print results.
+    !! Convenience entry point: load a JSON file and print a summary.
     !!
     !! This is a thin wrapper that:
     !! 1. Calls `loadStudy()` to parse the JSON file
-    !! 2. Calls `study%run()` to execute the solver
-    !! 3. Calls `study%report()` to print the summary
+    !! 2. Calls `study%report()` to print the summary
     !!
-    !! Useful for scripting and testing; production code may prefer to call
-    !! `loadStudy()` directly for more control.
+    !! `study%run()` is not called here: it now takes a frequency and current
+    !! sources (ROADMAP Phase 2), neither of which the JSON schema carries
+    !! yet (ROADMAP Phase 5). Once Phase 5 adds a `sources`/`frequencies`
+    !! section to the schema, this wrapper should parse them and call `run`
+    !! per frequency. Useful for scripting and testing; production code may
+    !! prefer to call `loadStudy()` directly for more control.
     character(len=*), intent(in) :: filename
     !! Path to the JSON study file
     type(tStudy) :: study
-    !! Local study object (created, executed, reported, then destroyed)
+    !! Local study object (created, reported, then destroyed)
 
     call loadStudy(filename, study)
-    call study%run()
     call study%report()
   end subroutine runFromFile
 

@@ -34,8 +34,8 @@ program example1
   elem = newElementLine("Line_1", "Node_1", "Node_2", 0.01d0, 2, "copper")
   call study%structure%addElement(elem)
 
-  ! Run the study
-  call study%run()
+  ! Run the study: 100 kHz, 1 A injected at Node_1
+  call study%run(2.0d0 * PI * 1.0d5, ["Node_1"], [cmplx(1.0d0, 0.0d0, kind=8)])
 
   ! Print summary
   call study%report()

@@ -1,8 +1,10 @@
 # TUPÃ — GUI Frontend Software Design Document (draft, for review)
 
-**Status**: proposal — the open questions in §8 have been answered by the
-author (recorded inline); this document now reflects those decisions. Still
-not binding until an ADR is written and accepted. Phases G0/G1 (§7) have
+**Status**: the decisions recorded in §8 are now binding —
+[ADR 0011](adr/0011-gui-module-technology-and-scope.md) (technology, scope,
+repo placement) and [ADR 0012](adr/0012-results-json-schema.md) (results
+JSON schema) have been accepted. This document remains the detailed design
+record and phased delivery plan behind those ADRs. Phases G0/G1 (§7) have
 been implemented in [`gui/`](../gui/README.md) against the design below.
 
 This is a design proposal for a **separate, solver-agnostic GUI module**:
@@ -114,14 +116,13 @@ what a solver already computed and exported.
 
 ROADMAP Phase 3 item 3 ("CSV writer (primary) and JSON results writer") and
 Phase 5 ("freeze the input schema v1... documented next to the cases") cover
-input; no output JSON schema has been drafted anywhere in the docs. Per §8.5,
+input; no output JSON schema had been drafted anywhere in the docs. Per §8.5,
 the schema is drafted **now**, alongside this GUI design, rather than waiting
 for the Fortran Phase 3 writer to exist and reverse-documenting it — all
 three planned implementations (Fortran, Python, Rust) and this GUI need to
-agree on one schema, so it should only be designed once. The sketch below is
-the starting point; it should be promoted to its own ADR (a new number after
-0010) and cross-referenced from ROADMAP Phase 3/5 as the next concrete step,
-ahead of any GUI code:
+agree on one schema, so it should only be designed once. The sketch below has
+been promoted to [ADR 0012](adr/0012-results-json-schema.md) and is
+cross-referenced from ROADMAP Phase 3/5:
 
 ```json
 {
@@ -203,13 +204,13 @@ dataclasses, unit-tested headless in `gui/tests/`), `gui/src/tupa_gui/view/`
 4. **Solver invocation** — **the GUI can call the solver** (subprocess),
    confirmed in scope; scheduled as G5, after the core view/plot phases.
 5. **Output JSON schema ownership** — **draft it now** (§5.2), not after a
-   solver implements it. Next concrete step: promote the §5.2 sketch to an
-   ADR (next free number after 0010) and cross-reference it from ROADMAP
-   Phase 3/5, before Fortran's JSON results writer is implemented, so it
-   isn't designed twice.
+   solver implements it. Frozen as [ADR 0012](adr/0012-results-json-schema.md)
+   and cross-referenced from ROADMAP Phase 3/5, ahead of Fortran's JSON
+   results writer, so it isn't designed twice.
 6. **Packaging** — **uv**-managed (`pyproject.toml` + `uv.lock`); no bundled
    executable for now.
 
-These are recorded here as the author's decisions; formalising them as an
-ADR (and the output-schema ADR from §5.2) is the natural next step before
-G0 code lands.
+These decisions are formalised in
+[ADR 0011](adr/0011-gui-module-technology-and-scope.md) (technology, scope,
+repo placement, items 1–4, 6 above) and
+[ADR 0012](adr/0012-results-json-schema.md) (item 5, the results schema).

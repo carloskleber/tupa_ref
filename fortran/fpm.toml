@@ -28,3 +28,7 @@ source-form = "free"
 name = "example1"
 main = "example1.f90"
 
+[[example]]
+name = "example3"
+main = "example3.f90"
+

@@ -26,6 +26,10 @@ program test_geometry
   ! IMPMUTUA, vs. the closed-form selfGeometryFactor). This also directly
   ! disproves the original C++ `fatorGeometriaPropria` formula (missing a
   ! factor of 2) noted in ROADMAP.md gap 8.
+  !
+  ! forceNumeric=.true. is required here: a and b are parallel, so
+  ! mutualGeometryFactor would otherwise take its own closed-form fast path
+  ! (parallelGeometryFactor) instead of the quadrature oracle this test needs.
   ! ----------------------------------------------------------------
   call test_init("selfGeometryFactor vs quadrature oracle (theory.md §4.2)")
 
@@ -35,7 +39,7 @@ program test_geometry
   a2 = [l, 0.0d0, 0.0d0]
   b1 = [0.0d0, r0, 0.0d0]
   b2 = [l, r0, 0.0d0]
-  call mutualGeometryFactor(a1, a2, b1, b2, gQuad)
+  call mutualGeometryFactor(a1, a2, b1, b2, gQuad, forceNumeric=.true.)
   gClosed = selfGeometryFactor(l, r0)
 
   call test_ok("g_self(10, 0.01) matches quadrature to 1e-6 relative", &
@@ -54,12 +58,97 @@ program test_geometry
   a2 = [l, 0.0d0, 0.0d0]
   b1 = [0.0d0, 0.0d0, -d]
   b2 = [l, 0.0d0, -d]
-  call mutualGeometryFactor(a1, a2, b1, b2, gQuad)
+  call mutualGeometryFactor(a1, a2, b1, b2, gQuad, forceNumeric=.true.)
   gClosed = selfGeometryFactor(l, d)
 
   call test_ok("g(l=5, offset=2) matches quadrature to 1e-6 relative", &
                abs(gClosed - gQuad) < 1.0d-6 * abs(gQuad), &
                "closed form and quadrature disagree for a genuine (non-self) pair")
+
+  ! ----------------------------------------------------------------
+  ! Parallel-segment closed-form fast path (mutualGeometryFactor's default
+  ! path), ported from the Matlab reference barraquad.m's posparal. Cases
+  ! mirror mom_matlab/test/testesIntegralxAnalitica.m.
+  !
+  ! Touching/consecutive collinear cases (1-2) are NOT compared against
+  ! forced quadrature: that is exactly the near-singular, slow-to-converge
+  ! configuration the closed form exists to avoid (ROADMAP.md §5). Instead
+  ! they check a property quadrature can't easily confirm anyway: g(a,b) is
+  ! invariant to which way each segment's direction vector happens to point.
+  ! ----------------------------------------------------------------
+  call test_init("Parallel-segment closed form (posparal port) vs quadrature and self-consistency")
+
+  ! Case 1/2 (testesIntegralxAnalitica.m): collinear, consecutive (touching),
+  ! same case with segment a's direction vector reversed.
+  a1 = [150.0d0, 0.0d0, 30.0d0]
+  a2 = [150.0d0, 0.0d0, 27.5d0]
+  b1 = [150.0d0, 0.0d0, 27.5d0]
+  b2 = [150.0d0, 0.0d0, 25.0d0]
+  call mutualGeometryFactor(a1, a2, b1, b2, gClosed)
+
+  block
+    real(8) :: gFlipped
+    call mutualGeometryFactor(a2, a1, b1, b2, gFlipped)
+    call test_ok("collinear touching: g invariant to segment a's direction", &
+                 abs(gClosed - gFlipped) < 1.0d-9 * abs(gClosed), &
+                 "reversing a's parametrisation must not change the mutual geometry factor")
+  end block
+
+  ! Case 3: collinear, non-consecutive (2.5 m gap) -- safe for quadrature.
+  a1 = [150.0d0, 0.0d0, 30.0d0]
+  a2 = [150.0d0, 0.0d0, 27.5d0]
+  b1 = [150.0d0, 0.0d0, 25.0d0]
+  b2 = [150.0d0, 0.0d0, 22.5d0]
+  call mutualGeometryFactor(a1, a2, b1, b2, gClosed)
+  call mutualGeometryFactor(a1, a2, b1, b2, gQuad, forceNumeric=.true.)
+  call test_ok("collinear, non-consecutive: closed form matches quadrature", &
+               abs(gClosed - gQuad) < 1.0d-4 * abs(gQuad), &
+               "closed form and quadrature disagree for a collinear, non-touching pair")
+
+  ! Case 4: parallel, offset = length (10 m) -- safe for quadrature.
+  a1 = [0.0d0, 0.0d0, 1.0d0]
+  a2 = [10.0d0, 0.0d0, 1.0d0]
+  b1 = [0.0d0, 10.0d0, 1.0d0]
+  b2 = [10.0d0, 10.0d0, 1.0d0]
+  call mutualGeometryFactor(a1, a2, b1, b2, gClosed)
+  call mutualGeometryFactor(a1, a2, b1, b2, gQuad, forceNumeric=.true.)
+  call test_ok("parallel, far offset: closed form matches quadrature", &
+               abs(gClosed - gQuad) < 1.0d-4 * abs(gQuad), &
+               "closed form and quadrature disagree for a widely-offset parallel pair")
+
+  ! Case 6/7: parallel, offset = length/100 (0.1 m over 10 m) -- moderately
+  ! close but not touching; safe for quadrature. Case 7 reverses b's
+  ! direction vector and swaps its endpoints, so it must give the same g.
+  a1 = [0.0d0, 0.0d0, 1.0d0]
+  a2 = [10.0d0, 0.0d0, 1.0d0]
+  b1 = [0.0d0, 0.1d0, 1.0d0]
+  b2 = [10.0d0, 0.1d0, 1.0d0]
+  call mutualGeometryFactor(a1, a2, b1, b2, gClosed)
+  call mutualGeometryFactor(a1, a2, b1, b2, gQuad, forceNumeric=.true.)
+  call test_ok("parallel, offset = length/100: closed form matches quadrature", &
+               abs(gClosed - gQuad) < 1.0d-3 * abs(gQuad), &
+               "closed form and quadrature disagree for a close parallel pair")
+
+  block
+    real(8) :: gOpposite
+    call mutualGeometryFactor(a1, a2, b2, b1, gOpposite)
+    call test_ok("parallel, offset = length/100: g invariant to b's direction", &
+                 abs(gClosed - gOpposite) < 1.0d-9 * abs(gClosed), &
+                 "reversing b's parametrisation must not change the mutual geometry factor")
+  end block
+
+  ! forceNumeric must actually route through IMPMUTUA: a non-parallel pair
+  ! only ever uses quadrature, so it must agree with itself regardless of
+  ! the flag (sanity check that the flag doesn't corrupt the non-parallel path).
+  a1 = [0.0d0, 0.0d0, 0.0d0]
+  a2 = [1.0d0, 0.0d0, 0.0d0]
+  b1 = [0.0d0, 1.0d0, 0.0d0]
+  b2 = [0.0d0, 1.0d0, 1.0d0]
+  call mutualGeometryFactor(a1, a2, b1, b2, gClosed)
+  call mutualGeometryFactor(a1, a2, b1, b2, gQuad, forceNumeric=.true.)
+  call test_ok("non-parallel pair: forceNumeric is a no-op (both paths are quadrature)", &
+               abs(gClosed - gQuad) < 1.0d-12 * abs(gQuad), &
+               "a non-parallel pair must give the identical result regardless of forceNumeric")
 
   ! ----------------------------------------------------------------
   ! Direction cosines, including image (z-flip)

@@ -1,8 +1,10 @@
 # TUPÃ GUI
 
 Solver-agnostic viewer for TUPÃ study inputs and results. Design doc:
-[../docs/GUI_SDD.md](../docs/GUI_SDD.md) (proposal — implementation may run
-ahead of formal ADR acceptance per that document's phase G0/G1 status).
+[../docs/GUI_SDD.md](../docs/GUI_SDD.md); technology, scope, and repo
+placement are fixed by [ADR 0011](../docs/adr/0011-gui-module-technology-and-scope.md),
+and the results JSON schema it will read is fixed by
+[ADR 0012](../docs/adr/0012-results-json-schema.md).
 
 This module talks to JSON files only ([common/README.md](../common/README.md)
 schema), never to a solver's internals ([ADR 0002](../docs/adr/0002-language-agnostic-object-model.md),

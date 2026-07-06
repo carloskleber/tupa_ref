@@ -59,15 +59,18 @@ Gaps in this repository, in dependency order (1–4, 7, 8 resolved by Phases
    `tStudy%run` still doesn't call `assembleStructure` (Phase 2).
 4. ~~**Internal impedance missing**~~ **Resolved (Phase 1)**, solid conductor
    only (`mImpedance%internalImpedance`, SLATEC `ZBESI`); tubular is Phase 7.
-5. **No frequency sweep, no sources, no outputs** — `tResult` types are
-   declared but never filled; no signal waveforms; no CSV/JSON writers.
-   *Partially advanced (2026-07-05)*: the impedance-fill interface is now
+5. ~~**No frequency sweep, no sources, no outputs**~~ **Fill loop and
+   single-frequency solve resolved (Phase 2)** — `tStudy%run` wires
+   assemble → topology → geometry (cached once) → per-frequency
+   `calcParam`/fill/`calcFreq2`/`injetaSinalF`; current-source injection at
+   named nodes works (ADR 0010). `tResult` types are still declared but
+   never filled, and there is still no CSV/JSON writer or formal sweep
+   storage — that remains Phase 3. The impedance-fill interface itself was
    fixed by [ADR 0009](adr/0009-impedance-fill-interface.md) —
    `calcZPropria`/`calcZMutua` take raw `mGeometry` outputs and apply every
    theory factor (propagation, direction cosines, length normalisation,
    including the direct-term `e^{−γr₀}` of theory.md §4.3) internally,
-   pinned by hand-evaluated values in `test_mesh.f90`. The per-frequency
-   fill *loop* and the sweep driver remain to be written.
+   pinned by hand-evaluated values in `test_mesh.f90`.
 6. **`tPortelaSoil` is a placeholder** (returns zero) — see ADR 0007. It is
    the first of several planned dispersive-soil `tMaterial` subtypes
    (`tLongmireSmithSoil`, `tVisacroAlipioSoil`, ...), not the only one.
@@ -176,32 +179,54 @@ segments, consistent with gap 8 — no self-term regularisation exists yet).
 **Exit criterion met**: for a 10 m line in 10 segments, geometry matrices
 match independent (scripted) numerical integration to 1e−6 relative.
 
-### Phase 2 — End-to-end single-frequency solve
+### Phase 2 — End-to-end single-frequency solve — **done (DC-limit scope)**
 
-1. Wire `tStudy%run`: assemble → topology → per-frequency
+1. ~~Wire `tStudy%run`: assemble → topology → per-frequency
    (`calcParam` from `tMaterial`s → `Zlong`/`Ztrans` fill from geometry
-   matrices → `calcFreq2` → inject → extract). The legacy trap here — the
-   C++ self-term call passed its *longitudinal* image geometry factor in the
-   *transversal*-image argument slot — motivated [ADR 0009](adr/0009-impedance-fill-interface.md):
-   `calcZPropria`/`calcZMutua` now consume the raw `mGeometry` matrices
-   directly (no caller-side pre-scaling), removing that class of bug. Still
-   cross-check the assembled fill against the Matlab reference on moduli.
-2. Current-source injection at named nodes (voltage sources deferred).
-3. **Validation test (the milestone)**: buried horizontal conductor
-   (10 m, r₀ = 5–7 mm, 0.5 m depth, σ = 0.01 S/m, εr = 10):
-   - DC limit vs Sunde/Dwight resistance formula (theory.md §9.1);
-   - low-frequency input impedance ≈ DC resistance;
-   - full curve 100 Hz–1 MHz within 5 % of Portela 1997 [2].
+   matrices → `calcFreq2` → inject → extract).~~ Done: `run(this, omega,
+   sourceNodeIds, sourceCurrents)` assembles and computes the geometry-factor
+   matrices once (cached on `tStudy`, guarded by a `prepared` flag), then
+   repeats only the per-frequency block (medium constants, fill loop over
+   `calcZPropria`/`calcZMutua`, `calcFreq2`, `injetaSinalF`) on every call —
+   so a caller sweeping frequency does not redo the O(n²) quadrature
+   (theory.md §4.1). The legacy trap here — the C++ self-term call passed
+   its *longitudinal* image geometry factor in the *transversal*-image
+   argument slot — motivated [ADR 0009](adr/0009-impedance-fill-interface.md):
+   `calcZPropria`/`calcZMutua` consume the raw `mGeometry` matrices directly
+   (no caller-side pre-scaling), removing that class of bug. Cross-checking
+   the assembled fill against the Matlab reference on moduli is still open
+   (no cross-code harness exists yet — see P3 below).
+2. ~~Current-source injection at named nodes~~ Done (ADR 0010; voltage
+   sources remain deferred) — `run`'s `sourceNodeIds`/`sourceCurrents`
+   arguments, resolved via `tStructure%findNodeIndex`.
+3. **Validation test — DC-limit scope done, curve-match deferred**: the
+   Portela-1997-parameter buried horizontal conductor (10 m, r₀ = 7 mm,
+   0.5 m depth, σ = 0.01 S/m, εr = 10) is pinned in
+   `fortran/test/test_solve.f90`:
+   - ~~DC limit vs Sunde/Dwight resistance formula (theory.md §9.1)~~ done,
+     within 15 % at 10 Hz (loose because the formula itself drops
+     higher-order terms and 10 Hz isn't literally DC);
+   - ~~low-frequency input impedance ≈ DC resistance~~ done (10 Hz vs 100 Hz
+     agree within 5 %, confirming the plateau) and passivity
+     (`Re(Zin) ≥ 0`) holds across the whole 10 Hz–1 MHz sweep;
+   - **full curve within 5 % of Portela 1997 [2] — not attempted**: no
+     tabulated data exists for that curve (theory.md §9.2), so there is
+     nothing to compare against yet. Left for ROADMAP §7 P3 (TAGS
+     cross-validation), a separate, larger task that would supply an
+     executable oracle.
 
-**Exit criterion**: `fpm run --example example1` prints the validated
-impedance-vs-frequency table.
+**Exit criterion met (DC-limit scope)**: `fpm run --example example3`
+prints the impedance-vs-frequency table for the Portela-1997-parameter
+conductor over 100 Hz–1 MHz (the smoke cases `example1`/`example2` use
+εr = 1 soil and are not the validation case, per `common/README.md`).
 
 ### Phase 3 — Frequency sweep, results, output
 
 1. Log-spaced frequency axis (default) with user override.
 2. Fill `tVoltages`/`tLongCurrents`/`tTransCurrents` across the sweep;
    convenience queries (`inputImpedance`, `maxVoltage`).
-3. CSV writer (primary) and JSON results writer.
+3. CSV writer (primary) and JSON results writer, against the schema frozen
+   in [ADR 0012](adr/0012-results-json-schema.md).
 4. OpenMP on the geometry-factor fill loop (already flagged in build.sh) —
    only after Phase 2 validation, with a determinism test.
 
@@ -266,11 +291,14 @@ conductor, with the convention audit done first. Priority order:
 2. [x] `tLine%assemble` + structure arrays
 3. [x] Geometry-factor module (direct + image) + tests
 4. [x] `Z_int` Bessel internal impedance
-5. [x] `Zlong`/`Ztrans` fill *interface* (ADR 0009, theory factors internal);
-       fill loop over the geometry matrices still pending
-6. [ ] `tStudy%run` wiring + current injection (ADR 0010)
-7. [ ] DC-limit test, then Portela curve test
-8. [ ] `example1` prints the result table
+5. [x] `Zlong`/`Ztrans` fill *interface* (ADR 0009, theory factors internal)
+       and fill loop over the geometry matrices (`tStudy%run`)
+6. [x] `tStudy%run` wiring + current injection (ADR 0010)
+7. [x] DC-limit test (`test_solve.f90`); Portela curve test deferred —
+       no tabulated data exists (theory.md §9.2), needs P3 (TAGS
+       cross-validation) as an executable oracle
+8. [x] `example3` prints the result table (`example1`/`example2` stay as
+       the εr = 1 smoke cases per `common/README.md`)
 
 ---
 
@@ -308,6 +336,8 @@ There is **no hosted CI** (decision §9): the gate is a local
 | FFT dependency | stdlib vs FFTW — decide in Phase 6; NLT proposed on top (P4 in §7) |
 | JSON schema v1 | draft with Phase 5; freeze before Python port |
 | Reduced `Z_g` solver | deferred optimisation (ADR 0003) |
+| GUI module | **Decided** — Python/PySide6/Qt3D, view-only v1, own `gui/` folder ([ADR 0011](adr/0011-gui-module-technology-and-scope.md)) |
+| Results JSON schema (output) | **Decided** — v0 frozen ahead of any writer ([ADR 0012](adr/0012-results-json-schema.md)); consumed by Phase 3 item 3 and GUI phase G2 |
 | Quadrature tolerances | `errrel = min(la,lb)·10⁻⁶`, `maxint = 500` are dissertation-era values, open to revision (interview §9) — revisit with the P1 mHEM kernel |
 
 ---
@@ -505,7 +535,7 @@ changed a document or the code, the change is already applied and referenced.
 | Public contract | JSON schema + `common/` cases only; all Fortran module APIs are internal and changeable. |
 | Compilers | Latest gfortran; keep ifx-compatible. |
 | CI | No hosted CI (no GitHub Actions); local `fpm build && fpm test` gate (§5). |
-| Release process | Proposed (delegated): semver; **0.1.0 = validated Phase 2 milestone** (Portela-curve case within tolerance); annotated git tags + a CHANGELOG; no package-registry publishing planned. |
+| Release process | Proposed (delegated): semver; **0.1.0 = validated Phase 2 milestone** (Portela-curve case within tolerance); annotated git tags + a CHANGELOG; no package-registry publishing planned. **Open as of the Phase 2 wiring pass**: only the DC-limit check is executable today (§3 Phase 2 item 3) — the Portela-curve tolerance check needs P3 (TAGS cross-validation) or real tabulated data first, so hitting this 0.1.0 bar needs one of those, not just the wiring done here. |
 | SLATEC | The **cloned** `fortran/slatec/` checkout (from the author's fork, fetched by `build.sh`) is canonical and may be fine-tuned in place. |
 | Benchmarks | TAGS and PRTL-mHEM to be added as git submodules under `benchmarks/` (see [BENCHMARKS.md](BENCHMARKS.md)); they are the executable validation oracles until curated reference datasets arrive. |
 | Validation data | No tabulated data from Portela 1997 exists — only the equations; further validation references to be supplied by the author. Visacro & Soares 2005 [5] has no usable comparison data. No legacy-output fixtures for now. |

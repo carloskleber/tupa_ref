@@ -54,8 +54,8 @@ Harrington [6], Gibson [7]).
 Sign conventions are the single largest source of bugs in this class of code.
 TUPÃ adopts **one** convention set; every routine must conform to it.
 
-- **Time factor**: $e^{+j\omega t}$ (electrical engineering convention). A quantity
-  $X$ means the phasor of $x(t) = \text{Re}\{X e^{j\omega t}\}$.
+- **Time factor**: $\exp(+j\omega t)$ (electrical engineering convention). A quantity
+  $X$ means the phasor of $x(t) = \text{Re}\{X \exp(j\omega t)\}$.
 - **Medium immittance** (per volume element): $\sigma + j\omega\varepsilon$. All media are linear,
   isotropic, non-magnetic unless stated ($\mu = \mu_r\mu_0$).
 - **Propagation constant**:
@@ -64,7 +64,7 @@ TUPÃ adopts **one** convention set; every routine must conform to it.
 
   with the principal square root, so that the **propagation factor**
 
-  $$F(R) = e^{-\gamma R}$$
+  $$F(R) = \exp(-\gamma R)$$
 
   decays with distance ($\alpha > 0$ in any lossy medium) and delays the phase.
 - **Geometry**: right-handed Cartesian axes, `z` up. The air–soil interface is
@@ -76,19 +76,19 @@ TUPÃ adopts **one** convention set; every routine must conform to it.
   $$I_t = I_1 + I_2 \quad \text{(total transversal / leakage current)}$$
 
 > **Mapping to the literature.** Portela [1] and the dissertation [3] use the
-> physics convention $e^{-i\omega t}$, in which the immittance appears as $\sigma - i\omega\varepsilon$,
+> physics convention $\exp(-i\omega t)$, in which the immittance appears as $\sigma - i\omega\varepsilon$,
 > the wavenumber is $k = \sqrt{\mu\varepsilon\omega^2 + i\omega\mu\sigma}$ and the propagation factor is
-> $e^{+ikR}$. The two notations are complex conjugates of each other:
-> $\gamma = j \cdot \text{conj}(k)$, and $e^{-\gamma R} = \text{conj}(e^{+ikR})$. Results (impedance moduli,
+> $\exp(+ikR)$. The two notations are complex conjugates of each other:
+> $\gamma = j \cdot \text{conj}(k)$, and $\exp(-\gamma R) = \text{conj}(\exp(+ikR))$. Results (impedance moduli,
 > time-domain waveforms) are identical; phases are conjugated. Any code mixing
 > the two conventions in a single expression is wrong.
 >
 > **Legacy caveat.** The original Matlab TUPÃ (the model reference of record,
 > see references.md) mixes the two conventions term by term: its immittance
 > ($\sigma + j\omega\varepsilon$) and propagation factor (decaying
-> $e^{-jkR}$ with $k^2 = \omega^2\mu\varepsilon - j\omega\mu\sigma$, i.e.
-> $e^{-\gamma R}$ exactly) follow the $e^{+j\omega t}$ convention above, but
-> its longitudinal constant is $-j\omega\mu/4\pi$ — the $e^{-i\omega t}$
+> $\exp(-jkR)$ with $k^2 = \omega^2\mu\varepsilon - j\omega\mu\sigma$, i.e.
+> $\exp(-\gamma R)$ exactly) follow the $\exp(+j\omega t)$ convention above, but
+> its longitudinal constant is $-j\omega\mu/4\pi$ — the $\exp(-i\omega t)$
 > sign. When cross-validating against the legacy codes, compare impedance
 > moduli and time-domain waveforms, never raw phases.
 
@@ -101,14 +101,14 @@ retarded potentials of the elementary sources are (Lorenz gauge):
 
 **Point injected current** $I_t$ (total current, conduction + displacement):
 
-$$\psi(r) = \frac{I_t}{4\pi(\sigma + j\omega\varepsilon)} \cdot \frac{e^{-\gamma r}}{r}$$
+$$\psi(r) = \frac{I_t}{4\pi(\sigma + j\omega\varepsilon)} \cdot \frac{\exp(-\gamma r)}{r}$$
 
 This replaces $q/\varepsilon$ of electrostatics by $I_t/(\sigma + j\omega\varepsilon)$ — the continuity
 equation in a dissipative medium ties injected current to charge.
 
 **Current element** $I \,d\ell$ directed along the unit vector $\mathbf{\hat{u}}$:
 
-$$\mathbf{A}(r) = \frac{\mu I \,d\ell}{4\pi} \cdot \frac{e^{-\gamma r}}{r} \cdot \mathbf{\hat{u}}$$
+$$\mathbf{A}(r) = \frac{\mu I \,d\ell}{4\pi} \cdot \frac{\exp(-\gamma r)}{r} \cdot \mathbf{\hat{u}}$$
 $$\mathbf{E} = -j\omega\mathbf{A} - \nabla\psi$$
 
 A thin cylindrical segment is treated as a line of such sources along its axis,
@@ -127,12 +127,12 @@ the integration points on the two axes (or axis-to-surface for self terms).
 **Transversal**: averaging the scalar potential produced by *b* over *a*, and
 dividing by the total transversal current of *b*:
 
-$$Z_t(a,b) = \frac{1}{4\pi l_a l_b (\sigma + j\omega\varepsilon)} \iint \frac{e^{-\gamma R_{ab}}}{R_{ab}} \, d\ell_a \, d\ell_b$$
+$$Z_t(a,b) = \frac{1}{4\pi l_a l_b (\sigma + j\omega\varepsilon)} \iint \frac{\exp(-\gamma R_{ab})}{R_{ab}} \, d\ell_a \, d\ell_b$$
 
 **Longitudinal**: from the projection of the vector potential of *b* on *a*
 (electric field $-j\omega\mathbf{A}$ integrated along *a*):
 
-$$Z_\ell(a,b) = \frac{j\omega\mu}{4\pi} \iint \frac{e^{-\gamma R_{ab}}}{R_{ab}} \, (d\ell_a \cdot d\ell_b)$$
+$$Z_\ell(a,b) = \frac{j\omega\mu}{4\pi} \iint \frac{\exp(-\gamma R_{ab})}{R_{ab}} \, (d\ell_a \cdot d\ell_b)$$
 
 For straight segments $d\ell_a \cdot d\ell_b = \cos \theta_{ab} \, d\ell_a \, d\ell_b$ with $\theta_{ab}$ the
 (constant) angle between the segment directions.
@@ -145,8 +145,8 @@ is the distance between segment midpoints. When the propagation factor varies
 little over the segments ($|\gamma| \cdot \Delta R \ll 1$), it can be pulled out of the integral
 at the mean distance:
 
-$$Z_t(a,b) \approx \frac{e^{-\gamma\bar{R}_{ab}}}{4\pi l_a l_b (\sigma + j\omega\varepsilon)} \cdot g(a,b)$$
-$$Z_\ell(a,b) \approx \frac{j\omega\mu e^{-\gamma\bar{R}_{ab}}}{4\pi} \cdot \cos \theta_{ab} \cdot g(a,b)$$
+$$Z_t(a,b) \approx \frac{\exp(-\gamma\bar{R}_{ab})}{4\pi l_a l_b (\sigma + j\omega\varepsilon)} \cdot g(a,b)$$
+$$Z_\ell(a,b) \approx \frac{j\omega\mu \exp(-\gamma\bar{R}_{ab})}{4\pi} \cdot \cos \theta_{ab} \cdot g(a,b)$$
 
 with the **geometry factor**, a purely real, frequency-independent quantity:
 
@@ -225,7 +225,7 @@ $$Z_\ell(a,a) = Z_{\text{int}} + Z_{\text{ext}} + Z_{\text{interface}}$$
 $$Z_t(a,a) = Z_{t,\text{ext}} + Z_{t,\text{interface}}$$
 
 - $Z_{\text{ext}}$ uses the machinery of §4.1 with $g_{\text{self}}$ and $\bar{R} = r_0$ (field point
-  on the conductor surface); $Z_{t,\text{ext}} = \frac{e^{-\gamma r_0} g_{\text{self}}}{4\pi l^2 (\sigma+j\omega\varepsilon)}$.
+  on the conductor surface); $Z_{t,\text{ext}} = \frac{\exp(-\gamma r_0) g_{\text{self}}}{4\pi l^2 (\sigma+j\omega\varepsilon)}$.
 - $Z_{\text{interface}}$ is the image contribution (§5).
 - $Z_{\text{int}}$ is the **internal impedance** (skin effect). For a solid cylindrical
   conductor of radius $r_0$, conductivity $\sigma_c$, permeability $\mu_c$:
@@ -250,10 +250,15 @@ contribution evaluated with the image geometry factor $g_i$, image mean distance
 $\bar{R}_i$, and the propagation constant of the medium containing the *real*
 segments:
 
-$$Z_t(a,b) = c_E \cdot \left( e^{-\gamma\bar{R}} g \pm \Gamma_t e^{-\gamma\bar{R}_i} g_i \right) / (l_a l_b)$$
-$$Z_\ell(a,b) = c_M \cdot \cos \theta \cdot e^{-\gamma\bar{R}} g \pm c_M \cdot \cos \theta_i \cdot \Gamma_\ell e^{-\gamma\bar{R}_i} g_i$$
+$$Z_t(a,b) = \frac{c_E}{l_a \, l_b} \left( \exp(-\gamma\bar{R}) g \pm \Gamma_t \exp(-\gamma\bar{R}_i) g_i \right)$$
+$$Z_\ell(a,b) = c_M \, \cos \theta \, \exp(-\gamma\bar{R}) g \pm c_M \, \cos \theta_i \, \Gamma_\ell \exp(-\gamma\bar{R}_i) g_i$$
 
-where $c_E = \frac{1}{4\pi(\sigma+j\omega\varepsilon)}$, $c_M = \frac{j\omega\mu}{4\pi}$, and $\theta_i$ is the angle with the
+where
+
+$$c_E = \frac{1}{4\pi(\sigma+j\omega\varepsilon)}$$
+$$c_M = \frac{j\omega\mu}{4\pi}$$
+
+and $\theta_i$ is the angle with the
 image direction (the image of a segment reverses the sign of the z-component of
 its direction vector).
 
@@ -414,7 +419,7 @@ and PRTL-mHEM codes), etc. All must reduce to the constant-parameter
 (`tLinear`) medium as $\omega \to 0$. Cavka et al. [16] compare these models
 side by side and are the reference for cross-checking any implementation.
 The effect is not confined to grounding: Alipio, Duarte & De Conti [28] show
-it materially changes underground-cable transients for $\rho > 1000\,\Omega\text{m}$
+it materially changes underground-cable transients for $\rho > 1000$ Ω m
 — dispersive soil should be the default, not the exception, in any transient
 study.
 
@@ -468,9 +473,9 @@ format, not part of the solver.
 Every implementation must reproduce, within stated tolerance:
 
 1. **DC limit, buried horizontal conductor** (length $l$, radius $r_0$, depth
-   $h$, soil $\sigma$): grounding resistance from the classical image formula
+   $h$, soil $\sigma$): grounding resistance from the classical image formula (Sunde/Dwight form)
 
-   $$R = \frac{1}{2\pi \sigma l} \left[ \ln\left(\frac{2l}{r_0}\right) + \ln\left(\frac{2l}{2h}\right) - 2 + \ldots \right] \quad \text{(Sunde/Dwight form)}$$
+   $$R = \frac{1}{2\pi \sigma l} \left[ \ln\left(\frac{2l}{r_0}\right) + \ln\left(\frac{2l}{2h}\right) - 2 + \ldots \right]$$
 
    — the low-frequency asymptote of the full model.
 2. **Portela 1997 [2]** application curves: harmonic input impedance of a 10 m
@@ -512,7 +517,7 @@ came out of this comparison.
 | Target problem | General field problems (antennas, scattering) as integral equations | Lightning/grounding transients, thin-wire structures | Grounding system transients | Line lightning performance incl. mHEM grounding | Line lightning performance; grounding imported from file |
 | Unknowns | Expansion coefficients of the current distribution | $(\mathbf{u}, \mathbf{i}_1, \mathbf{i}_2)$: node voltages + segment end currents (§6) | $(\mathbf{u}, I_\ell, I_t)$ symmetric block system, or nodal $\mathbf{u}$ only | Nodal $\mathbf{u}$ (admittance reduction) | Nodal network quantities (Laplace domain) |
 | Basis / testing | Arbitrary (Galerkin, point matching, …) — the general framework | Pulse basis per segment; matching on segment averages | idem | idem | n/a (circuit/TL level) |
-| Coupling integrals | Full Green's-function integrals, re-evaluated per frequency | Frequency-independent geometry factor $g$, $e^{-\gamma\bar R}$ at midpoint distance (§4.1); $g$ via 1-D mHEM integral (§4.2, planned) or 2-D quadrature | Selectable: double, single, mHEM, midpoint-only | mHEM (1-D integral, precomputed $P$, $P_i$) | n/a — line by TL theory; grounding external |
+| Coupling integrals | Full Green's-function integrals, re-evaluated per frequency | Frequency-independent geometry factor $g$, $\exp(-\gamma\bar R)$ at midpoint distance (§4.1); $g$ via 1-D mHEM integral (§4.2, planned) or 2-D quadrature | Selectable: double, single, mHEM, midpoint-only | mHEM (1-D integral, precomputed $P$, $P_i$) | n/a — line by TL theory; grounding external |
 | Half-space interface | Not treated (homogeneous medium assumed) | Images; ideal signs $\pm 1$ today, $\Gamma_t(\omega)$ planned (§5) | Images with complex $\Gamma_\ell$, $\Gamma_t$ as free parameters | Images with $\Gamma_t(\omega)$ applied to both $Z_t$ and $Z_\ell$ | Earth return at TL level (line above lossy ground) |
 | Cross-media coupling (air↔soil segments) | n/a | Neglected (§5) | Neglected | Neglected | n/a |
 | Soil dispersion | n/a (σ, ε constants) | `tPortelaSoil` [1]; `tVisacroAlipioSoil` [13,14], `tLongmireSmithSoil` [15,16] planned (§7) | Alipio–Visacro [14] and Smith–Longmire [16] built in | Visacro–Alipio [13] | Delegated to the imported grounding data |

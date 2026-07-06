@@ -17,7 +17,10 @@ module mStudy
   use mElement
   use mMaterial
   use mResult
-  use mCtes, only: newl
+  use mGeometry, only: buildGeometryMatrices
+  use mImpedance, only: internalImpedance
+  use mError, only: raiseError
+  use mCtes, only: newl, EPSILON0, MU0, ZERO_CPLX
   implicit none
 
   type :: tStudy
@@ -39,6 +42,22 @@ module mStudy
     !! Temporary pointer for iteration during material management
     class(tResult), allocatable :: results(:)
     !! Array of frequency-domain results: voltages, longitudinal currents, transverse currents
+
+    logical :: prepared = .false.
+    !! Set once assembly and geometry-factor computation have run (theory.md
+    !! §4.1: these are frequency-independent and computed only once, even
+    !! across a `run` call per frequency in a sweep)
+    real(8), allocatable :: geomG(:,:), geomGi(:,:)
+    !! Cached direct/image geometry factors (mGeometry%buildGeometryMatrices)
+    real(8), allocatable :: geomRbar(:,:), geomRbari(:,:)
+    !! Cached direct/image mean distances
+    real(8), allocatable :: geomCosTheta(:,:), geomCosThetaI(:,:)
+    !! Cached direct/image direction cosines
+    real(8), allocatable :: geomLength(:), geomRadius(:)
+    !! Cached per-electrode segment length and radius
+    integer(4), allocatable :: geomPos(:)
+    !! Cached per-electrode medium (1 = air, 2 = soil), from the sign of the
+    !! segment midpoint's z (theory.md §2: air z>0, soil z<0)
   contains
     procedure :: report
     !! Print a human-readable summary of the study contents
@@ -49,25 +68,157 @@ module mStudy
 contains
 
   ! =====================================================================
+  ! One-time preparation: assembly + frequency-independent geometry factors
+  ! =====================================================================
+
+  subroutine prepareStudy(this)
+    !! Discretise the structure and compute the geometry-factor matrices
+    !! once (theory.md §4.1). Guarded by `this%prepared` so repeated `run`
+    !! calls across a frequency sweep do not redo the assembly or the O(n²)
+    !! quadrature.
+    class(tStudy), intent(inout) :: this
+    integer(4) :: nno, nseg, i
+    integer(4), allocatable :: n1(:), n2(:)
+    real(8), allocatable :: p1(:,:), p2(:,:)
+
+    call this%structure%assembleStructure()
+
+    nno  = this%structure%getNodeCount()
+    nseg = this%structure%getElectrodeCount()
+
+    allocate(n1(nseg), n2(nseg), p1(nseg,3), p2(nseg,3))
+    allocate(this%geomRadius(nseg), this%geomLength(nseg), this%geomPos(nseg))
+
+    do i = 1, nseg
+      n1(i) = this%structure%electrodes(i)%nodeIndices(1)
+      n2(i) = this%structure%electrodes(i)%nodeIndices(2)
+      p1(i,:) = this%structure%nodes(n1(i))%p
+      p2(i,:) = this%structure%nodes(n2(i))%p
+      this%geomRadius(i) = this%structure%electrodes(i)%radius
+      this%geomLength(i) = norm2(p2(i,:) - p1(i,:))
+      if (0.5d0 * (p1(i,3) + p2(i,3)) > 0.0d0) then
+        this%geomPos(i) = 1 ! air
+      else
+        this%geomPos(i) = 2 ! soil
+      end if
+    end do
+
+    allocate(this%geomG(nseg,nseg),        this%geomGi(nseg,nseg))
+    allocate(this%geomRbar(nseg,nseg),     this%geomRbari(nseg,nseg))
+    allocate(this%geomCosTheta(nseg,nseg), this%geomCosThetaI(nseg,nseg))
+
+    call buildGeometryMatrices(p1, p2, this%geomRadius, nseg, &
+      this%geomG, this%geomGi, this%geomRbar, this%geomRbari, &
+      this%geomCosTheta, this%geomCosThetaI)
+
+    call initMesh(this%mesh, nno, nseg)
+    call calcTopologia(this%mesh, nseg, n1, n2)
+
+    this%prepared = .true.
+  end subroutine prepareStudy
+
+  ! =====================================================================
+  ! Per-segment internal (skin-effect) impedance
+  ! =====================================================================
+
+  complex(8) function segmentInternalImpedance(this, i, omega) result(zint)
+    !! Internal impedance of electrode `i`'s conductor material at `omega`
+    !! (theory.md §4.3). Only `tLinear` conductor materials are supported;
+    !! dispersive conductor models are not part of the current object model.
+    class(tStudy), intent(in) :: this
+    integer(4), intent(in) :: i
+    real(8), intent(in) :: omega
+
+    select type (mat => this%structure%electrodes(i)%material)
+    type is (tLinear)
+      zint = internalImpedance(this%geomRadius(i), this%geomLength(i), omega, mat%sigma, mat%mur)
+    class default
+      call raiseError("tStudy%run: internal impedance requires a tLinear conductor material")
+      zint = ZERO_CPLX
+    end select
+  end function segmentInternalImpedance
+
+  ! =====================================================================
   ! Study execution and reporting
   ! =====================================================================
 
-  subroutine run(this)
-    !! Execute the complete simulation pipeline for this study.
+  subroutine run(this, omega, sourceNodeIds, sourceCurrents)
+    !! Solve the study at one angular frequency ω, injecting the given
+    !! currents at the given nodes (ADR 0010: current-injection sources).
     !!
-    !! **Phase 1 (current)**: Placeholder that prints a message.
-    !!
-    !! **Phase 2 (future)**: Will implement the full sequence:
-    !! 1. Call `this%structure%assembleStructure()` to discretise all elements
-    !! 2. Call `this%mesh%calcTopologia()` to build topology matrices (A, B, C, D)
-    !! 3. For each frequency ω in the frequency axis:
-    !!    - Call `this%mesh%calcParam(ω)` to compute medium constants
-    !!    - Call `this%mesh%calcFreq2(ω)` to assemble Zeq and solve Zeq·x = b
-    !!    - Call `this%mesh%getSaidas(ω)` to extract voltages and currents
-    !! 4. Store results in `this%results` for output
+    !! First call: discretises the structure and computes the geometry-factor
+    !! matrices (`prepareStudy`, done once). Every call: resolves medium
+    !! constants from `structure%air`/`structure%soil`, fills `Zlong`/`Ztrans`
+    !! from the cached geometry matrices (ADR 0009 — `calcZPropria`/
+    !! `calcZMutua` apply every theory factor internally), assembles `Zeq`
+    !! and solves. The solution is left in `this%mesh%tensao`/`corrente1`/
+    !! `corrente2` for the caller to read (e.g. input impedance at the
+    !! injection node); a frequency sweep is driven by calling `run` in a
+    !! loop, one call per ω (ROADMAP Phase 3 formalises sweep storage).
     class(tStudy), intent(inout) :: this
+    real(8), intent(in) :: omega
+    !! Angular frequency ω (rad/s) for this solve
+    character(len=*), intent(in) :: sourceNodeIds(:)
+    !! User-assigned IDs of the nodes receiving current injection
+    complex(8), intent(in) :: sourceCurrents(:)
+    !! Complex current injected at each corresponding node in `sourceNodeIds` (A)
+    integer(4) :: nseg, i, j, k
+    integer(4), allocatable :: sourcePos(:)
+    complex(8) :: zint
+    real(8) :: epsAr, muAr, sigmaAr, epsSolo, muSolo, sigmaSolo
+    integer(4) :: info
 
-    print *, "Study '", trim(this%title), "' loaded (solver not yet wired)."
+    if (.not. this%prepared) call prepareStudy(this)
+
+    epsAr   = this%structure%air%epsilonr * EPSILON0
+    muAr    = this%structure%air%mur * MU0
+    sigmaAr = this%structure%air%sigma
+
+    select type (soil => this%structure%soil)
+    type is (tLinear)
+      epsSolo   = soil%epsilonr * EPSILON0
+      muSolo    = soil%mur * MU0
+      sigmaSolo = soil%sigma
+    class default
+      call raiseError("tStudy%run: dispersive soil is not supported until ROADMAP Phase 4 (ADR 0007)")
+      return
+    end select
+
+    call calcParam(this%mesh, omega, epsAr, muAr, sigmaAr, epsSolo, muSolo, sigmaSolo)
+
+    nseg = this%structure%getElectrodeCount()
+    do i = 1, nseg
+      do j = i, nseg
+        if (i == j) then
+          zint = segmentInternalImpedance(this, i, omega)
+          call calcZPropria(this%mesh, i, this%geomPos(i), &
+            this%geomRbar(i,i), this%geomRbari(i,i), this%geomLength(i), &
+            zint, this%geomG(i,i), this%geomGi(i,i), this%geomCosThetaI(i,i))
+        else
+          call calcZMutua(this%mesh, i, j, this%geomPos(i), this%geomPos(j), &
+            this%geomRbar(i,j), this%geomRbari(i,j), &
+            this%geomLength(i), this%geomLength(j), &
+            this%geomG(i,j), this%geomGi(i,j), &
+            this%geomCosTheta(i,j), this%geomCosThetaI(i,j))
+        end if
+      end do
+    end do
+
+    call calcFreq2(this%mesh)
+
+    allocate(sourcePos(size(sourceNodeIds)))
+    do k = 1, size(sourceNodeIds)
+      sourcePos(k) = this%structure%findNodeIndex(trim(sourceNodeIds(k)))
+      if (sourcePos(k) == 0) then
+        call raiseError("tStudy%run: source node '" // trim(sourceNodeIds(k)) // "' not found")
+        return
+      end if
+    end do
+
+    info = injetaSinalF(this%mesh, size(sourceNodeIds), sourcePos, sourceCurrents)
+    if (info /= 0) then
+      call raiseError("tStudy%run: injetaSinalF failed (ZGESV INFO /= 0)")
+    end if
   end subroutine run
 
   subroutine report(this)
