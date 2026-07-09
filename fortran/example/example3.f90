@@ -51,7 +51,7 @@ program example3
     call study%run(omega, ["Node_1"], [cmplx(1.0d0, 0.0d0, kind=8)])
 
     idx = study%structure%findNodeIndex("Node_1")
-    zin = study%mesh%tensao(idx) / cmplx(1.0d0, 0.0d0, kind=8)
+    zin = study%mesh%voltage(idx) / cmplx(1.0d0, 0.0d0, kind=8)
     zinMag = abs(zin)
     zinPhaseDeg = atan2(aimag(zin), real(zin)) * 180.0d0 / PI
 

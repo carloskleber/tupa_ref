@@ -20,7 +20,7 @@ considered (formerly an open decision for Phase 3):
 ## Decision
 
 Use **current-injection equivalents** (interview decision, 2026-07-05). The
-right-hand-side assembly of `injetaSinalF` stays exactly as in theory.md §6;
+right-hand-side assembly of `injectSignal` stays exactly as in theory.md §6;
 voltage sources are handled outside the solver kernel by the study layer.
 
 ## Consequences

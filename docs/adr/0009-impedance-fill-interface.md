@@ -12,7 +12,7 @@ the real geometry factors:
 $$Z_t(a,b) = c_E \left( e^{-\gamma\bar R} g \pm \Gamma_t e^{-\gamma\bar R_i} g_i \right) / (l_a l_b)$$
 $$Z_\ell(a,b) = c_M \left( \cos\theta\, e^{-\gamma\bar R} g \pm \cos\theta_i\, \Gamma_\ell e^{-\gamma\bar R_i} g_i \right)$$
 
-The ported `calcZPropria`/`calcZMutua` inherited the legacy calling
+The ported `calcZSelf`/`calcZMutual` inherited the legacy calling
 convention, in which the *caller* pre-multiplied $\cos\theta$ and
 $1/(l_a l_b)$ into the "geometry factor" arguments, and the self term
 carried no direct-path propagation factor at all. That implicit contract was
@@ -24,7 +24,7 @@ theory.md §4.3 — an undocumented deviation.
 
 ## Decision
 
-`calcZPropria` and `calcZMutua` take the **raw outputs of
+`calcZSelf` and `calcZMutual` take the **raw outputs of
 `mGeometry%buildGeometryMatrices`** — geometry factors `g`, `gi`, mean
 distances `d`, `di`, direction cosines `cosTheta`, `cosThetaI`, and segment
 lengths — and apply **every** theory factor internally, including the
@@ -40,7 +40,7 @@ the self term, per theory.md §4.3). Callers do no pre-scaling of any kind.
   expressions; `test_mesh.f90` pins the air/soil image signs, the
   `cosThetaI` flip for vertical segments, the $1/(l_a l_b)$ normalisation
   and the mixed-media zero.
-- The signatures are wider (13 arguments for `calcZMutua`). Accepted for the
+- The signatures are wider (13 arguments for `calcZMutual`). Accepted for the
   reference implementation; a future refactor may pass a per-pair geometry
   struct instead, without changing the contract.
 - When the frequency-dependent reflection coefficient Γ(ω) lands (ROADMAP

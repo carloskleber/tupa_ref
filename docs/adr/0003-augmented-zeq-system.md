@@ -15,7 +15,7 @@ The nodal HEM equations admit two solution strategies (theory.md §6):
    original TRANSMATER-era formulation and the legacy `solMalha` routine did.
 
 The original C++/Fortran code contains both paths; only the augmented one
-(`calcFreq2` + `injetaSinalF`) was completed and used.
+(`calcFreq2` + `injectSignal`) was completed and used.
 
 > **Update (2026-07-05).** The original Matlab (now the model reference of
 > record) goes further: it exposes the reduced form (two variants), the

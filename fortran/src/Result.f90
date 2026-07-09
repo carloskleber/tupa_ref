@@ -12,7 +12,7 @@ module mResult
   !! - `tLongCurrents`: longitudinal electrode currents I_long(ω) — shape (nElectrodes, nFrequencies)
   !! - `tTransCurrents`: transverse (earth-leakage) electrode currents I_trans(ω) — shape (nElectrodes, nFrequencies)
   !!
-  !! After solver execution, results are obtained by calling `getSaidas()` from mMesh.
+  !! After solver execution, results are obtained by calling `getOutputs()` from mMesh.
   use mNode
   use mElement
   use mElectrode

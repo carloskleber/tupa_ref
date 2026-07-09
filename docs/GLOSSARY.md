@@ -22,10 +22,10 @@ entries.
   current. "Segment" in theory text, "electrode" in the object model — same
   thing.
 - **Node** — endpoint of one or more segments (`tNode`); carries the scalar
-  potential (voltage to remote earth) $u$.
+  potential (voltage to remote earth) $u$, stored in `tMesh%voltage`.
 - **End currents $i_1, i_2$** — the currents entering a segment at its two
   end nodes (both positive *into* the segment, theory.md §2). Stored in
-  `tMesh%corrente1/corrente2` as part of the solution $x = [u, i_1, i_2]$.
+  `tMesh%current1/current2` as part of the solution $x = [u, i_1, i_2]$.
 - **Longitudinal current $I_\ell$** — mean current along the segment axis,
   $I_\ell = (i_1 - i_2)/2$.
 - **Transversal (leakage) current $I_t$** — total current leaking from the
@@ -66,6 +66,75 @@ entries.
 - **Thin-wire approximation** — conductors represented by axial line
   sources with field points on the surface; requires segment length large
   vs radius and small vs wavelength (theory.md §4.1).
+
+## Symbols
+
+Mathematical symbols as used in [theory.md](theory.md), with the Fortran
+identifier(s) that hold them. Types live in `fortran/src/`: `tMesh`
+(Mesh.f90), `tStudy` (Study.f90), `tMaterial` family (Material.f90),
+`mGeometry` (Geometry.f90), `mImpedance` (Impedance.f90).
+
+### Fields, currents, propagation (§2)
+
+| Symbol | Meaning | theory.md | Code |
+| --- | --- | --- | --- |
+| $u$ | Node voltage (V), to remote earth | §1, §6 | `tMesh%voltage` |
+| $i_1, i_2$ | Segment end currents (A), positive into the segment | §2 | `tMesh%current1`, `tMesh%current2` |
+| $I_\ell$ | Mean longitudinal current, $(i_1-i_2)/2$ | §2 | derived from `current1`/`current2` at the call site |
+| $I_t$ | Total transversal (leakage) current, $i_1+i_2$ | §2 | derived from `current1`/`current2` at the call site |
+| $\omega$ | Angular frequency (rad/s) | §2 | `omega` (argument throughout) |
+| $\gamma$ | Propagation constant, $\sqrt{j\omega\mu(\sigma+j\omega\varepsilon)}$ | §2 | `tMesh%propAir`/`propSoil`; `tLinear%propagationConstant` |
+| $\sigma + j\omega\varepsilon$ | Medium immittance | §2 | inlined as `cmplx(sigma, omega*eps)` in `mMesh%calcParam`, `mMaterial%calcPropagationConstant` |
+
+### Potentials, impedances, geometry factor (§3-4)
+
+| Symbol | Meaning | theory.md | Code |
+| --- | --- | --- | --- |
+| $R_{ab}$, $\bar R_{ab}$ | Distance / mean distance between segments *a*, *b* | §4 | `mGeometry%meanDistance`; cached in `tStudy%geomRbar` |
+| $g(a,b)$ | Geometry factor, $\iint dl_a\,dl_b/R_{ab}$ | §4.1-4.2 | `mGeometry%mutualGeometryFactor` (dispatches to `parallelGeometryFactor` or the quadrature oracle `mImpedance%geometryFactor2D`); cached in `tStudy%geomG` |
+| $g_{self}$ | Coincident (self) geometry factor, closed form | §4.2 | `mGeometry%selfGeometryFactor` |
+| $\theta_{ab}$, $\cos\theta_{ab}$ | Angle / direction cosine between segments | §4 | `mGeometry%directionCosine`; cached in `tStudy%geomCosTheta` |
+| $Z_t$ | Transversal impedance matrix | §4, §6 | `tMesh%Ztrans` |
+| $Z_\ell$ | Longitudinal impedance matrix | §4, §6 | `tMesh%Zlong` |
+| $Z_{int}$ | Internal (skin-effect) impedance | §4.3 | `mImpedance%internalImpedance` |
+| $\rho$ | Bessel-ratio argument in $Z_{int}$ | §4.3 | local `rho` in `mImpedance%internalImpedance` |
+| $I_0, I_1$ | Modified Bessel functions (first kind) | §4.3 | SLATEC `zbesi`; local `ratio` in `mImpedance%internalImpedance` |
+
+### Air-soil interface / image method (§5)
+
+| Symbol | Meaning | theory.md | Code |
+| --- | --- | --- | --- |
+| $c_E$ | Electric constant, $1/(4\pi(\sigma+j\omega\varepsilon))$ | §5 | `tMesh%cEAir`, `tMesh%cESoil` |
+| $c_M$ | Magnetic constant, $j\omega\mu/4\pi$ | §5 | `tMesh%cMAir`, `tMesh%cMSoil` |
+| $\Gamma_t$, $\Gamma_\ell$ | Frequency-dependent reflection coefficients | §5 | not implemented; ideal $\pm1$ limits are hardcoded in `mMesh%calcZSelf`/`calcZMutual` (ROADMAP P2) |
+| $g_i$, $\bar R_i$ | Image geometry factor / mean distance | §5 | `tStudy%geomGi`, `tStudy%geomRbari` |
+| $\cos\theta_i$ | Direction cosine against the image | §5 | `tStudy%geomCosThetaI` |
+
+### Nodal system (§6)
+
+| Symbol | Meaning | theory.md | Code |
+| --- | --- | --- | --- |
+| $A, B, C, D$ | Incidence matrices | §6 | `tMesh%A`, `%B`, `%C`, `%D`; assembled by `mMesh%calcTopology` |
+| $Z_{eq}$ | Augmented system matrix | §6 | `tMesh%Zeq`; assembled by `mMesh%calcFreq2` |
+| $x = [u, i_1, i_2]$ | Unknown/solution vector | §6 | RHS/solution `y` inside `mMesh%injectSignal` (LAPACK `ZGESV`), copied out to `tMesh%voltage`/`current1`/`current2` (or via `mMesh%getOutputs`) |
+
+### Soil dispersion (§7)
+
+| Symbol | Meaning | theory.md | Code |
+| --- | --- | --- | --- |
+| $W(\omega)$ | Soil immittance, $\sigma(\omega) + j\omega\varepsilon(\omega)$ | §7 | `tPortelaSoil%calcPropagationConstant` (currently a placeholder — see code `TODO`) |
+| $\sigma_0$ | DC (low-frequency) conductivity | §7 | `tLinear%sigma`; base term of `tPortelaSoil` |
+| $\alpha$ | Dispersion exponent | §7 | `tPortelaSoil%alpha0` |
+| $\Delta\sigma$ / $k_r$ | Dispersion magnitude at $\omega_0$ | §7 | `tPortelaSoil%kr` |
+
+### Validation (§9) and constants
+
+| Symbol | Meaning | theory.md | Code |
+| --- | --- | --- | --- |
+| $R$ | Sunde/Dwight DC grounding resistance | §9.1 | local `rDc` in `fortran/test/test_solve.f90` |
+| $\mu_0$ | Vacuum permeability | §2 | `mCtes%MU0` |
+| $\varepsilon_0$ | Vacuum permittivity | §2 | `mCtes%EPSILON0` |
+| $j$ | Imaginary unit | §2 | `mCtes%IMAG_I` |
 
 ## Software
 

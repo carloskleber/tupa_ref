@@ -47,7 +47,7 @@ Correctness is preferred over performance everywhere until validation exists
                      │ (hand-rolled │      │  │     (tLinear,      │      │ mMesh                │
                      │  subset,     │      │  │      tPortelaSoil) │      │  A/B/C/D topology    │
                      │  ADR 0006)   │      │  ├ tMesh ◄────────────┼──────│  calcParam (γ, cE,cM)│
-                     └──────────────┘      │  └ tResult[] (declared│      │  calcZPropria/Mutua  │
+                     └──────────────┘      │  └ tResult[] (declared│      │  calcZSelf/Mutual     │
                                            │     not filled yet)   │      │  Zeq → ZGESV → u,i1,i2│
  support: mCtes (constants, dp kind)       └───────────────────────┘      ├──────────────────────┤
           mError (feh raiseError)                                         │ mImpedance           │
@@ -85,13 +85,13 @@ load JSON ──► build tStudy ──► structure%assembleStructure()
               buildGeometryMatrices(p1, p2, radius)          [once per geometry]
                     G, Gi, R̄, R̄i, cosθ, cosθi
                                     ▼
-              calcTopologia(n1, n2)  →  A, B, C, D           [once per topology]
+              calcTopology(n1, n2)   →  A, B, C, D           [once per topology]
                                     ▼
         ┌── for each ω in the sweep ────────────────────────────┐
         │   calcParam(ω)         medium constants cE, cM, γ     │   ✗ sweep driver
-        │   calcZPropria/Mutua   Zlong, Ztrans entries          │   ✗ fill loop
+        │   calcZSelf/Mutual     Zlong, Ztrans entries          │   ✗ fill loop
         │   calcFreq2()          assemble augmented Zeq         │
-        │   injetaSinalF(...)    RHS = current injections       │
+        │   injectSignal(...)    RHS = current injections       │
         │                        ZGESV → u, i1, i2              │
         └───────────────────────────────────────────────────────┘
                                     ▼
@@ -164,7 +164,7 @@ until the CSV/JSON writers land (ROADMAP Phase 3).
 | New soil/conductor model | Extend `tMaterial`, implement `calcPropagationConstant` | One subtype per literature reference, named after it (ADR 0007) |
 | New output | Extend `tResult`, implement `alloc` (+ future fill/write) | Use the legacy output-class inventory to prioritise (ROADMAP P7) |
 | Alternate geometry-factor kernel (mHEM 1-D) | Swap inside `mGeometry`; 2-D quadrature stays as test oracle | ROADMAP P1; ADR 0004 |
-| Γ(ω) reflection images | Multiply the image parcel inside `calcZPropria`/`calcZMutua` | ROADMAP P2; ADR 0009 keeps call sites untouched |
+| Γ(ω) reflection images | Multiply the image parcel inside `calcZSelf`/`calcZMutual` | ROADMAP P2; ADR 0009 keeps call sites untouched |
 | Other languages | Re-implement the object model; must pass `common/` cases | ADR 0002; JSON schema is the public contract |
 
 The **public interface** of the project is the JSON schema plus the

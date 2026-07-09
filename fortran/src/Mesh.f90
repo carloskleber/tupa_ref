@@ -14,8 +14,6 @@ module mMesh
   !! Sign and propagation conventions follow theory.md §2, §5, §6 (ADR 0008); this
   !! module must not be edited to match any single paper's convention in isolation.
   !!
-  !! Portuguese variable names are retained per the project standard (legacy from MATLAB).
-  !!
   !! **References:**
   !! - Portela 1997 (IEEE EMC) — HEM formulation foundation
   !! - Visacro & Soares 2005 (IEEE Trans. Power Del.) — validation
@@ -40,12 +38,12 @@ module mMesh
     !! Discretised electromagnetic mesh for frequency-domain HEM solution.
 
     ! Solution vectors — the augmented unknown x = [u, i1, i2] of theory.md §6
-    complex(8), allocatable :: tensao(:)
+    complex(8), allocatable :: voltage(:)
     !! Complex node voltages u (V), size nno
-    complex(8), allocatable :: corrente1(:)
+    complex(8), allocatable :: current1(:)
     !! End currents i1 at node n1 of each segment (A), positive INTO the
     !! segment (theory.md §2), size nseg
-    complex(8), allocatable :: corrente2(:)
+    complex(8), allocatable :: current2(:)
     !! End currents i2 at node n2 of each segment (A), positive INTO the
     !! segment, size nseg. The physical currents are derived quantities:
     !! longitudinal Il = (i1 - i2)/2, transversal (leakage) It = i1 + i2.
@@ -71,18 +69,18 @@ module mMesh
     !! Augmented impedance matrix: (nno + 2*nseg) × (nno + 2*nseg)
     !! Assembled from A, B, C, D, Zlong, Ztrans via calcFreq2
 
-    ! Frequency-dependent medium constants
-    complex(8) :: cteEletAr
+    ! Frequency-dependent medium constants (theory.md §5: c_E, c_M)
+    complex(8) :: cEAir
     !! Electric constant for air: 1/(4π·(σ_air + jω·ε_air))
-    complex(8) :: cteEletSolo
+    complex(8) :: cESoil
     !! Electric constant for soil: 1/(4π·(σ_soil + jω·ε_soil))
-    complex(8) :: cteMagAr
+    complex(8) :: cMAir
     !! Magnetic constant for air: jω·μ_air/(4π)
-    complex(8) :: cteMagSolo
+    complex(8) :: cMSoil
     !! Magnetic constant for soil: jω·μ_soil/(4π)
-    complex(8) :: propAr
+    complex(8) :: propAir
     !! Propagation constant for air: γ = sqrt(jωμ(σ+jωε)), Re γ ≥ 0 (theory.md §2)
-    complex(8) :: propSolo
+    complex(8) :: propSoil
     !! Propagation constant for soil
 
     ! Problem dimensions
@@ -107,9 +105,9 @@ contains
     mesh%nno  = nn
     mesh%nseg = ns
 
-    allocate(mesh%tensao(nn))
-    allocate(mesh%corrente1(ns))
-    allocate(mesh%corrente2(ns))
+    allocate(mesh%voltage(nn))
+    allocate(mesh%current1(ns))
+    allocate(mesh%current2(ns))
     allocate(mesh%A(ns, nn))
     allocate(mesh%B(ns, nn))
     allocate(mesh%C(nn, ns))
@@ -128,7 +126,7 @@ contains
   ! Topology matrix assembly
   ! =====================================================================
 
-  subroutine calcTopologia(mesh, ns, n1, n2)
+  subroutine calcTopology(mesh, ns, n1, n2)
     !! Assemble topology matrices A, B, C, D from node index arrays (theory.md §6).
     !!
     !! Row j (segment j) of A has -1 at column n1(j), +1 at n2(j); row j of B has
@@ -150,34 +148,34 @@ contains
       mesh%C(n1(i1), i1) = ONE_CPLX
       mesh%D(n2(i1), i1) = ONE_CPLX
     end do
-  end subroutine calcTopologia
+  end subroutine calcTopology
 
   ! =====================================================================
   ! Frequency-dependent medium parameters
   ! =====================================================================
 
-  subroutine calcParam(mesh, omega, epsAr, muAr, sigmaAr, epsSolo, muSolo, sigmaSolo)
+  subroutine calcParam(mesh, omega, epsAir, muAir, sigmaAir, epsSoil, muSoil, sigmaSoil)
     !! Compute frequency-dependent medium constants for a given angular frequency ω.
     !!
-    !! Updates `cteElet*`, `cteMag*`, and `prop*` fields of the mesh based on
+    !! Updates `cE*`, `cM*`, and `prop*` fields of the mesh based on
     !! the permittivity, permeability, and conductivity of air and soil.
     real(8), intent(in), value :: omega
     !! Angular frequency ω (rad/s)
-    real(8), intent(in), value :: epsAr, muAr, sigmaAr
+    real(8), intent(in), value :: epsAir, muAir, sigmaAir
     !! Air permittivity (F/m), permeability (H/m), conductivity (S/m)
-    real(8), intent(in), value :: epsSolo, muSolo, sigmaSolo
+    real(8), intent(in), value :: epsSoil, muSoil, sigmaSoil
     !! Soil permittivity (F/m), permeability (H/m), conductivity (S/m)
     type(tMesh), intent(inout) :: mesh
 
-    mesh%cteEletAr   = 1.0d0 / (FOUR_PI * cmplx(sigmaAr, omega * epsAr, kind=8))
-    mesh%cteEletSolo = 1.0d0 / (FOUR_PI * cmplx(sigmaSolo, omega * epsSolo, kind=8))
-    mesh%cteMagAr    = cmplx(0.0d0, omega * muAr / FOUR_PI, kind=8)
-    mesh%cteMagSolo  = cmplx(0.0d0, omega * muSolo / FOUR_PI, kind=8)
+    mesh%cEAir  = 1.0d0 / (FOUR_PI * cmplx(sigmaAir, omega * epsAir, kind=8))
+    mesh%cESoil = 1.0d0 / (FOUR_PI * cmplx(sigmaSoil, omega * epsSoil, kind=8))
+    mesh%cMAir  = cmplx(0.0d0, omega * muAir / FOUR_PI, kind=8)
+    mesh%cMSoil = cmplx(0.0d0, omega * muSoil / FOUR_PI, kind=8)
     ! theory.md §2: gamma = sqrt(j*omega*mu*(sigma + j*omega*eps)), Re(gamma) >= 0
-    mesh%propAr      = sqrt(cmplx(0.0d0, omega, kind=8) * muAr &
-                             * cmplx(sigmaAr, omega * epsAr, kind=8))
-    mesh%propSolo    = sqrt(cmplx(0.0d0, omega, kind=8) * muSolo &
-                             * cmplx(sigmaSolo, omega * epsSolo, kind=8))
+    mesh%propAir = sqrt(cmplx(0.0d0, omega, kind=8) * muAir &
+                         * cmplx(sigmaAir, omega * epsAir, kind=8))
+    mesh%propSoil = sqrt(cmplx(0.0d0, omega, kind=8) * muSoil &
+                          * cmplx(sigmaSoil, omega * epsSoil, kind=8))
   end subroutine calcParam
 
   ! =====================================================================
@@ -206,13 +204,13 @@ contains
   ! Self-impedance calculation (using image theory)
   ! =====================================================================
 
-  subroutine calcZPropria(mesh, i, pos, d, di, l, zint, g, gi, cosThetaI)
+  subroutine calcZSelf(mesh, i, pos, d, di, l, zint, g, gi, cosThetaI)
     !! Compute the self-impedance of a cylindrical segment with its own image
     !! (theory.md §4.3, §5; ADR 0009). Sets `mesh%Zlong(i,i)` and
     !! `mesh%Ztrans(i,i)`:
     !!
-    !!     Ztrans(i,i) = cteElet * (e^{-γd} g ± e^{-γdi} gi) / l²
-    !!     Zlong(i,i)  = cteMag  * (e^{-γd} g ± cosThetaI e^{-γdi} gi) + zint
+    !!     Ztrans(i,i) = cE * (e^{-γd} g ± e^{-γdi} gi) / l²
+    !!     Zlong(i,i)  = cM * (e^{-γd} g ± cosThetaI e^{-γdi} gi) + zint
     !!
     !! All theory factors (propagation at the mean distances, direction cosine
     !! of the image, 1/l² length normalisation) are applied HERE; callers pass
@@ -236,32 +234,32 @@ contains
     complex(8), intent(in) :: zint
     !! Internal (skin-effect) impedance of the segment
     type(tMesh), intent(inout) :: mesh
-    complex(8) :: prop, cteE, cteM, fprop, fpropi
+    complex(8) :: prop, cE, cM, fprop, fpropi
     real(8) :: s
 
     if (pos == 1) then
-      prop = mesh%propAr;   cteE = mesh%cteEletAr;   cteM = mesh%cteMagAr;   s = -1.0d0
+      prop = mesh%propAir; cE = mesh%cEAir;  cM = mesh%cMAir;  s = -1.0d0
     else
-      prop = mesh%propSolo; cteE = mesh%cteEletSolo; cteM = mesh%cteMagSolo; s = +1.0d0
+      prop = mesh%propSoil; cE = mesh%cESoil; cM = mesh%cMSoil; s = +1.0d0
     end if
     fprop  = exp(-d  * prop)
     fpropi = exp(-di * prop)
 
-    mesh%Ztrans(i, i) = cteE * (fprop * g + s * fpropi * gi) / (l * l)
-    mesh%Zlong(i, i)  = cteM * (fprop * g + s * cosThetaI * fpropi * gi) + zint
-  end subroutine calcZPropria
+    mesh%Ztrans(i, i) = cE * (fprop * g + s * fpropi * gi) / (l * l)
+    mesh%Zlong(i, i)  = cM * (fprop * g + s * cosThetaI * fpropi * gi) + zint
+  end subroutine calcZSelf
 
   ! =====================================================================
   ! Mutual impedance calculation
   ! =====================================================================
 
-  subroutine calcZMutua(mesh, i, j, pos1, pos2, d, di, la, lb, g, gi, cosTheta, cosThetaI)
+  subroutine calcZMutual(mesh, i, j, pos1, pos2, d, di, la, lb, g, gi, cosTheta, cosThetaI)
     !! Compute the mutual impedance between two segments with image theory
     !! (theory.md §4.1, §5; ADR 0009). Sets `mesh%Zlong(i,j)` and
     !! `mesh%Ztrans(i,j)` plus their symmetric counterparts:
     !!
-    !!     Ztrans(i,j) = cteElet * (e^{-γd} g ± e^{-γdi} gi) / (la·lb)
-    !!     Zlong(i,j)  = cteMag  * (cosTheta e^{-γd} g ± cosThetaI e^{-γdi} gi)
+    !!     Ztrans(i,j) = cE * (e^{-γd} g ± e^{-γdi} gi) / (la·lb)
+    !!     Zlong(i,j)  = cM * (cosTheta e^{-γd} g ± cosThetaI e^{-γdi} gi)
     !!
     !! All theory factors (propagation at the mean distances, direction
     !! cosines, 1/(la·lb) length normalisation) are applied HERE; callers pass
@@ -279,19 +277,19 @@ contains
     real(8), intent(in), value :: cosTheta, cosThetaI
     !! Direction cosines, direct and against the image of segment j
     type(tMesh), intent(inout) :: mesh
-    complex(8) :: prop, cteE, cteM, fprop, fpropi, zt, zl
+    complex(8) :: prop, cE, cM, fprop, fpropi, zt, zl
     real(8) :: s
 
     if (pos1 == pos2) then
       if (pos1 == 1) then
-        prop = mesh%propAr;   cteE = mesh%cteEletAr;   cteM = mesh%cteMagAr;   s = -1.0d0
+        prop = mesh%propAir; cE = mesh%cEAir;  cM = mesh%cMAir;  s = -1.0d0
       else
-        prop = mesh%propSolo; cteE = mesh%cteEletSolo; cteM = mesh%cteMagSolo; s = +1.0d0
+        prop = mesh%propSoil; cE = mesh%cESoil; cM = mesh%cMSoil; s = +1.0d0
       end if
       fprop  = exp(-d  * prop)
       fpropi = exp(-di * prop)
-      zt = cteE * (fprop * g + s * fpropi * gi) / (la * lb)
-      zl = cteM * (cosTheta * fprop * g + s * cosThetaI * fpropi * gi)
+      zt = cE * (fprop * g + s * fpropi * gi) / (la * lb)
+      zl = cM * (cosTheta * fprop * g + s * cosThetaI * fpropi * gi)
     else
       ! Mixed media: coupling neglected (theory.md §5)
       zt = ZERO_CPLX
@@ -301,7 +299,7 @@ contains
     mesh%Ztrans(j, i) = zt
     mesh%Zlong(i, j)  = zl
     mesh%Zlong(j, i)  = zl
-  end subroutine calcZMutua
+  end subroutine calcZMutual
 
   ! =====================================================================
   ! Full system matrix assembly
@@ -321,7 +319,7 @@ contains
     !!     │  0   | C        | D           │
     !!     └─────────────────────────────────┘
     !!
-    !! This matrix is then solved by ZGESV in `injetaSinalF`.
+    !! This matrix is then solved by ZGESV in `injectSignal`.
     type(tMesh), intent(inout) :: mesh
     integer :: nn, ns, n
 
@@ -344,7 +342,7 @@ contains
   ! Signal injection and solving
   ! =====================================================================
 
-  integer(4) function injetaSinalF(mesh, nsig, pos, sig)
+  integer(4) function injectSignal(mesh, nsig, pos, sig)
     !! Solve for node voltages and electrode currents given source current injections.
     !!
     !! Sets up the right-hand side vector with source currents at specified nodes,
@@ -374,21 +372,21 @@ contains
 
     call zgesv(n, 1, mesh%Zeq, n, IPIV, y, n, INFO)
     if (INFO /= 0) then
-      injetaSinalF = INFO
+      injectSignal = INFO
       return
     end if
 
-    mesh%tensao    = y(1:nn)
-    mesh%corrente1 = y((nn+1):(nn+ns))
-    mesh%corrente2 = y((nn+ns+1):n)
-    injetaSinalF = 0
-  end function injetaSinalF
+    mesh%voltage  = y(1:nn)
+    mesh%current1 = y((nn+1):(nn+ns))
+    mesh%current2 = y((nn+ns+1):n)
+    injectSignal = 0
+  end function injectSignal
 
   ! =====================================================================
   ! Output retrieval
   ! =====================================================================
 
-  subroutine getSaidas(mesh, nn, ns, v, i1, i2)
+  subroutine getOutputs(mesh, nn, ns, v, i1, i2)
     !! Copy mesh solution vectors (voltages and currents) to output arrays.
     integer(4), intent(in), value :: nn, ns
     complex(8), intent(out) :: v(nn)
@@ -399,10 +397,10 @@ contains
     !! Output transversal electrode currents
     type(tMesh), intent(in) :: mesh
 
-    v = mesh%tensao
-    i1 = mesh%corrente1
-    i2 = mesh%corrente2
-  end subroutine getSaidas
+    v = mesh%voltage
+    i1 = mesh%current1
+    i2 = mesh%current2
+  end subroutine getOutputs
 
   ! =====================================================================
   ! Debug output

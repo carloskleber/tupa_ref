@@ -12,14 +12,14 @@ program test_impedance
   real(8) :: result1, result2
 
   ! ----------------------------------------------------------------
-  ! Test 1: FUNCBARRA - Distância entre pontos paralelos
+  ! Test 1: inverseDistanceIntegrand - distance between parallel points
   ! ----------------------------------------------------------------
-  call test_init("FUNCBARRA function tests")
+  call test_init("inverseDistanceIntegrand function tests")
 
-  ! Ponto A percorre o eixo x a partir da origem; ponto B fixo na origem.
-  ! zva precisa ser não-nulo para que a distância varie com X (bug anterior:
-  ! zva=zvb=[0,0,0] tornava FUNCBARRA(X,Y) constante, quebrando o teste de
-  ! monotonicidade abaixo).
+  ! Point A travels along the x axis from the origin; point B fixed at the origin.
+  ! zva must be non-zero so the distance varies with X (previous bug:
+  ! zva=zvb=[0,0,0] made inverseDistanceIntegrand(X,Y) constant, breaking the
+  ! monotonicity test below).
   za1 = [0.0d0, 0.0d0, 0.0d0]
   zb1 = [0.0d0, 0.0d0, 0.0d0]
   zva = [1.0d0, 0.0d0, 0.0d0]
@@ -27,41 +27,41 @@ program test_impedance
   zla = 1.0d0
   zlb = 1.0d0
 
-  ! Configurar common block para teste
+  ! Set the common block for the test
   call set_params(za1, zb1, zva, zvb, zlb)
 
   x = 1.0d0
   y = 0.0d0
 
-  call test_ok("FUNCBARRA retorna valor positivo", &
-               FUNCBARRA(x, y) > 0.0d0, &
-               "Esperado valor positivo")
+  call test_ok("inverseDistanceIntegrand returns a positive value", &
+               inverseDistanceIntegrand(x, y) > 0.0d0, &
+               "Expected a positive value")
 
-  call test_ok("FUNCBARRA é função decrescente com distância", &
-               FUNCBARRA(1.0d0, 0.0d0) > FUNCBARRA(2.0d0, 0.0d0), &
-               "Quanto maior x, maior distância, menor o valor")
-
-  ! ----------------------------------------------------------------
-  ! Test 2: LIMINF - sempre retorna 0
-  ! ----------------------------------------------------------------
-  call test_init("LIMINF function tests")
-
-  call test_ok("LIMINF(0.0) = 0.0", &
-               LIMINF(0.0d0) == 0.0d0, &
-               "Deve retornar zero")
-
-  call test_ok("LIMINF(5.0) = 0.0", &
-               LIMINF(5.0d0) == 0.0d0, &
-               "Deve retornar zero independente do argumento")
-
-  call test_ok("LIMINF(-3.0) = 0.0", &
-               LIMINF(-3.0d0) == 0.0d0, &
-               "Deve retornar zero para argumentos negativos")
+  call test_ok("inverseDistanceIntegrand decreases with distance", &
+               inverseDistanceIntegrand(1.0d0, 0.0d0) > inverseDistanceIntegrand(2.0d0, 0.0d0), &
+               "The larger x, the larger the distance, the smaller the value")
 
   ! ----------------------------------------------------------------
-  ! Test 3: LIMSUP - retorna lb do common block
+  ! Test 2: lowerLimit - always returns 0
   ! ----------------------------------------------------------------
-  call test_init("LIMSUP function tests")
+  call test_init("lowerLimit function tests")
+
+  call test_ok("lowerLimit(0.0) = 0.0", &
+               lowerLimit(0.0d0) == 0.0d0, &
+               "Must return zero")
+
+  call test_ok("lowerLimit(5.0) = 0.0", &
+               lowerLimit(5.0d0) == 0.0d0, &
+               "Must return zero regardless of the argument")
+
+  call test_ok("lowerLimit(-3.0) = 0.0", &
+               lowerLimit(-3.0d0) == 0.0d0, &
+               "Must return zero for negative arguments")
+
+  ! ----------------------------------------------------------------
+  ! Test 3: upperLimit - returns lb from the common block
+  ! ----------------------------------------------------------------
+  call test_init("upperLimit function tests")
 
   za1 = [0.0d0, 0.0d0, 0.0d0]
   zb1 = [1.0d0, 0.0d0, 0.0d0]
@@ -72,68 +72,68 @@ program test_impedance
 
   call set_params(za1, zb1, zva, zvb, zlb)
 
-  call test_ok("LIMSUP retorna lb", &
-               abs(LIMSUP(0.0d0) - 3.0d0) < 1.0d-15, &
-               "Deve retornar 3.0")
+  call test_ok("upperLimit returns lb", &
+               abs(upperLimit(0.0d0) - 3.0d0) < 1.0d-15, &
+               "Must return 3.0")
 
-  call test_ok("LIMSUP é constante", &
-               abs(LIMSUP(1.0d0) - LIMSUP(2.0d0)) < 1.0d-15, &
-               "Deve ser independente do argumento")
+  call test_ok("upperLimit is constant", &
+               abs(upperLimit(1.0d0) - upperLimit(2.0d0)) < 1.0d-15, &
+               "Must be independent of the argument")
 
   ! ----------------------------------------------------------------
-  ! Test 4: Integração 1D - Gauss-Kronrod
+  ! Test 4: 1D integration - Gauss-Kronrod
   ! ----------------------------------------------------------------
   call test_init("1D Integration tests")
 
   tolerance = 1.0d-10
 
-  ! Integral de x^2 de 0 a 1
+  ! Integral of x^2 from 0 to 1
   expected = 1.0d0/3.0d0
   result = integrate_1d(quadratic, 0.0d0, 1.0d0, 0.0d0, 1.0d-12)
-  call test_ok("∫₀¹ x² dx = 1/3", &
+  call test_ok("integral_0^1 x^2 dx = 1/3", &
                abs(result - expected) < tolerance, &
-               "Resultado: " // trim(adjustl(real_to_str(result))))
+               "Result: " // trim(adjustl(real_to_str(result))))
 
-  ! Integral de sin(x) de 0 a pi
+  ! Integral of sin(x) from 0 to pi
   expected = 2.0d0
   result = integrate_1d(sin_func, 0.0d0, acos(-1.0d0), 0.0d0, 1.0d-12)
-  call test_ok("∫₀ᵠ sin(x) dx = 2", &
+  call test_ok("integral_0^pi sin(x) dx = 2", &
                abs(result - expected) < tolerance, &
-               "Resultado: " // trim(adjustl(real_to_str(result))))
+               "Result: " // trim(adjustl(real_to_str(result))))
 
   ! ----------------------------------------------------------------
-  ! Test 5: Integração 2D - TWODQ
+  ! Test 5: 2D integration - TWODQ
   ! ----------------------------------------------------------------
   call test_init("2D Integration (TWODQ) tests")
 
   tolerance = 1.0d-6
 
-  ! Integral de x*y sobre retângulo [0,1]x[0,1]
+  ! Integral of x*y over the [0,1]x[0,1] rectangle
   expected = 0.25d0
   call test_twodq_simple(xy_func, constant_0, constant_1, &
                          0.0d0, 1.0d0, 0.0d0, 1.0d-6, &
-                         result, "∫₀¹∫₀¹ x·y dy dx = 0.25")
-  call test_ok("∫₀¹∫₀¹ x·y dy dx = 0.25", &
+                         result, "integral_0^1 integral_0^1 x*y dy dx = 0.25")
+  call test_ok("integral_0^1 integral_0^1 x*y dy dx = 0.25", &
                abs(result - expected) < tolerance, &
-               "Resultado: " // trim(adjustl(real_to_str(result))))
+               "Result: " // trim(adjustl(real_to_str(result))))
 
-  ! Integral de x^2 + y^2 sobre retângulo [0,1]x[0,2]
+  ! Integral of x^2 + y^2 over the [0,1]x[0,2] rectangle
   expected = 10.0d0/3.0d0  ! = 3.333...
   call test_twodq_simple(sum_squares, constant_0, constant_2, &
                          0.0d0, 1.0d0, 0.0d0, 1.0d-6, &
-                         result, "∫₀¹∫₀² (x²+y²) dy dx = 10/3")
-  call test_ok("∫₀¹∫₀² (x²+y²) dy dx = 10/3", &
+                         result, "integral_0^1 integral_0^2 (x^2+y^2) dy dx = 10/3")
+  call test_ok("integral_0^1 integral_0^2 (x^2+y^2) dy dx = 10/3", &
                abs(result - expected) < tolerance, &
-               "Resultado: " // trim(adjustl(real_to_str(result))))
+               "Result: " // trim(adjustl(real_to_str(result))))
 
   ! ----------------------------------------------------------------
-  ! Test 6: IMPMUTUA - Casos de geometria simples
+  ! Test 6: geometryFactor2D - simple geometry cases
   ! ----------------------------------------------------------------
-  call test_init("IMPMUTUA geometry tests")
+  call test_init("geometryFactor2D geometry tests")
 
   tolerance = 1.0d-4
 
-  ! Caso 1: Dois segmentos paralelos unitários, separados por distância d=1
+  ! Case 1: two parallel unit segments, separated by distance d=1
   za1 = [0.0d0, 0.0d0, 0.0d0]
   zb1 = [1.0d0, 0.0d0, 0.0d0]
   zva = [1.0d0, 0.0d0, 0.0d0]
@@ -141,21 +141,21 @@ program test_impedance
   zla = 1.0d0
   zlb = 1.0d0
 
-  call IMPMUTUA(za1, zva, zla, zb1, zvb, zlb, result)
-  call test_ok("IMPMUTUA - segmentos paralelos unitários", &
+  call geometryFactor2D(za1, zva, zla, zb1, zvb, zlb, result)
+  call test_ok("geometryFactor2D - parallel unit segments", &
                result > 0.0d0, &
-               "Resultado positivo: " // trim(adjustl(real_to_str(result))))
+               "Positive result: " // trim(adjustl(real_to_str(result))))
 
-  ! Valor de referência (pode ser calculado analiticamente)
-  call test_ok("IMPMUTUA - valor razoável", &
+  ! Reasonableness check (an analytic reference value could be computed)
+  call test_ok("geometryFactor2D - reasonable value", &
                result > 0.1d0 .and. result < 10.0d0, &
-               "Resultado deve ser finito e positivo")
+               "Result must be finite and positive")
 
-  ! Caso 2: Segmentos exatamente coincidentes — integral genuinamente
-  ! divergente (int 1/|x-y| sobre a diagonal do quadrado não é finita sem um
-  ! deslocamento de raio finito). IMPMUTUA não deve ser usada para o termo
-  ! próprio; esse é o papel de mGeometry%selfGeometryFactor (fórmula fechada
-  ! com deslocamento eixo-superfície r0), testado em test_geometry.f90.
+  ! Case 2: exactly coincident segments — genuinely divergent integral
+  ! (int 1/|x-y| over the square's diagonal is not finite without a finite
+  ! radius offset). geometryFactor2D must not be used for the self term;
+  ! that is the role of mGeometry%selfGeometryFactor (closed-form formula
+  ! with an axis-to-surface offset r0), tested in test_geometry.f90.
   za1 = [0.0d0, 0.0d0, 0.0d0]
   zb1 = [0.0d0, 0.0d0, 0.0d0]
   zva = [1.0d0, 0.0d0, 0.0d0]
@@ -163,12 +163,12 @@ program test_impedance
   zla = 1.0d0
   zlb = 1.0d0
 
-  call IMPMUTUA(za1, zva, zla, zb1, zvb, zlb, result)
-  call test_ok("IMPMUTUA em segmentos exatamente coincidentes diverge (esperado)", &
+  call geometryFactor2D(za1, zva, zla, zb1, zvb, zlb, result)
+  call test_ok("geometryFactor2D on exactly coincident segments diverges (expected)", &
                ieee_is_nan(result) .or. result > 1.0d6, &
-               "sem raio finito a integral diverge; o termo proprio usa mGeometry%selfGeometryFactor")
+               "without a finite radius the integral diverges; the self term uses mGeometry%selfGeometryFactor")
 
-  ! Caso 3: Segmentos afastados
+  ! Case 3: distant segments
   za1 = [0.0d0, 0.0d0, 0.0d0]
   zb1 = [0.0d0, 0.0d0, 10.0d0]
   zva = [1.0d0, 0.0d0, 0.0d0]
@@ -176,12 +176,12 @@ program test_impedance
   zla = 1.0d0
   zlb = 1.0d0
 
-  call IMPMUTUA(za1, zva, zla, zb1, zvb, zlb, result)
-  call test_ok("IMPMUTUA - segmentos afastados", &
+  call geometryFactor2D(za1, zva, zla, zb1, zvb, zlb, result)
+  call test_ok("geometryFactor2D - distant segments", &
                result < 1.0d0, &
-               "Valor pequeno para grande separação: " // trim(adjustl(real_to_str(result))))
+               "Small value for large separation: " // trim(adjustl(real_to_str(result))))
 
-  ! Caso 4: Segmentos perpendiculares
+  ! Case 4: perpendicular segments
   za1 = [0.0d0, 0.0d0, 0.0d0]
   zb1 = [1.0d0, 0.0d0, 0.0d0]
   zva = [1.0d0, 0.0d0, 0.0d0]
@@ -189,15 +189,15 @@ program test_impedance
   zla = 1.0d0
   zlb = 1.0d0
 
-  call IMPMUTUA(za1, zva, zla, zb1, zvb, zlb, result)
-  call test_ok("IMPMUTUA - segmentos perpendiculares", &
+  call geometryFactor2D(za1, zva, zla, zb1, zvb, zlb, result)
+  call test_ok("geometryFactor2D - perpendicular segments", &
                result > 0.0d0 .and. result < 10.0d0, &
-               "Resultado finito: " // trim(adjustl(real_to_str(result))))
+               "Finite result: " // trim(adjustl(real_to_str(result))))
 
   ! ----------------------------------------------------------------
-  ! Test 7: Consistência e simetria
+  ! Test 7: consistency and symmetry
   ! ----------------------------------------------------------------
-  call test_init("IMPMUTUA symmetry tests")
+  call test_init("geometryFactor2D symmetry tests")
 
   tolerance = 1.0d-6
 
@@ -208,41 +208,41 @@ program test_impedance
   zla = 2.0d0
   zlb = 3.0d0
 
-  ! IMPMUTUA deve ser simétrica
-  call IMPMUTUA(za1, zva, zla, zb1, zvb, zlb, result1)
-  call IMPMUTUA(zb1, zvb, zlb, za1, zva, zla, result2)
+  ! geometryFactor2D must be symmetric
+  call geometryFactor2D(za1, zva, zla, zb1, zvb, zlb, result1)
+  call geometryFactor2D(zb1, zvb, zlb, za1, zva, zla, result2)
 
-  call test_ok("IMPMUTUA é simétrica", &
+  call test_ok("geometryFactor2D is symmetric", &
                abs(result1 - result2) < tolerance, &
                "Result1: " // trim(adjustl(real_to_str(result1))) // &
                " Result2: " // trim(adjustl(real_to_str(result2))))
 
   ! ----------------------------------------------------------------
-  ! Test 8: Testes de stress - domínios não retangulares
+  ! Test 8: stress tests - non-rectangular domains
   ! ----------------------------------------------------------------
   call test_init("TWODQ non-rectangular domain tests")
 
   tolerance = 1.0d-6
 
-  ! Integral com limite superior variável: ∫₀¹ ∫₀ˣ 1 dy dx = 0.5
+  ! Integral with a variable upper limit: integral_0^1 integral_0^x 1 dy dx = 0.5
   expected = 0.5d0
   call test_twodq_simple(const_1, constant_0, identity_func, &
                          0.0d0, 1.0d0, 0.0d0, 1.0d-12, &
-                         result, "∫₀¹ ∫₀ˣ 1 dy dx = 0.5")
-  call test_ok("∫₀¹ ∫₀ˣ 1 dy dx = 0.5", &
+                         result, "integral_0^1 integral_0^x 1 dy dx = 0.5")
+  call test_ok("integral_0^1 integral_0^x 1 dy dx = 0.5", &
                abs(result - expected) < tolerance, &
-               "Resultado: " // trim(adjustl(real_to_str(result))))
+               "Result: " // trim(adjustl(real_to_str(result))))
 
-  ! Integral com limites variáveis: ∫₀¹ ∫₋ₓˣ x·y dy dx
-  expected = 0.0d0  ! Função ímpar em y
+  ! Integral with variable limits: integral_0^1 integral_{-x}^x x*y dy dx
+  expected = 0.0d0  ! Odd function in y
   call test_twodq_simple(xy_func, neg_identity, identity_func, &
                          0.0d0, 1.0d0, 0.0d0, 1.0d-12, &
-                         result, "∫₀¹ ∫₋ₓˣ x·y dy dx = 0")
-  call test_ok("∫₀¹ ∫₋ₓˣ x·y dy dx = 0", &
+                         result, "integral_0^1 integral_{-x}^x x*y dy dx = 0")
+  call test_ok("integral_0^1 integral_{-x}^x x*y dy dx = 0", &
                abs(result - expected) < 1.0d-8, &
-               "Resultado: " // trim(adjustl(real_to_str(result))))
+               "Result: " // trim(adjustl(real_to_str(result))))
 
-  ! Resumo final
+  ! Final summary
   call test_summary()
 
 contains

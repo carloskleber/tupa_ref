@@ -91,7 +91,7 @@ module mImpedance
   integer, parameter :: igauss(7) = [2, 4, 6, 8, 10, 12, 14]
   !! Indices in xgk/wgk that correspond to the 7-point Gauss rule
 
-  public :: IMPMUTUA, FUNCBARRA, LIMINF, LIMSUP, TWODQ, internalImpedance
+  public :: geometryFactor2D, inverseDistanceIntegrand, lowerLimit, upperLimit, TWODQ, internalImpedance
 
 contains
 
@@ -145,8 +145,9 @@ contains
   ! Public entry point for mutual impedance
   ! =====================================================================
 
-  subroutine IMPMUTUA(za1, zva, zla, zb1, zvb, zlb, res)
-    !! Compute the mutual impedance between two line segments via double integration.
+  subroutine geometryFactor2D(za1, zva, zla, zb1, zvb, zlb, res)
+    !! Compute the geometry factor g(a,b) between two line segments via double
+    !! integration (theory.md §4.2, "general position, 2-D").
     !!
     !! The integrand is 1/r, where r is the distance between a point on the first
     !! segment and a point on the second. Uses adaptive Gauss-Kronrod quadrature.
@@ -163,7 +164,7 @@ contains
     real(8) :: zlb
     !! Length of the second segment (m)
     real(8) :: res
-    !! Result: the mutual impedance integral (dimensionless distance integral)
+    !! Result: the geometry factor g(a,b) (dimensionless distance integral)
     real(8) :: a1(3), b1(3), va(3), vb(3), la, lb
     integer :: irule
     common /params/ a1, b1, va, vb, lb
@@ -177,14 +178,14 @@ contains
     lb = zlb
     errabs = 0.0d0
     errrel = dmin1(la, lb) * 1.0d-6
-    call TWODQ(FUNCBARRA, 0.0d0, la, LIMINF, LIMSUP, errabs, errrel, res, errest)
-  end subroutine IMPMUTUA
+    call TWODQ(inverseDistanceIntegrand, 0.0d0, la, lowerLimit, upperLimit, errabs, errrel, res, errest)
+  end subroutine geometryFactor2D
 
   ! =====================================================================
   ! Integration kernel (integrand and integration limits)
   ! =====================================================================
 
-  real(8) function FUNCBARRA(X, Y)
+  real(8) function inverseDistanceIntegrand(X, Y)
     !! 2D integrand: 1 / distance between points on two line segments.
     !!
     !! The distance r(x,y) is computed as the Euclidean distance between:
@@ -203,24 +204,24 @@ contains
       c = b - a
       z = z + c * c
     end do
-    FUNCBARRA = 1.0d0 / dsqrt(z)
-  end function FUNCBARRA
+    inverseDistanceIntegrand = 1.0d0 / dsqrt(z)
+  end function inverseDistanceIntegrand
 
-  real(8) function LIMINF(x)
+  real(8) function lowerLimit(x)
     !! Lower integration limit for the inner integral: always 0.
     real(8), intent(in) :: x
 
-    LIMINF = 0.0d0
-  end function LIMINF
+    lowerLimit = 0.0d0
+  end function lowerLimit
 
-  real(8) function LIMSUP(x)
+  real(8) function upperLimit(x)
     !! Upper integration limit for the inner integral: always lb (length of segment 2).
     real(8), intent(in) :: x
     real(8) :: a1(3), b1(3), va(3), vb(3), la, lb
     common /params/ a1, b1, va, vb, lb
 
-    LIMSUP = lb
-  end function LIMSUP
+    upperLimit = lb
+  end function upperLimit
 
   ! =====================================================================
   ! Double integration: wrapper for nested 1D integration

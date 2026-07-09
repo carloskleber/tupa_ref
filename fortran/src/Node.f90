@@ -3,7 +3,7 @@ module mNode
   !!
   !! A `tNode` represents one vertex of the conductor network. Nodes are created
   !! by the user (main or boundary nodes) and also internally by element assembly
-  !! (internal interpolation nodes). Voltages are computed by `Mesh.injetaSinalF`
+  !! (internal interpolation nodes). Voltages are computed by `Mesh.injectSignal`
   !! and stored back here after each frequency solve.
   implicit none
 

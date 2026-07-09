@@ -5,7 +5,7 @@ module mElectrode
   !! cylindrical electrodes. Every electrode carries a longitudinal current `il`
   !! (along its axis) and a transverse current `it` (leaking radially to earth).
   !! Both currents are complex-valued frequency-domain quantities solved by
-  !! `Mesh.injetaSinalF`.
+  !! `Mesh.injectSignal`.
   use mNode
   use mMaterial, only: tMaterial
   implicit none

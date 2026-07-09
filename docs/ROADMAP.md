@@ -62,12 +62,12 @@ Gaps in this repository, in dependency order (1–4, 7, 8 resolved by Phases
 5. ~~**No frequency sweep, no sources, no outputs**~~ **Fill loop and
    single-frequency solve resolved (Phase 2)** — `tStudy%run` wires
    assemble → topology → geometry (cached once) → per-frequency
-   `calcParam`/fill/`calcFreq2`/`injetaSinalF`; current-source injection at
+   `calcParam`/fill/`calcFreq2`/`injectSignal`; current-source injection at
    named nodes works (ADR 0010). `tResult` types are still declared but
    never filled, and there is still no CSV/JSON writer or formal sweep
    storage — that remains Phase 3. The impedance-fill interface itself was
    fixed by [ADR 0009](adr/0009-impedance-fill-interface.md) —
-   `calcZPropria`/`calcZMutua` take raw `mGeometry` outputs and apply every
+   `calcZSelf`/`calcZMutual` take raw `mGeometry` outputs and apply every
    theory factor (propagation, direction cosines, length normalisation,
    including the direct-term `e^{−γr₀}` of theory.md §4.3) internally,
    pinned by hand-evaluated values in `test_mesh.f90`.
@@ -104,8 +104,8 @@ getting `fpm test` green and are left for whoever picks up Phase 1/geometry
 work: `test_impedance.f90`'s `check` module resets its pass/fail counters on
 every `test_init`, so only the last block's failures affect the exit code —
 earlier `[FAIL]` lines don't fail the build; and two of its assertions
-currently fail (`FUNCBARRA` decreasing-with-distance, using a degenerate
-all-zero direction vector in the test setup; and `IMPMUTUA` on coincident
+currently fail (`inverseDistanceIntegrand` decreasing-with-distance, using a degenerate
+all-zero direction vector in the test setup; and `geometryFactor2D` on coincident
 segments, consistent with gap 8 — no self-term regularisation exists yet).
 
 ---
@@ -164,7 +164,7 @@ segments, consistent with gap 8 — no self-term regularisation exists yet).
    - same-medium test; mixed pairs skipped (ADR 0005): **not implemented in
      mGeometry** — this is medium/position information, not a geometric
      property (theory.md §5), so it correctly lives in `Mesh.f90`'s
-     `calcZPropria`/`calcZMutua` (`pos1`/`pos2` args), not the geometry layer.
+     `calcZSelf`/`calcZMutual` (`pos1`/`pos2` args), not the geometry layer.
 3. ~~Internal impedance `Z_int`: solid conductor Bessel formula (SLATEC or
    stdlib Bessel); tubular later.~~ Done for the solid conductor
    (`mImpedance%internalImpedance`, SLATEC `ZBESI`); tubular deferred (Phase 7).
@@ -187,12 +187,12 @@ match independent (scripted) numerical integration to 1e−6 relative.
    sourceNodeIds, sourceCurrents)` assembles and computes the geometry-factor
    matrices once (cached on `tStudy`, guarded by a `prepared` flag), then
    repeats only the per-frequency block (medium constants, fill loop over
-   `calcZPropria`/`calcZMutua`, `calcFreq2`, `injetaSinalF`) on every call —
+   `calcZSelf`/`calcZMutual`, `calcFreq2`, `injectSignal`) on every call —
    so a caller sweeping frequency does not redo the O(n²) quadrature
    (theory.md §4.1). The legacy trap here — the C++ self-term call passed
    its *longitudinal* image geometry factor in the *transversal*-image
    argument slot — motivated [ADR 0009](adr/0009-impedance-fill-interface.md):
-   `calcZPropria`/`calcZMutua` consume the raw `mGeometry` matrices directly
+   `calcZSelf`/`calcZMutual` consume the raw `mGeometry` matrices directly
    (no caller-side pre-scaling), removing that class of bug. Cross-checking
    the assembled fill against the Matlab reference on moduli is still open
    (no cross-code harness exists yet — see P3 below).
@@ -529,7 +529,7 @@ changed a document or the code, the change is already applied and referenced.
 | Soil dispersion | ADR 0007 accepted: `tPortelaSoil` first, Lima–Portela [31] parametrisation, ω₀ = 2π·1 MHz. |
 | Proposals P1/P2/P4 | Confirmed as written (mHEM 1-D kernel; Γ(ω) images; NLT). |
 | Sources | Current-injection equivalents (ADR 0010). |
-| Fill interface | Theory factors inside `calcZPropria`/`calcZMutua` (ADR 0009); `corrente1/corrente2` documented as end currents `i₁`/`i₂`. |
+| Fill interface | Theory factors inside `calcZSelf`/`calcZMutual` (ADR 0009); `current1/current2` documented as end currents `i₁`/`i₂`. |
 | Quadrature tolerances | Dissertation-era values kept for now, open to revision. |
 | Stable vs fluid modules | Stable: `mMesh` conventions, `mGeometry`, `mImpedance`. Fluid: `tResult`, `mJsonParser`, `tStudy%run`. |
 | Public contract | JSON schema + `common/` cases only; all Fortran module APIs are internal and changeable. |

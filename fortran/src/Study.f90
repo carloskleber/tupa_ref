@@ -9,8 +9,8 @@ module mStudy
   !! Typical workflow:
   !! 1. JSON parsing creates and populates a tStudy instance
   !! 2. Study calls `structure%assembleStructure()` to discretise elements
-  !! 3. Study calls `mesh%calcTopologia()` and `mesh%calcFreq2(ω)` to solve
-  !! 4. Study stores results from `mesh%getSaidas()`
+  !! 3. Study calls `mesh%calcTopology()` and `mesh%calcFreq2(ω)` to solve
+  !! 4. Study stores results from `mesh%getOutputs()`
   !! 5. I/O writes results to CSV or JSON
   use mMesh
   use mStructure
@@ -112,7 +112,7 @@ contains
       this%geomCosTheta, this%geomCosThetaI)
 
     call initMesh(this%mesh, nno, nseg)
-    call calcTopologia(this%mesh, nseg, n1, n2)
+    call calcTopology(this%mesh, nseg, n1, n2)
 
     this%prepared = .true.
   end subroutine prepareStudy
@@ -149,10 +149,10 @@ contains
     !! First call: discretises the structure and computes the geometry-factor
     !! matrices (`prepareStudy`, done once). Every call: resolves medium
     !! constants from `structure%air`/`structure%soil`, fills `Zlong`/`Ztrans`
-    !! from the cached geometry matrices (ADR 0009 — `calcZPropria`/
-    !! `calcZMutua` apply every theory factor internally), assembles `Zeq`
-    !! and solves. The solution is left in `this%mesh%tensao`/`corrente1`/
-    !! `corrente2` for the caller to read (e.g. input impedance at the
+    !! from the cached geometry matrices (ADR 0009 — `calcZSelf`/
+    !! `calcZMutual` apply every theory factor internally), assembles `Zeq`
+    !! and solves. The solution is left in `this%mesh%voltage`/`current1`/
+    !! `current2` for the caller to read (e.g. input impedance at the
     !! injection node); a frequency sweep is driven by calling `run` in a
     !! loop, one call per ω (ROADMAP Phase 3 formalises sweep storage).
     class(tStudy), intent(inout) :: this
@@ -165,37 +165,37 @@ contains
     integer(4) :: nseg, i, j, k
     integer(4), allocatable :: sourcePos(:)
     complex(8) :: zint
-    real(8) :: epsAr, muAr, sigmaAr, epsSolo, muSolo, sigmaSolo
+    real(8) :: epsAir, muAir, sigmaAir, epsSoil, muSoil, sigmaSoil
     integer(4) :: info
 
     if (.not. this%prepared) call prepareStudy(this)
 
-    epsAr   = this%structure%air%epsilonr * EPSILON0
-    muAr    = this%structure%air%mur * MU0
-    sigmaAr = this%structure%air%sigma
+    epsAir   = this%structure%air%epsilonr * EPSILON0
+    muAir    = this%structure%air%mur * MU0
+    sigmaAir = this%structure%air%sigma
 
     select type (soil => this%structure%soil)
     type is (tLinear)
-      epsSolo   = soil%epsilonr * EPSILON0
-      muSolo    = soil%mur * MU0
-      sigmaSolo = soil%sigma
+      epsSoil   = soil%epsilonr * EPSILON0
+      muSoil    = soil%mur * MU0
+      sigmaSoil = soil%sigma
     class default
       call raiseError("tStudy%run: dispersive soil is not supported until ROADMAP Phase 4 (ADR 0007)")
       return
     end select
 
-    call calcParam(this%mesh, omega, epsAr, muAr, sigmaAr, epsSolo, muSolo, sigmaSolo)
+    call calcParam(this%mesh, omega, epsAir, muAir, sigmaAir, epsSoil, muSoil, sigmaSoil)
 
     nseg = this%structure%getElectrodeCount()
     do i = 1, nseg
       do j = i, nseg
         if (i == j) then
           zint = segmentInternalImpedance(this, i, omega)
-          call calcZPropria(this%mesh, i, this%geomPos(i), &
+          call calcZSelf(this%mesh, i, this%geomPos(i), &
             this%geomRbar(i,i), this%geomRbari(i,i), this%geomLength(i), &
             zint, this%geomG(i,i), this%geomGi(i,i), this%geomCosThetaI(i,i))
         else
-          call calcZMutua(this%mesh, i, j, this%geomPos(i), this%geomPos(j), &
+          call calcZMutual(this%mesh, i, j, this%geomPos(i), this%geomPos(j), &
             this%geomRbar(i,j), this%geomRbari(i,j), &
             this%geomLength(i), this%geomLength(j), &
             this%geomG(i,j), this%geomGi(i,j), &
@@ -215,9 +215,9 @@ contains
       end if
     end do
 
-    info = injetaSinalF(this%mesh, size(sourceNodeIds), sourcePos, sourceCurrents)
+    info = injectSignal(this%mesh, size(sourceNodeIds), sourcePos, sourceCurrents)
     if (info /= 0) then
-      call raiseError("tStudy%run: injetaSinalF failed (ZGESV INFO /= 0)")
+      call raiseError("tStudy%run: injectSignal failed (ZGESV INFO /= 0)")
     end if
   end subroutine run
 

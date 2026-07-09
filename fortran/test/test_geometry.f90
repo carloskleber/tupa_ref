@@ -23,7 +23,7 @@ program test_geometry
   ! int_0^l int_0^l dx dy / sqrt((x-y)^2 + r0^2). That same integral is what
   ! mutualGeometryFactor computes for two PARALLEL, aligned segments offset
   ! by r0 (a genuinely independent code path: adaptive 2D quadrature via
-  ! IMPMUTUA, vs. the closed-form selfGeometryFactor). This also directly
+  ! geometryFactor2D, vs. the closed-form selfGeometryFactor). This also directly
   ! disproves the original C++ `fatorGeometriaPropria` formula (missing a
   ! factor of 2) noted in ROADMAP.md gap 8.
   !
@@ -137,7 +137,7 @@ program test_geometry
                  "reversing b's parametrisation must not change the mutual geometry factor")
   end block
 
-  ! forceNumeric must actually route through IMPMUTUA: a non-parallel pair
+  ! forceNumeric must actually route through geometryFactor2D: a non-parallel pair
   ! only ever uses quadrature, so it must agree with itself regardless of
   ! the flag (sanity check that the flag doesn't corrupt the non-parallel path).
   a1 = [0.0d0, 0.0d0, 0.0d0]

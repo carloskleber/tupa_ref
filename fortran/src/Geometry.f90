@@ -7,7 +7,7 @@ module mGeometry
   !! This module has no dependency on the object model (`tStructure`,
   !! `tElectrode`) — it operates on plain segment endpoints and radii, so it
   !! can be tested and reasoned about in isolation.
-  use mImpedance, only: IMPMUTUA
+  use mImpedance, only: geometryFactor2D
   implicit none
   private
 
@@ -80,7 +80,7 @@ contains
     !! Dispatches to the closed-form `parallelGeometryFactor` fast path
     !! (theory.md §4.2 "Parallel segments"; ported from the Matlab
     !! reference `barraquad.m`'s `posparal`) whenever `a` and `b` are
-    !! parallel, falling back to adaptive 2D quadrature (`IMPMUTUA`) for
+    !! parallel, falling back to adaptive 2D quadrature (`geometryFactor2D`) for
     !! non-parallel pairs, or if the closed form hits a degenerate
     !! (NaN/Inf) edge case, exactly as the reference does.
     real(8), intent(in)  :: a1(3), a2(3)
@@ -108,7 +108,7 @@ contains
       if (ok) return
     end if
 
-    call IMPMUTUA(a1, va, la, b1, vb, lb, g)
+    call geometryFactor2D(a1, va, la, b1, vb, lb, g)
   end subroutine mutualGeometryFactor
 
   function crossProduct(u, v) result(w)
@@ -130,23 +130,23 @@ contains
     !!
     !! `ok = .false.` signals a degenerate (NaN/Inf) result from a
     !! near-machine-precision edge case in the log terms — the caller
-    !! should then fall back to `IMPMUTUA` quadrature, exactly as the
+    !! should then fall back to `geometryFactor2D` quadrature, exactly as the
     !! reference does (its `isnan(fg)` check in `barraquad`).
     real(8), intent(in)  :: a1(3), a2(3), la, va(3)
     real(8), intent(in)  :: b1(3), b2(3), lb, vb(3)
     real(8), intent(out) :: g
     logical, intent(out) :: ok
-    real(8) :: posicao, da1b1, da1b2, da2b1, da2b2, x2
+    real(8) :: alignment, da1b1, da1b2, da2b1, da2b2, x2
     real(8) :: xi1, xi2, d11, d12, d21, d22, l11, l21, l22, y
 
-    posicao = dot_product(va, vb)
+    alignment = dot_product(va, vb)
     da1b1 = norm2(a1 - b1)
     da1b2 = norm2(a1 - b2)
     da2b1 = norm2(a2 - b1)
     da2b2 = norm2(a2 - b2)
     x2 = la
 
-    if (posicao > 0.0d0) then
+    if (alignment > 0.0d0) then
       if (da1b2 > da2b1) then
         xi1 = dot_product(b1 - a1, va)
         xi2 = xi1 + lb

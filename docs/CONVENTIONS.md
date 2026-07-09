@@ -25,9 +25,10 @@ instructions (retired 2026-07-05).
   citing the theory.md section a physics routine implements.
 - **Comments**: only for non-obvious physics derivations or numerical
   workarounds — never restating what the code plainly does.
-- **Portuguese identifiers** are acceptable in the solver kernel (legacy
-  from the original MATLAB); do not rename them without the author's
-  approval.
+- **English only**: all identifiers, comments, and documentation are in
+  English. Legacy Portuguese identifiers inherited from the original MATLAB
+  (e.g. `tensao`, `corrente1/2`, `IMPMUTUA`) were translated in bulk
+  2026-07-09; do not reintroduce Portuguese names in new code.
 - **Compilers**: latest gfortran is the development compiler; keep the code
   ifx-compatible (no gfortran-only extensions).
 
