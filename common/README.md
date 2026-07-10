@@ -11,13 +11,13 @@ when it reproduces every case within the stated tolerance.
 
 | File | Description | Expected output |
 | --- | --- | --- |
-| `example1.json` | Buried bare conductor, 2 m, 0.5 m depth, 2 segments — smallest smoke case | none (structure-only, no `sources`/`frequencies`) |
-| `example2.json` | Two collinear buried conductors, 2 × 10 m, 10 segments each | none (structure-only) |
+| `buried_conductor_short.json` | Buried bare conductor, 2 m, 0.5 m depth, 2 segments — smallest smoke case | none (structure-only, no `sources`/`frequencies`) |
+| `buried_conductor_long.json` | Two collinear buried conductors, 2 × 10 m, 10 segments each | none (structure-only) |
 | `portela1997.json` | The Phase 2 validation conductor (10 m, 0.5 m depth, σ = 0.01 S/m, εr = 10), 1∠0° A at `Node_1`, 10 Hz-1 MHz | `portela1997_expected.csv` |
 | `rod.json` | Single vertical buried rod (3 m, -0.5 to -3.5 m), same soil, 1∠0° A at `Node_1`, 10 Hz-1 MHz | `rod_expected.csv` |
 | `grid.json` | Small buried grounding grid, one square mesh (4 nodes/edges), 1∠0° A at `Node_A`, 100 Hz-100 kHz | `grid_expected.csv` |
 
-`example1.json`/`example2.json` stay εr = 1 soil smoke tests with no
+`buried_conductor_short.json`/`buried_conductor_long.json` stay εr = 1 soil smoke tests with no
 `sources`/`frequencies` block. The other three carry `sources`/
 `frequencies`/`outputs` (ADR 0013) and are runnable with `runStudyFromFile`
 (`fortran/src/Tupa.f90`). Their `*_expected.csv` fixtures are **regression
@@ -65,7 +65,7 @@ Semantics:
   must respect the λ/10 and thin-wire bounds (theory.md §4.1).
 - `materials` is optional only if no element references one.
 - `sources`, `frequencies`, `outputs` are **optional** (a structure-only
-  case file, like `example1.json`/`example2.json`, stays valid) but
+  case file, like `buried_conductor_short.json`/`buried_conductor_long.json`, stays valid) but
   required together to run a sweep. `sources[].current` and the output
   schema's per-frequency values share the same `{"re":..,"im":..}` pair.
   `frequencies` is log-spaced only (`min`/`max` in Hz, `pointsPerDecade`

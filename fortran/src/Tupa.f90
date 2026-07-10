@@ -250,7 +250,7 @@ contains
     !! Load a JSON case file and run its frequency sweep (ROADMAP Phase 5,
     !! ADR 0013): calls `loadStudy` for the `sources`/`frequencies` blocks,
     !! then `study%runSweep`. Both blocks must be present in the case file —
-    !! a structure-only file (like `example1.json`/`example2.json`) has
+    !! a structure-only file (like `buried_conductor_short.json`/`buried_conductor_long.json`) has
     !! nothing to sweep and raises an error.
     character(len=*), intent(in) :: filename
     !! Path to the JSON study file

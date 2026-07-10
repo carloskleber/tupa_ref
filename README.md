@@ -82,10 +82,23 @@ the same [common/](common/README.md) cases.
 
 ```bash
 cd fortran
-bash build.sh                 # fetch+build SLATEC, optimised build
-fpm run --example example1    # run a bundled example
-fpm test                      # tests (see docs/ROADMAP.md §5 for the fast/slow split)
+bash build.sh                          # fetch+build SLATEC, optimised build
+fpm run -- ../common/portela1997.json  # run the solver on a JSON case
+fpm test                               # tests (see docs/ROADMAP.md §5 for the fast/slow split)
 ```
+
+See [fortran/README.md](fortran/README.md) for the full setup (Windows/Linux)
+and for the bundled Fortran demo programs (`fpm run --example example1`).
+The JSON case files under [common/](common/README.md) are the shared,
+language-neutral inputs every implementation must reproduce:
+
+| Case | Description |
+| --- | --- |
+| `buried_conductor_short.json` | Smallest smoke case: 2 m buried conductor, 2 segments (structure-only) |
+| `buried_conductor_long.json` | Two collinear buried conductors, 2 × 10 m (structure-only) |
+| `portela1997.json` | Phase 2 validation conductor (10 m, εr = 10 soil), 10 Hz–1 MHz sweep |
+| `rod.json` | Single vertical buried rod, same soil, 10 Hz–1 MHz sweep |
+| `grid.json` | Small buried grounding grid (one square mesh), 100 Hz–100 kHz sweep |
 
 ## Regarding the name
 

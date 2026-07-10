@@ -195,7 +195,7 @@ loaders and dataclasses, unit-tested headless in `gui/tests/`),
 `gui/src/tupa_gui/view/` (`tree.py` for G0, `viewer3d.py` for G1,
 `plot_panel.py` for G2, wired together as a three-pane splitter in
 `main_window.py`). Run with `cd gui && uv sync && uv run tupa-gui
-../common/example1.json [--results results.json]`; results can also be
+../common/buried_conductor_short.json [--results results.json]`; results can also be
 opened from the File menu. G2 plots come from a hand-written ADR 0012
 fixture (`gui/tests/fixtures/`) until a solver's results writer lands
 (ROADMAP Phase 3). One implementation note that cost real debugging time is

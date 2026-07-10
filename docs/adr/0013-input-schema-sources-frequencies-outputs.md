@@ -62,7 +62,7 @@ Add three optional top-level blocks to the input schema:
   `longCurrentResults`/`transCurrentResults` in `Study.f90`), and
   `inputImpedance` (derived). Omitting the block, or omitting `nodes`/
   `electrodes` within it, means "everything," matching today's behaviour —
-  this keeps `example1.json`/`example2.json` (no `outputs` block) valid
+  this keeps `buried_conductor_short.json`/`buried_conductor_long.json` (no `outputs` block) valid
   under v1 with no change in meaning.
 - All three blocks are **optional**: a structure-only case file (today's
   smoke tests) stays valid without them; they're only required to actually

@@ -22,13 +22,13 @@ program test_common_cases
   ! ----------------------------------------------------------------
   call test_init("loadStudy: structure-only case leaves sweep args unallocated")
 
-  call loadStudy("../common/example1.json", study, sourceNodeIds=sourceNodeIds, &
+  call loadStudy("../common/buried_conductor_short.json", study, sourceNodeIds=sourceNodeIds, &
                  sourceCurrents=sourceCurrents, freqHz=freqHz)
 
   call test_ok("sourceNodeIds not allocated (no 'sources' block)", &
-               .not. allocated(sourceNodeIds), "example1.json has no sources block")
+               .not. allocated(sourceNodeIds), "buried_conductor_short.json has no sources block")
   call test_ok("freqHz not allocated (no 'frequencies' block)", &
-               .not. allocated(freqHz), "example1.json has no frequencies block")
+               .not. allocated(freqHz), "buried_conductor_short.json has no frequencies block")
   call test_ok("structure still parsed (2 nodes)", &
                study%structure%getNodeCount() == 2, "structure-only parsing regressed")
 

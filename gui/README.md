@@ -22,9 +22,9 @@ are implemented. See GUI_SDD.md §7 for later phases.
 ```bash
 cd gui
 uv sync
-uv run tupa-gui ../common/example1.json
+uv run tupa-gui ../common/buried_conductor_short.json
 # optionally open a results JSON (ADR 0012 schema) alongside it:
-uv run tupa-gui ../common/example1.json --results path/to/results.json
+uv run tupa-gui ../common/buried_conductor_short.json --results path/to/results.json
 ```
 
 Both files can also be opened from the File menu.

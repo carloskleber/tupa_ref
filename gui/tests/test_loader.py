@@ -9,9 +9,9 @@ COMMON = Path(__file__).resolve().parents[2] / "common"
 
 
 def test_load_example1():
-    study = load_study(COMMON / "example1.json")
+    study = load_study(COMMON / "buried_conductor_short.json")
 
-    assert study.title == "Example 1 - buried bare conductor"
+    assert study.title == "Buried bare conductor, short"
     assert study.soil.conductivity == pytest.approx(0.01)
     assert [n.id for n in study.nodes] == ["Node_1", "Node_2"]
     assert study.node("Node_2").position == (2.0, 0.0, -0.5)
@@ -47,7 +47,7 @@ def test_load_portela1997_sources_frequencies_outputs():
 
 
 def test_load_example2_two_elements():
-    study = load_study(COMMON / "example2.json")
+    study = load_study(COMMON / "buried_conductor_long.json")
 
     assert [n.id for n in study.nodes] == ["Node_1", "Node_2", "Node_3"]
     assert [e.id for e in study.elements] == ["Line_1", "Line_2"]

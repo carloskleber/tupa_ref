@@ -61,6 +61,34 @@ practical under `--profile release` — in the default debug profile they run
 for many minutes (see [../docs/ROADMAP.md](../docs/ROADMAP.md) §5). There is
 no hosted CI; a local `fpm build && fpm test` is the merge gate.
 
+## Running Tupa
+
+The standalone solver executable (`app/main.f90`, package name `Tupa` in
+`fpm.toml`) takes a single JSON study file
+([common/README.md](../common/README.md) schema) and runs it end to end.
+
+```bash
+fpm run -- ../common/portela1997.json
+```
+
+This is `fpm run` for the *default* (only) executable, passing the JSON
+path after `--` as its command-line argument. The command is identical on
+Linux and inside WSL on Windows — there is no separate native-Windows
+build (see "Recommended setup" above). Once built, the compiled binary can
+also be run directly, e.g.
+`./build/gfortran_*/app/Tupa ../common/portela1997.json`, or install it to
+a stable path with `fpm install` and invoke it as `Tupa <study.json>`.
+
+Bundled Fortran demo programs (hand-written studies, not JSON-driven) are
+run with `fpm run --example <name>`:
+
+| Example | What it does |
+| --- | --- |
+| `example1` | Smallest smoke case: 2 m buried conductor, single frequency |
+| `example2` | Two collinear buried conductors, structure-only (no sweep) |
+| `example3` | Portela-1997-parameter conductor, frequency sweep printed as a table |
+| `example4` | Same case as `example3`, driven through `runSweep` end to end, writing `example4_results.csv`/`.json` |
+
 ## Code documentation
 
 Using [FORD](https://forddocs.readthedocs.io/en/stable/). A Python is needed, but only if you need to generated the docs.

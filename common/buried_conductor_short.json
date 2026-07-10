@@ -1,5 +1,5 @@
 {
-  "title": "Example 1 - buried bare conductor",
+  "title": "Buried bare conductor, short",
   "soil": {
     "conductivity": 0.01,
     "permittivity": 1.0,
