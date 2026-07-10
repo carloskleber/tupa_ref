@@ -106,3 +106,10 @@ element/boundary-node ID — see `common/README.md` for the worked example.
 `fortran/test/test_common_cases.f90` tests the reader (including the
 structure-only-file case, where the optional arguments stay unallocated)
 and the write-time filter.
+
+**Exercised (GUI)**: `gui/src/tupa_gui/data/loader.py`/`model.py` now parse
+and mirror all three blocks (`Source`, `FrequencySweep`, `Outputs`
+dataclasses on `Study`), and `view/tree.py` displays them, including their
+absent/empty states (no `frequencies` block; empty `outputs` lists meaning
+"everything"). Display-only, per GUI_SDD.md §2 — no solver-side computation
+(point-count conversion, output filtering) happens in the GUI.

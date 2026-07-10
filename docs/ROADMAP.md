@@ -453,7 +453,7 @@ There is **no hosted CI** (decision §9): the gate is a local
 | Voltage-source handling | **Decided** — current-injection equivalent ([ADR 0010](adr/0010-sources-as-current-injections.md)) |
 | Impedance-fill interface | **Decided** — theory factors inside `calcZ*` ([ADR 0009](adr/0009-impedance-fill-interface.md)) |
 | FFT dependency | stdlib vs FFTW — decide in Phase 6; NLT proposed on top (P4 in §7) |
-| JSON schema v1 | **Decided and implemented (Fortran)** — shape frozen ([ADR 0013](adr/0013-input-schema-sources-frequencies-outputs.md): `sources`/`frequencies`/`outputs`); Fortran reader done (Phase 5 item 1, `Tupa.f90`); Python/Rust readers pending those ports (Phase 8) |
+| JSON schema v1 | **Decided and implemented (Fortran, GUI)** — shape frozen ([ADR 0013](adr/0013-input-schema-sources-frequencies-outputs.md): `sources`/`frequencies`/`outputs`); Fortran reader done (Phase 5 item 1, `Tupa.f90`); GUI study loader/tree view done (`gui/src/tupa_gui/data/`, display-only); Python/Rust readers pending those ports (Phase 8) |
 | Reduced `Z_g` solver | deferred optimisation (ADR 0003) |
 | GUI module | **Decided** — Python/PySide6/Qt3D, view-only v1, own `gui/` folder ([ADR 0011](adr/0011-gui-module-technology-and-scope.md)) |
 | Results JSON schema (output) | **Decided** — v0 frozen ahead of any writer ([ADR 0012](adr/0012-results-json-schema.md)); consumed by Phase 3 item 3 and GUI phase G2 |

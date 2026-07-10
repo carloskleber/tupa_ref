@@ -1,7 +1,7 @@
 """Plain dataclasses mirroring the language-agnostic object model (ADR 0002).
 
 No Qt dependency here: this module is unit-testable headless and is the
-only place that understands the common/README.md JSON schema (v0).
+only place that understands the common/README.md JSON schema (v1, ADR 0013).
 """
 
 from __future__ import annotations
@@ -42,6 +42,36 @@ class LineElement:
     material: str
 
 
+@dataclass(frozen=True)
+class Source:
+    """A current-injection source (ADR 0010): one entry per driven node."""
+
+    node: str
+    current: complex
+
+
+@dataclass(frozen=True)
+class FrequencySweep:
+    """Log-spaced sweep request (ADR 0013) — the schema's user-facing knob;
+    `pointsPerDecade` is converted to a total point count by the solver-side
+    reader, not here."""
+
+    min: float
+    max: float
+    points_per_decade: float
+
+
+@dataclass(frozen=True)
+class Outputs:
+    """Opt-in projection over what the results writer stores/emits (ADR
+    0013). Omitted or empty lists mean "everything" — mirrored as-is here,
+    the GUI does not resolve that default itself."""
+
+    nodes: list[str] = field(default_factory=list)
+    electrodes: list[str] = field(default_factory=list)
+    quantities: list[str] = field(default_factory=list)
+
+
 @dataclass
 class Study:
     title: str
@@ -49,6 +79,9 @@ class Study:
     nodes: list[Node] = field(default_factory=list)
     materials: list[Material] = field(default_factory=list)
     elements: list[LineElement] = field(default_factory=list)
+    sources: list[Source] = field(default_factory=list)
+    frequencies: FrequencySweep | None = None
+    outputs: Outputs | None = None
 
     def node(self, node_id: str) -> Node:
         for n in self.nodes:

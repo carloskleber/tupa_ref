@@ -91,9 +91,13 @@ No multi-user, no persistence beyond the files the solver already produces.
 The GUI's entire design rests on JSON contracts, so its feasibility depends
 on what those contracts contain. Two asymmetric situations:
 
-### 5.1 Input — exists today, informal (common/README.md schema v0)
+### 5.1 Input — exists today (common/README.md schema v1, ADR 0013)
 
-Usable as-is for the tree view. For the 3D view there is a real design
+Usable as-is for the tree view, including the `sources`/`frequencies`/
+`outputs` blocks ADR 0013 added to the schema (Phase 5) — the study loader
+and tree view display them (empty/absent state shown explicitly, since
+omitting them is meaningful: "everything" for `outputs`, "no sweep
+configured" for `frequencies`). For the 3D view there is a real design
 choice:
 
 - **(a) Render authored (boundary) elements only** — i.e. the line
@@ -177,7 +181,7 @@ elaborate (Qt/3D/plotting code).
 
 | Phase | Deliverable | Depends on |
 | --- | --- | --- |
-| G0 | **Done** — Skeleton PySide6 app (uv project); input JSON loader; tree view only | common/README.md schema (exists) |
+| G0 | **Done** — Skeleton PySide6 app (uv project); input JSON loader (schema v1, incl. ADR 0013's `sources`/`frequencies`/`outputs`); tree view only | common/README.md schema (exists) |
 | G1 | **Done** — Qt3D viewer for input geometry, authored elements only (§5.1a) | G0 |
 | G2 | **Done** — Output JSON schema drafted (§5.2) and promoted to an ADR; results loader + 1D magnitude/phase plots (impedance, node voltages, electrode currents vs. frequency) | solver-side JSON results writer (any implementation) |
 | G3 | 2D/spatial plots (touch voltage, GPR profiles) | ROADMAP P7 output classes |

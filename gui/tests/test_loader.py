@@ -24,6 +24,27 @@ def test_load_example1():
     assert line.segments == 2
     assert line.material == "copper"
 
+    assert study.sources == []
+    assert study.frequencies is None
+    assert study.outputs is None
+
+
+def test_load_portela1997_sources_frequencies_outputs():
+    study = load_study(COMMON / "portela1997.json")
+
+    assert [s.node for s in study.sources] == ["Node_1"]
+    assert study.sources[0].current == complex(1.0, 0.0)
+
+    assert study.frequencies is not None
+    assert study.frequencies.min == pytest.approx(10.0)
+    assert study.frequencies.max == pytest.approx(1.0e6)
+    assert study.frequencies.points_per_decade == pytest.approx(1)
+
+    assert study.outputs is not None
+    assert study.outputs.nodes == []
+    assert study.outputs.electrodes == []
+    assert study.outputs.quantities == ["voltage", "i1", "i2", "inputImpedance"]
+
 
 def test_load_example2_two_elements():
     study = load_study(COMMON / "example2.json")

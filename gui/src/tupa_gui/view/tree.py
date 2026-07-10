@@ -47,4 +47,29 @@ def build_study_model(study: Study) -> QStandardItemModel:
         elements.appendRow(item)
     root.appendRow(elements)
 
+    sources = _row("Sources", f"({len(study.sources)})")
+    for s in study.sources:
+        sources.appendRow(_row(s.node, f"{s.current.real:g}{s.current.imag:+g}j A"))
+    root.appendRow(sources)
+
+    frequencies = _row("Frequencies")
+    if study.frequencies is not None:
+        f = study.frequencies
+        frequencies.appendRow(_row("min", f"{f.min} Hz"))
+        frequencies.appendRow(_row("max", f"{f.max} Hz"))
+        frequencies.appendRow(_row("pointsPerDecade", str(f.points_per_decade)))
+    else:
+        frequencies.setText("Frequencies  (none)")
+    root.appendRow(frequencies)
+
+    outputs = _row("Outputs")
+    if study.outputs is not None:
+        o = study.outputs
+        outputs.appendRow(_row("nodes", ", ".join(o.nodes) if o.nodes else "(all)"))
+        outputs.appendRow(_row("electrodes", ", ".join(o.electrodes) if o.electrodes else "(all)"))
+        outputs.appendRow(_row("quantities", ", ".join(o.quantities) if o.quantities else "(all)"))
+    else:
+        outputs.setText("Outputs  (none, everything stored)")
+    root.appendRow(outputs)
+
     return model

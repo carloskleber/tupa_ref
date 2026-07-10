@@ -31,8 +31,9 @@ Both files can also be opened from the File menu.
 
 ## Layout
 
-- `src/tupa_gui/data/` — dataclasses mirroring the object model and the
-  results schema (ADR 0012) + their JSON loaders. No Qt dependency;
+- `src/tupa_gui/data/` — dataclasses mirroring the object model (including
+  the `sources`/`frequencies`/`outputs` blocks of input schema v1, ADR 0013)
+  and the results schema (ADR 0012) + their JSON loaders. No Qt dependency;
   unit-testable headless.
 - `src/tupa_gui/view/` — QTreeView, Qt3D viewer, PyQtGraph plot panel, main
   window. Dumb: renders what the data layer gives it, no JSON parsing.

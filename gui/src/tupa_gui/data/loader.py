@@ -1,5 +1,5 @@
-"""Loaders for input study JSON (common/README.md schema v0) and results
-JSON (ADR 0012 schema v0)."""
+"""Loaders for input study JSON (common/README.md schema v1, ADR 0013) and
+results JSON (ADR 0012 schema v0)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,19 @@ import json
 import logging
 from pathlib import Path
 
-from .model import ElectrodeCurrent, LineElement, Material, Node, NodeVoltage, Results, Soil, Study
+from .model import (
+    ElectrodeCurrent,
+    FrequencySweep,
+    LineElement,
+    Material,
+    Node,
+    NodeVoltage,
+    Outputs,
+    Results,
+    Soil,
+    Source,
+    Study,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +62,32 @@ def load_study(path: str | Path) -> Study:
             )
         )
 
-    return Study(title=raw.get("title", path.stem), soil=soil, nodes=nodes, materials=materials, elements=elements)
+    sources = [Source(node=s["node"], current=_complex(s["current"])) for s in raw.get("sources", [])]
+
+    frequencies = None
+    if "frequencies" in raw:
+        f = raw["frequencies"]
+        frequencies = FrequencySweep(min=f["min"], max=f["max"], points_per_decade=f["pointsPerDecade"])
+
+    outputs = None
+    if "outputs" in raw:
+        o = raw["outputs"]
+        outputs = Outputs(
+            nodes=list(o.get("nodes", [])),
+            electrodes=list(o.get("electrodes", [])),
+            quantities=list(o.get("quantities", [])),
+        )
+
+    return Study(
+        title=raw.get("title", path.stem),
+        soil=soil,
+        nodes=nodes,
+        materials=materials,
+        elements=elements,
+        sources=sources,
+        frequencies=frequencies,
+        outputs=outputs,
+    )
 
 
 def _complex(raw: dict) -> complex:
