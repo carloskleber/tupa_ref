@@ -281,12 +281,22 @@ conductor over 100 Hz–1 MHz (the smoke cases `example1`/`example2` use
 
 ### Phase 5 — JSON I/O and common cases
 
-1. Freeze the input schema v1 (title, media, materials, elements, sources,
-   frequencies, outputs) — documented next to the cases.
+1. ~~Freeze the input schema v1 (title, media, materials, elements, sources,
+   frequencies, outputs) — documented next to the cases.~~ Shape frozen:
+   [ADR 0013](adr/0013-input-schema-sources-frequencies-outputs.md) adds
+   `sources` (node + complex current, ADR 0010 shape), `frequencies`
+   (min/max/`pointsPerDecade`, log-spaced only), and `outputs` (opt-in
+   node/electrode/quantity selection against the ADR 0012 result shape;
+   omitting it keeps today's dump-everything behaviour). Documented in
+   `common/README.md`. **Still open**: no Fortran/Python/Rust JSON reader
+   consumes these three blocks yet — today's `example4.f90` still wires
+   `sources`/`frequencies` by hand as `runSweep` arguments.
 2. `common/` folder: JSON inputs + expected CSV outputs for (at least) the
    Phase 2 conductor, a vertical rod, and a small grid; run locally as
    integration tests via `fpm test` (no hosted CI — decision §9).
 3. Parser: stay within the minimal-parser subset; escape hatch per ADR 0006.
+   (Results stay JSON per ADR 0012; see the "Binary results format" open
+   decision in §6 for the deferred HDF5 question.)
 
 ### Phase 6 — Sources and time domain
 
@@ -373,11 +383,12 @@ There is **no hosted CI** (decision §9): the gate is a local
 | Voltage-source handling | **Decided** — current-injection equivalent ([ADR 0010](adr/0010-sources-as-current-injections.md)) |
 | Impedance-fill interface | **Decided** — theory factors inside `calcZ*` ([ADR 0009](adr/0009-impedance-fill-interface.md)) |
 | FFT dependency | stdlib vs FFTW — decide in Phase 6; NLT proposed on top (P4 in §7) |
-| JSON schema v1 | draft with Phase 5; freeze before Python port |
+| JSON schema v1 | **Decided** — shape frozen ([ADR 0013](adr/0013-input-schema-sources-frequencies-outputs.md): `sources`/`frequencies`/`outputs`); no reader implements it yet (Phase 5 item 1) |
 | Reduced `Z_g` solver | deferred optimisation (ADR 0003) |
 | GUI module | **Decided** — Python/PySide6/Qt3D, view-only v1, own `gui/` folder ([ADR 0011](adr/0011-gui-module-technology-and-scope.md)) |
 | Results JSON schema (output) | **Decided** — v0 frozen ahead of any writer ([ADR 0012](adr/0012-results-json-schema.md)); consumed by Phase 3 item 3 and GUI phase G2 |
 | Quadrature tolerances | `errrel = min(la,lb)·10⁻⁶`, `maxint = 500` are dissertation-era values, open to revision (interview §9) — revisit with the P1 mHEM kernel |
+| Binary results format | Deferred — stay on JSON/CSV (ADR 0012) for now. Large real cases (long sweeps × many nodes/electrodes) will eventually want a portable binary format; **HDF5 is the leading candidate** (self-describing, chunked/partial reads, native Fortran/Python/Rust bindings — fits ADR 0002), traded off against ADR 0006's zero-dependency parser philosophy (HDF5 needs the C library at build time on every implementation/OS). Revisit once a real case is actually too large for JSON, not speculatively. |
 
 ---
 

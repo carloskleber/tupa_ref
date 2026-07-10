@@ -61,3 +61,42 @@ class Study:
             if m.id == material_id:
                 return m
         raise KeyError(f"unknown material id: {material_id!r}")
+
+
+@dataclass(frozen=True)
+class NodeVoltage:
+    id: str
+    voltage: list[complex]
+
+
+@dataclass(frozen=True)
+class ElectrodeCurrent:
+    id: str
+    i1: list[complex]
+    """Longitudinal current (theory.md §6 naming)."""
+    i2: list[complex]
+    """Transverse (leakage) current."""
+
+
+@dataclass
+class Results:
+    """Mirrors the output JSON schema v0 (ADR 0012). Keyed back to the input
+    study's node/element `id`s — only meaningful loaded alongside it."""
+
+    title: str
+    frequencies: list[float]
+    nodes: list[NodeVoltage] = field(default_factory=list)
+    electrodes: list[ElectrodeCurrent] = field(default_factory=list)
+    input_impedance: list[complex] | None = None
+
+    def node(self, node_id: str) -> NodeVoltage:
+        for n in self.nodes:
+            if n.id == node_id:
+                return n
+        raise KeyError(f"unknown node id: {node_id!r}")
+
+    def electrode(self, electrode_id: str) -> ElectrodeCurrent:
+        for e in self.electrodes:
+            if e.id == electrode_id:
+                return e
+        raise KeyError(f"unknown electrode id: {electrode_id!r}")

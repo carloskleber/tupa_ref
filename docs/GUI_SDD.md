@@ -179,18 +179,26 @@ elaborate (Qt/3D/plotting code).
 | --- | --- | --- |
 | G0 | **Done** — Skeleton PySide6 app (uv project); input JSON loader; tree view only | common/README.md schema (exists) |
 | G1 | **Done** — Qt3D viewer for input geometry, authored elements only (§5.1a) | G0 |
-| G2 | Output JSON schema drafted now (§5.2) and promoted to an ADR; 1D plots (impedance vs. frequency) once a solver writes it | solver-side JSON results writer (any implementation) |
+| G2 | **Done** — Output JSON schema drafted (§5.2) and promoted to an ADR; results loader + 1D magnitude/phase plots (impedance, node voltages, electrode currents vs. frequency) | solver-side JSON results writer (any implementation) |
 | G3 | 2D/spatial plots (touch voltage, GPR profiles) | ROADMAP P7 output classes |
 | G4 | Discretised-geometry 3D view (§5.1b) | a solver-side "structure dump" export |
 | G5 | Launch a solver as a subprocess from the GUI (decided in scope, §8.4); study authoring/editing remains out of scope | G0–G2 |
 
 Nothing before G2 requires the output schema to *exist* in a solver's
-output — only its design, which happens now (§5.2). G0/G1 are implemented
-in [`gui/`](../gui/README.md): `gui/src/tupa_gui/data/` (loader +
-dataclasses, unit-tested headless in `gui/tests/`), `gui/src/tupa_gui/view/`
-(`tree.py` for G0, `viewer3d.py` for G1, wired together in
+output — only its design, which happens now (§5.2). G0/G1/G2 are implemented
+in [`gui/`](../gui/README.md): `gui/src/tupa_gui/data/` (study + results
+loaders and dataclasses, unit-tested headless in `gui/tests/`),
+`gui/src/tupa_gui/view/` (`tree.py` for G0, `viewer3d.py` for G1,
+`plot_panel.py` for G2, wired together as a three-pane splitter in
 `main_window.py`). Run with `cd gui && uv sync && uv run tupa-gui
-../common/example1.json`.
+../common/example1.json [--results results.json]`; results can also be
+opened from the File menu. G2 plots come from a hand-written ADR 0012
+fixture (`gui/tests/fixtures/`) until a solver's results writer lands
+(ROADMAP Phase 3). One implementation note that cost real debugging time is
+recorded in [`gui/README.md`](../gui/README.md) Troubleshooting: PySide6
+does not track Qt3D `QNode` parentage as ownership, so the view layer must
+hold Python references to every Qt3D scene object or the scene is silently
+emptied by the next Python GC cycle.
 
 ## 8. Decisions (author, 2026-07-05)
 

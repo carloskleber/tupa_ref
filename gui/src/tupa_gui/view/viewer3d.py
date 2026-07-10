@@ -37,10 +37,9 @@ class GeometryViewer(QWidget):
         self._window = Qt3DExtras.Qt3DWindow()
         self._window.defaultFrameGraph().setClearColor(QColor(32, 34, 38))
         container = QWidget.createWindowContainer(self._window, self)
-        # Qt3D initialises its swap chain against the container's size at
-        # creation time; a zero/near-zero initial size (e.g. inside a
-        # QSplitter before the first layout pass) can leave it rendering
-        # nothing even after the widget is later resized.
+        # Keep the embedded window from being laid out to zero size (e.g. a
+        # fully collapsed splitter pane): a windowed 3D surface at 0x0 is a
+        # state some platforms/drivers recover from poorly.
         container.setMinimumSize(200, 200)
 
         from PySide6.QtWidgets import QVBoxLayout
@@ -49,10 +48,23 @@ class GeometryViewer(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(container)
 
-        self._root: Qt3DCore.QEntity | None = None
+        # Python references to every Qt3D object of the current scene — see
+        # the ownership note in load_study.
+        self._scene: list[object] = []
 
     def load_study(self, study: Study) -> None:
+        # PySide6 does not register Qt3D's QNode parent-child links as
+        # ownership (QNode parenting is not the plain QObject parenting that
+        # shiboken tracks), so a scene object whose Python wrapper becomes
+        # unreferenced is destroyed — C++ side included — at the next Python
+        # GC cycle. The scene then silently empties: the framegraph keeps
+        # clearing the viewport, but there is nothing left to draw. Passing
+        # `entity` as constructor parent is NOT enough. Every object created
+        # here must therefore be appended to `scene` and kept alive on self
+        # for as long as it is displayed.
+        scene: list[object] = []
         root = Qt3DCore.QEntity()
+        scene.append(root)
 
         light_entity = Qt3DCore.QEntity(root)
         light = Qt3DRender.QPointLight(light_entity)
@@ -62,18 +74,19 @@ class GeometryViewer(QWidget):
         light_transform.setTranslation(QVector3D(0, 20, 0))
         light_entity.addComponent(light)
         light_entity.addComponent(light_transform)
+        scene += [light_entity, light, light_transform]
 
         positions = [_to_qt3d(n.position) for n in study.nodes]
         extent = max((v.length() for v in positions), default=1.0)
         extent = max(extent, 1.0)
 
-        self._add_soil_plane(root, extent)
+        self._add_soil_plane(root, scene, extent)
         for node in study.nodes:
-            self._add_node(root, _to_qt3d(node.position))
+            self._add_node(root, scene, _to_qt3d(node.position))
         for element in study.elements:
             a = _to_qt3d(study.node(element.from_node).position)
             b = _to_qt3d(study.node(element.to_node).position)
-            self._add_conductor(root, a, b, element.radius)
+            self._add_conductor(root, scene, a, b, element.radius)
 
         camera = self._window.camera()
         camera.lens().setPerspectiveProjection(45.0, 16.0 / 9.0, 0.01, extent * 100)
@@ -90,17 +103,15 @@ class GeometryViewer(QWidget):
         controller.setCamera(camera)
         controller.setLinearSpeed(extent * 20)
         controller.setLookSpeed(180)
+        scene.append(controller)
 
         self._window.setRootEntity(root)
-        self._root = root  # keep alive: Qt3D entities are owned by Python GC otherwise
+        # Swap only after the new root is installed; releasing the previous
+        # scene's references lets GC destroy the old (now undisplayed) scene.
+        self._scene = scene
 
-    def _add_soil_plane(self, root: Qt3DCore.QEntity, extent: float) -> None:
+    def _add_soil_plane(self, root: Qt3DCore.QEntity, scene: list[object], extent: float) -> None:
         entity = Qt3DCore.QEntity(root)
-        # Every component is constructed with `entity` as its QObject
-        # parent: without an explicit parent, Qt3D's addComponent() alone
-        # does not stop Python from garbage-collecting (and thereby
-        # destroying the underlying C++ object) the moment this method
-        # returns, since nothing else keeps a Python reference to it.
         mesh = Qt3DExtras.QPlaneMesh(entity)
         size = max(extent * 3, 5.0)
         mesh.setWidth(size)
@@ -110,8 +121,9 @@ class GeometryViewer(QWidget):
         material.setAlpha(SOIL_COLOR.alphaF())
         entity.addComponent(mesh)
         entity.addComponent(material)
+        scene += [entity, mesh, material]
 
-    def _add_node(self, root: Qt3DCore.QEntity, position: QVector3D) -> None:
+    def _add_node(self, root: Qt3DCore.QEntity, scene: list[object], position: QVector3D) -> None:
         entity = Qt3DCore.QEntity(root)
         mesh = Qt3DExtras.QSphereMesh(entity)
         mesh.setRadius(0.05)
@@ -122,8 +134,11 @@ class GeometryViewer(QWidget):
         entity.addComponent(mesh)
         entity.addComponent(material)
         entity.addComponent(transform)
+        scene += [entity, mesh, material, transform]
 
-    def _add_conductor(self, root: Qt3DCore.QEntity, a: QVector3D, b: QVector3D, radius: float) -> None:
+    def _add_conductor(
+        self, root: Qt3DCore.QEntity, scene: list[object], a: QVector3D, b: QVector3D, radius: float
+    ) -> None:
         direction = b - a
         length = direction.length()
         if length == 0:
@@ -146,3 +161,4 @@ class GeometryViewer(QWidget):
         entity.addComponent(mesh)
         entity.addComponent(material)
         entity.addComponent(transform)
+        scene += [entity, mesh, material, transform]

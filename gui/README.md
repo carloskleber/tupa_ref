@@ -11,8 +11,9 @@ schema), never to a solver's internals ([ADR 0002](../docs/adr/0002-language-agn
 [ADR 0006](../docs/adr/0006-json-io.md)). It has no dependency on `fortran/`
 and is buildable/runnable on its own.
 
-**Status**: G0 (tree view of an input study) and G1 (Qt3D geometry view,
-authored elements only) are implemented. See GUI_SDD.md §7 for later phases.
+**Status**: G0 (tree view of an input study), G1 (Qt3D geometry view,
+authored elements only), and G2 (results loader + 1D magnitude/phase plots)
+are implemented. See GUI_SDD.md §7 for later phases.
 
 ## Setup
 
@@ -22,37 +23,37 @@ authored elements only) are implemented. See GUI_SDD.md §7 for later phases.
 cd gui
 uv sync
 uv run tupa-gui ../common/example1.json
+# optionally open a results JSON (ADR 0012 schema) alongside it:
+uv run tupa-gui ../common/example1.json --results path/to/results.json
 ```
+
+Both files can also be opened from the File menu.
 
 ## Layout
 
-- `src/tupa_gui/data/` — dataclasses mirroring the object model + the JSON
-  loader. No Qt dependency; unit-testable headless.
-- `src/tupa_gui/view/` — QTreeView, Qt3D viewer, main window. Dumb: renders
-  what the data layer gives it, no JSON parsing.
+- `src/tupa_gui/data/` — dataclasses mirroring the object model and the
+  results schema (ADR 0012) + their JSON loaders. No Qt dependency;
+  unit-testable headless.
+- `src/tupa_gui/view/` — QTreeView, Qt3D viewer, PyQtGraph plot panel, main
+  window. Dumb: renders what the data layer gives it, no JSON parsing.
 - `src/tupa_gui/app.py` — entry point (`tupa-gui` script).
 
 ## Troubleshooting
 
-**3D pane is blank, tree view works fine.** Two independent causes were
-found and fixed while building G1 — worth knowing if the symptom ever comes
-back after touching `view/viewer3d.py`:
-
-- **Qt3D components need an explicit Python-visible parent.** Every mesh/
-  material/transform in `viewer3d.py` is constructed as `Qt3DExtras.QSomething(entity)`
-  (parent passed at construction), not `QSomething()` followed by
-  `entity.addComponent(...)` alone. Without the explicit parent, nothing
-  else holds a Python reference to the component once the `_add_*` method
-  returns, Python's GC frees the underlying C++ object, and the entity is
-  left with no mesh/material — silently, no exception, nothing rendered.
-  Keep this pattern for any new geometry added here.
-- **`QWidget.createWindowContainer` (used to embed the `Qt3DWindow`) is
-  unreliable under Qt's native `wayland` QPA platform.** `app.py`
-  auto-switches to `xcb` (XWayland) when it detects a Wayland session
-  (`WAYLAND_DISPLAY` set) and no explicit `QT_QPA_PLATFORM`. If the pane is
-  blank again, confirm the platform in use (`QT_DEBUG_PLUGINS=1`, or check
-  `QApplication.instance().platformName()`) and force it:
-  `QT_QPA_PLATFORM=xcb uv run tupa-gui ...`. Needs XWayland installed.
+**3D pane is blank (only the background clear color), everything else works.**
+Root cause found while building G2, after several misdiagnoses (layouts,
+QPA platform, surface formats — all red herrings): **PySide6 does not
+register Qt3D's `QNode` parent-child links as ownership**, so any Qt3D scene
+object (entity, mesh, material, transform, light) whose Python wrapper
+becomes unreferenced is destroyed — C++ object included — at the next Python
+GC cycle. Passing the parent at construction (`QSphereMesh(entity)`) is
+*not* enough. The scene then empties silently: no exception, no log, the
+viewport keeps clearing but draws nothing. The trigger is anything that
+allocates enough to run the garbage collector (loading results into the
+plot panel was the original trigger; `gc.collect()` reproduces it on
+demand). The fix in `view/viewer3d.py` is to append every created Qt3D
+object to a `self._scene` list kept alive for as long as the scene is
+displayed — keep that pattern for any new geometry added there.
 
 ## Testing
 

@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "GPL-3.0-or-later" }
 authors = [{ name = "Carlos Kleber C. Arruda", email = "carloskleber@gmail.com" }]
-dependencies = ["pyside6>=6.7"]
+dependencies = ["pyside6>=6.7", "pyqtgraph>=0.13"]
 
 [project.scripts]
 tupa-gui = "tupa_gui.app:main"
