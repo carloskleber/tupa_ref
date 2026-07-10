@@ -63,3 +63,19 @@ tPortelaSoil, tLongmireSmithSoil, tVisacroAlipioSoil.
 - Validation against Portela 1997 curves is apples-to-apples.
 - Each dispersion model is a self-contained subtype; adding more (Cole-Cole,
   Alipio-Visacro) never touches the solver.
+
+**Exercised (ROADMAP Phase 4)**: `tPortelaSoil` is implemented in
+`fortran/src/Material.f90` (`sigma0` field added as required above). The
+propagation-constant formula `γ = √(jωμW(ω))` was factored onto the
+abstract `tMaterial` base as a single non-deferred procedure that calls a
+new deferred `admittance(ω)` function — the one quantity (`W(ω) = σ(ω) +
+jωε(ω)`) that actually differs between `tLinear` and `tPortelaSoil` — so
+`tStudy%run` (`fortran/src/Study.f90`) now calls `soil%admittance(omega)`
+polymorphically instead of the `select type`/reject-non-linear-soil branch
+this ADR's acceptance had left in place. `fortran/test/test_material.f90`
+pins the Lima–Portela formula at ω₀ = 2π·1 MHz, the required DC-limit
+convergence to a resistive `tLinear(epsilonr=0, sigma=σ₀)` medium as ω→0,
+passivity across a decade sweep, and repeats the Phase 2 buried-conductor
+passivity/DC-limit checks with `tPortelaSoil` in place of `tLinear` soil
+(illustrative `alpha0`/`kr`, since no tabulated Lima–Portela parameter set
+is available — ROADMAP §9 "Validation data").

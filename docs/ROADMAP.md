@@ -30,8 +30,8 @@ implementation**; usability as an engineering tool is secondary.
 | Object model skeleton | `tStudy → tStructure → tElement/tMaterial → tNode/tElectrode`, `tMesh` — compiles, FORD-documented |
 | Impedance quadrature | `Impedance.f90`: adaptive Gauss–Kronrod 7/15 double integration of `1/R`, tested (`test_impedance.f90`) |
 | Mesh matrix code | `Mesh.f90`: allocation, topology A/B/C/D, medium constants, `Zeq` assembly, `ZGESV` solve, injection — ported from the original Fortran module |
-| Materials | `tLinear` propagation constant; `tPortelaSoil` parameters declared |
-| JSON parser | Minimal hand-rolled parser (`JsonParser.f90`), study loading started |
+| Materials | `tLinear` and `tPortelaSoil` (Lima–Portela dispersive soil, ADR 0007) propagation constants, both via `tMaterial%admittance` |
+| JSON parser | Minimal hand-rolled parser (`JsonParser.f90`); `loadStudy`/`runStudyFromFile` (`Tupa.f90`) read structure plus `sources`/`frequencies`/`outputs` (ADR 0013) |
 | Build/test | FPM + `build.sh` (LAPACK/BLAS/SLATEC, OpenMP flags), basic test framework |
 
 ### Missing or wrong — gap analysis vs. the original
@@ -71,9 +71,12 @@ Gaps in this repository, in dependency order (1–4, 7, 8 resolved by Phases
    theory factor (propagation, direction cosines, length normalisation,
    including the direct-term `e^{−γr₀}` of theory.md §4.3) internally,
    pinned by hand-evaluated values in `test_mesh.f90`.
-6. **`tPortelaSoil` is a placeholder** (returns zero) — see ADR 0007. It is
-   the first of several planned dispersive-soil `tMaterial` subtypes
-   (`tLongmireSmithSoil`, `tVisacroAlipioSoil`, ...), not the only one.
+6. ~~**`tPortelaSoil` is a placeholder** (returns zero)~~ **Resolved
+   (Phase 4)** — implements the Lima–Portela form per ADR 0007, wired into
+   `tStudy%run` via the new `tMaterial%admittance` deferred function; see
+   `test_material.f90`. It remains the first of several planned
+   dispersive-soil `tMaterial` subtypes (`tLongmireSmithSoil`,
+   `tVisacroAlipioSoil`, ...), not the only one.
 7. ~~**Leftover C-interop artifacts**~~ **Resolved (Phase 0)** — indices
    naturalised, `alocaMalha` replaced by `initMesh` (no pointer), `calcFreqF`
    and `Solver.f90` (`solMalha`) deleted.
@@ -269,17 +272,40 @@ conductor over 100 Hz–1 MHz (the smoke cases `example1`/`example2` use
    test's public-API assumptions), tracked as open work, not folded into
    this pass.
 
-### Phase 4 — Dispersive soil
+### Phase 4 — Dispersive soil — **done**
 
-1. Implement `tPortelaSoil` per ADR 0007 (**accepted 2026-07-05**): the
+1. ~~Implement `tPortelaSoil` per ADR 0007 (**accepted 2026-07-05**): the
    Lima–Portela parametrisation of references.md [31], reference frequency
    ω₀ = 2π·1 MHz. Requires adding a `sigma0` field to the type (it currently
    carries only `alpha0`/`kr`). Do **not** reuse legacy Matlab `kr` values
-   unconverted — they are referenced to ω₀ = 1 rad/s (theory.md §7).
-2. DC-limit convergence test against `tLinear`; repeat Phase 2 validation with
-   dispersion on (Portela 1997 dispersive curves).
+   unconverted — they are referenced to ω₀ = 1 rad/s (theory.md §7).~~ Done
+   in `fortran/src/Material.f90`: `sigma0` field added, `admittance(ω)`
+   (`W(ω) = σ(ω) + jωε(ω)`) is now the one deferred function every
+   `tMaterial` subtype implements, with `calcPropagationConstant` factored
+   onto the abstract base as a single `γ = √(jωμW(ω))` procedure shared by
+   `tLinear` and `tPortelaSoil` — removing the duplicated gamma formula the
+   two concrete types previously each carried. `tStudy%run`
+   (`fortran/src/Study.f90`) calls `soil%admittance(omega)` polymorphically
+   instead of the `select type`/reject-dispersive-soil branch this phase
+   inherited from Phase 2; `mMesh` gained a `calcParamW` sibling to
+   `calcParam` taking the complex immittance directly (`calcParam` is now a
+   thin real-valued wrapper over it, unchanged for existing callers).
+2. ~~DC-limit convergence test against `tLinear`; repeat Phase 2 validation
+   with dispersion on (Portela 1997 dispersive curves).~~ Done in
+   `fortran/test/test_material.f90`: the Lima–Portela formula pinned at
+   ω₀ = 2π·1 MHz, DC-limit convergence to a resistive
+   `tLinear(epsilonr=0, sigma=σ₀)` medium as ω→0, passivity across a decade
+   sweep, and the Phase 2 buried-conductor passivity/DC-limit checks
+   repeated with `tPortelaSoil` soil. **Curve match still not attempted**:
+   no tabulated Portela dispersive curve exists (theory.md §9.2, unchanged
+   from Phase 2) — illustrative `alpha0`/`kr` values are used instead (no
+   real Lima–Portela parameter set is available yet, §9 "Validation data").
 
-### Phase 5 — JSON I/O and common cases
+**Exit criterion met**: `tPortelaSoil` is a working, tested dispersive-soil
+model, exercised end to end through `tStudy%run`, with zero behaviour
+change to the `tLinear` path it was factored alongside.
+
+### Phase 5 — JSON I/O and common cases — **done**
 
 1. ~~Freeze the input schema v1 (title, media, materials, elements, sources,
    frequencies, outputs) — documented next to the cases.~~ Shape frozen:
@@ -288,15 +314,43 @@ conductor over 100 Hz–1 MHz (the smoke cases `example1`/`example2` use
    (min/max/`pointsPerDecade`, log-spaced only), and `outputs` (opt-in
    node/electrode/quantity selection against the ADR 0012 result shape;
    omitting it keeps today's dump-everything behaviour). Documented in
-   `common/README.md`. **Still open**: no Fortran/Python/Rust JSON reader
-   consumes these three blocks yet — today's `example4.f90` still wires
-   `sources`/`frequencies` by hand as `runSweep` arguments.
-2. `common/` folder: JSON inputs + expected CSV outputs for (at least) the
+   `common/README.md`. ~~**Still open**: no Fortran/Python/Rust JSON reader
+   consumes these three blocks yet~~ **Resolved**: `fortran/src/Tupa.f90`'s
+   `loadStudy` now reads all three (optional, allocatable arguments — every
+   existing single-argument call site compiles unchanged), plus a
+   `runStudyFromFile` convenience wrapper; `outputs` filtering happens at
+   write time in `mResultsWriter` (new optional `nodeIds`/`electrodeIds`/
+   `quantities` arguments on both writers). See ADR 0013's "Exercised" note
+   for the write-time-only scope decision and an ID-naming gotcha found
+   along the way (`outputs.electrodes`/`nodes` need the *discretised*
+   segment/internal-node IDs, not the input element/boundary-node ID).
+2. ~~`common/` folder: JSON inputs + expected CSV outputs for (at least) the
    Phase 2 conductor, a vertical rod, and a small grid; run locally as
-   integration tests via `fpm test` (no hosted CI — decision §9).
-3. Parser: stay within the minimal-parser subset; escape hatch per ADR 0006.
-   (Results stay JSON per ADR 0012; see the "Binary results format" open
-   decision in §6 for the deferred HDF5 question.)
+   integration tests via `fpm test` (no hosted CI — decision §9).~~ Done:
+   `common/portela1997.json` (the Phase 2 conductor), `rod.json` (single
+   vertical buried rod), `grid.json` (small buried grid, one square mesh),
+   each with `sources`/`frequencies`/`outputs` and a checked-in
+   `*_expected.csv`. These are **regression (golden) fixtures**, not an
+   independent physics oracle — no tabulated Portela curve data or
+   cross-code harness exists yet (§7 P3) — generated once by this
+   implementation and diffed against on every `fpm test`
+   (`fortran/test/test_common_cases.f90`, 1e-6 relative tolerance, plus an
+   independent passivity check). `grid.json` is deliberately a single
+   4-electrode mesh, not a larger grid: every non-parallel segment pair
+   costs roughly 1-2 s in `geometryFactor2D`'s 2-D adaptive quadrature
+   regardless of touching/singularity at today's tolerances — confirmed by
+   direct measurement while sizing this case (a naive 9-node/12-edge grid
+   took several minutes) — so a bigger grid case waits on the §7 P1 mHEM
+   kernel, not on this phase.
+3. ~~Parser: stay within the minimal-parser subset; escape hatch per
+   ADR 0006.~~ Unchanged — no parser growth was needed; the new blocks fit
+   the existing object/array/string/number subset. (Results stay JSON per
+   ADR 0012; see the "Binary results format" open decision in §6 for the
+   deferred HDF5 question.)
+
+**Exit criterion met**: a JSON case file with `sources`/`frequencies`/
+`outputs` runs end to end (`runStudyFromFile` → `mResultsWriter`) with no
+hand-wired Fortran, and three such cases are pinned as regression fixtures.
 
 ### Phase 6 — Sources and time domain
 
@@ -311,10 +365,18 @@ conductor over 100 Hz–1 MHz (the smoke cases `example1`/`example2` use
 
 ### Phase 7 — More elements and media (as needed)
 
-Priority from the original's inventory: `tCircumference` (grounding rings),
-`tCatenary`, grid/mesh generator element, tubular conductor, insulated
-conductor, series RLC element; reflection-coefficient images and multi-layer
-soil after that. The Matlab reference's full element inventory, for the
+From the original's inventory, in order of preference:
+
+- `tCatenary`,
+- series RLC element;
+- tubular conductor,
+- insulated conductor,
+- `tCircumference` (grounding rings),
+- grid/mesh generator element,
+- reflection-coefficient images,
+- multi-layer soil.
+
+The Matlab reference's full element inventory, for the
 record: straight lines (three variants), ring, grid, cable, catenary,
 lightning-channel element, helicoidal rod, tube, conduit, solid shapes
 (block/cube/pyramid/tetrahedron), lumped series-RLC "impedance" elements
@@ -324,10 +386,10 @@ only; placeholder theory, flagged TODO in the legacy code itself). The C++
 adds bundle and L-profile (lattice-member) internal impedances and a
 shielded-wire segment.
 
-### Phase 8 — Second implementation (Python)
+### Phase 8 — Second implementation (Rust)
 
-NumPy/SciPy port following the object model; must pass every `common/` case.
-Rust later, same contract.
+Rust port following the object model; must pass every `common/` case.
+Originally Python was proposed, but at the moment is negleted for the GUI side.
 
 ---
 
@@ -372,6 +434,14 @@ There is **no hosted CI** (decision §9): the gate is a local
   slow tier before merges only.
 - A cold `fpm test` also pays several minutes of stdlib compilation; keep the
   build cache.
+- Measured 2026-07-10 (Phase 5): every non-parallel segment pair costs
+  roughly 1-2 s in `geometryFactor2D`'s 2-D adaptive quadrature at today's
+  tolerances, touching or not — confirmed directly while sizing
+  `common/grid.json` (a naive 9-node/12-edge grid took several minutes;
+  the checked-in 4-electrode version keeps `test_common_cases.f90` in the
+  full suite's ~45 s `--profile release` run). Keep any new `common/`
+  case's electrode count small until §7 P1 (mHEM single-integral kernel)
+  lands.
 
 ---
 
@@ -379,11 +449,11 @@ There is **no hosted CI** (decision §9): the gate is a local
 
 | Decision | Status |
 | --- | --- |
-| Soil dispersion model | **Decided** — ADR 0007 accepted 2026-07-05: `tPortelaSoil` first, Lima–Portela [31] parametrisation, ω₀ = 2π·1 MHz |
+| Soil dispersion model | **Decided and implemented** — ADR 0007 accepted 2026-07-05: `tPortelaSoil` first, Lima–Portela [31] parametrisation, ω₀ = 2π·1 MHz; implemented Phase 4 |
 | Voltage-source handling | **Decided** — current-injection equivalent ([ADR 0010](adr/0010-sources-as-current-injections.md)) |
 | Impedance-fill interface | **Decided** — theory factors inside `calcZ*` ([ADR 0009](adr/0009-impedance-fill-interface.md)) |
 | FFT dependency | stdlib vs FFTW — decide in Phase 6; NLT proposed on top (P4 in §7) |
-| JSON schema v1 | **Decided** — shape frozen ([ADR 0013](adr/0013-input-schema-sources-frequencies-outputs.md): `sources`/`frequencies`/`outputs`); no reader implements it yet (Phase 5 item 1) |
+| JSON schema v1 | **Decided and implemented (Fortran)** — shape frozen ([ADR 0013](adr/0013-input-schema-sources-frequencies-outputs.md): `sources`/`frequencies`/`outputs`); Fortran reader done (Phase 5 item 1, `Tupa.f90`); Python/Rust readers pending those ports (Phase 8) |
 | Reduced `Z_g` solver | deferred optimisation (ADR 0003) |
 | GUI module | **Decided** — Python/PySide6/Qt3D, view-only v1, own `gui/` folder ([ADR 0011](adr/0011-gui-module-technology-and-scope.md)) |
 | Results JSON schema (output) | **Decided** — v0 frozen ahead of any writer ([ADR 0012](adr/0012-results-json-schema.md)); consumed by Phase 3 item 3 and GUI phase G2 |
