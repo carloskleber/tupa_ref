@@ -227,6 +227,31 @@ program test_geometry
                "self entries must use the closed form, not quadrature")
 
   ! ----------------------------------------------------------------
+  ! Determinism (ROADMAP.md Phase 3 item 4 / P6): the fill loop's write
+  ! pattern (each matrix entry (r,c) is written by exactly one outer
+  ! iteration i = min(r,c)) is race-free and OpenMP-ready, but the loop is
+  ! NOT parallelised yet — mImpedance's quadrature fallback keeps
+  ! non-reentrant module-level state (ARCHITECTURE.md §7), so parallelising
+  ! today would race whenever a pair takes that path. This test pins
+  ! today's serial determinism as a baseline, to be re-run once OpenMP
+  ! actually lands (after the mImpedance reentrancy fix).
+  ! ----------------------------------------------------------------
+  call test_init("buildGeometryMatrices is deterministic across repeated calls")
+
+  block
+    real(8) :: G2(10,10), Gi2(10,10), Rbar2(10,10), Rbari2(10,10), cosTheta2(10,10), cosThetaI2(10,10)
+
+    call buildGeometryMatrices(p1, p2, radius, 10, G2, Gi2, Rbar2, Rbari2, cosTheta2, cosThetaI2)
+
+    call test_ok("G bit-identical across two calls", all(G == G2), "geometry factor matrix is nondeterministic")
+    call test_ok("Gi bit-identical across two calls", all(Gi == Gi2), "image geometry factor matrix is nondeterministic")
+    call test_ok("Rbar bit-identical across two calls", all(Rbar == Rbar2), "mean distance matrix is nondeterministic")
+    call test_ok("Rbari bit-identical across two calls", all(Rbari == Rbari2), "image mean distance matrix is nondeterministic")
+    call test_ok("cosTheta bit-identical across two calls", all(cosTheta == cosTheta2), "direction cosine matrix is nondeterministic")
+    call test_ok("cosThetaI bit-identical across two calls", all(cosThetaI == cosThetaI2), "image direction cosine matrix is nondeterministic")
+  end block
+
+  ! ----------------------------------------------------------------
   ! Internal (skin-effect) impedance: DC and high-frequency limits (theory.md §4.3)
   ! ----------------------------------------------------------------
   call test_init("internalImpedance DC and high-frequency limits")

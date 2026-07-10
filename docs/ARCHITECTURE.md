@@ -6,7 +6,7 @@ specified in [theory.md](theory.md) (normative); forward plans live in
 [ROADMAP.md](ROADMAP.md); individual decisions in [adr/](adr/). Terms are
 defined in [GLOSSARY.md](GLOSSARY.md).
 
-Everything below describes the **Fortran** implementation as of 2026-07-05.
+Everything below describes the **Fortran** implementation as of 2026-07-09.
 Statements about intent (rather than code) are marked *(intent)*; the object
 model itself is language-agnostic by decision
 ([ADR 0002](adr/0002-language-agnostic-object-model.md)) and future
@@ -61,21 +61,22 @@ Correctness is preferred over performance everywhere until validation exists
 | `main` | `fortran/app/main.f90` | CLI entry: JSON path → run → report | working (solver not wired) |
 | `tupa` | `fortran/src/Tupa.f90` | JSON → object model mapping | working for the current schema |
 | `mJsonParser` | `fortran/src/JsonParser.f90` | Minimal recursive-descent JSON subset (ADR 0006) | working within subset limits |
-| `tStudy` | `fortran/src/Study.f90` | Top container; owns structure, mesh, results; `run` is the pipeline | `run` is a stub (ROADMAP Phase 2) |
+| `tStudy` | `fortran/src/Study.f90` | Top container; owns structure, mesh, results; `run` solves one ω, `runSweep` drives the full frequency axis | working (Phase 2 `run`, Phase 3 `runSweep`) |
 | `tStructure` | `fortran/src/Structure.f90` | Owns nodes/electrodes (dynamic arrays) and elements/materials (linked lists); `assembleStructure` | working |
 | `tElement`/`tLine` | `fortran/src/element/` | Geometric generators; self-discretising | `tLine` only |
 | `tMaterial` family | `fortran/src/Material.f90` | γ(ω) per medium; `tLinear` working, `tPortelaSoil` placeholder (ADR 0007) | partial |
 | `tNode`, `tElectrode` | `fortran/src/Node.f90`, `Electrode.f90` | Mesh primitives | working |
 | `mGeometry` | `fortran/src/Geometry.f90` | Frequency-independent geometry matrices (ADR 0004) | working, tested |
 | `mMesh` | `fortran/src/Mesh.f90` | Topology, medium constants, impedance entries (ADR 0009), Zeq assembly, ZGESV solve (ADR 0003) | working, tested; fill loop pending |
-| `mImpedance` | `fortran/src/Impedance.f90` | Adaptive Gauss–Kronrod quadrature; Bessel internal impedance | working, tested |
-| `tResult` family | `fortran/src/Result.f90` | Declared output containers (voltages, currents vs ω) | declared, never filled |
+| `mImpedance` | `fortran/src/Impedance.f90` | Adaptive Gauss–Kronrod quadrature; Bessel internal impedance | working, tested; non-reentrant (§7) |
+| `tResult` family | `fortran/src/Result.f90` | Output containers (voltages, currents vs ω): own copies of entity IDs + ω axis, `get`/`set`/`entityId` accessors | working, filled by `tStudy%runSweep` |
+| `mResultsWriter` | `fortran/src/ResultsWriter.f90` | CSV (tidy/long) and JSON (ADR 0012 v0) results writers | working, tested |
 | `mCtes`, `mError` | `fortran/src/Ctes.f90`, `Error.f90` | Constants (`dp` kind, μ₀, ε₀, …); feh error boundary | working |
 
 ## 3. Execution flow
 
 Intended pipeline (theory.md §1; steps marked ✗ are not yet wired — see
-ROADMAP Phase 2/3):
+ROADMAP Phase 6):
 
 ```
 load JSON ──► build tStudy ──► structure%assembleStructure()
@@ -87,17 +88,18 @@ load JSON ──► build tStudy ──► structure%assembleStructure()
                                     ▼
               calcTopology(n1, n2)   →  A, B, C, D           [once per topology]
                                     ▼
-        ┌── for each ω in the sweep ────────────────────────────┐
-        │   calcParam(ω)         medium constants cE, cM, γ     │   ✗ sweep driver
-        │   calcZSelf/Mutual     Zlong, Ztrans entries          │   ✗ fill loop
-        │   calcFreq2()          assemble augmented Zeq         │
-        │   injectSignal(...)    RHS = current injections       │
-        │                        ZGESV → u, i1, i2              │
-        └───────────────────────────────────────────────────────┘
+        ┌── runSweep: for each ω in freqHz (logFrequencyAxis or custom) ──┐
+        │   calcParam(ω)         medium constants cE, cM, γ              │
+        │   calcZSelf/Mutual     Zlong, Ztrans entries                   │
+        │   calcFreq2()          assemble augmented Zeq                  │
+        │   injectSignal(...)    RHS = current injections                │
+        │                        ZGESV → u, i1, i2                       │
+        │   store into tVoltages/tLongCurrents/tTransCurrents            │
+        └──────────────────────────────────────────────────────────────┘
                                     ▼
-              tResult arrays (V(ω), I(ω))                        ✗ not filled
+              inputImpedance(nodeId) / maxVoltageMagnitude() queries
                                     ▼
-              CSV / JSON writers                                 ✗ absent
+              writeResultsCsv / writeResultsJson (ADR 0012)
                                     ▼
               (Phase 6) FFT/NLT ↔ time domain                    ✗ absent
 ```
@@ -120,8 +122,10 @@ and elements are inputs; assembly derives the flat arrays the solver
 consumes (`tStructure%nodes`, `%electrodes` with `n1`/`n2` connectivity).
 Geometry matrices and topology matrices are derived state, computed once;
 impedance matrices and the solution vectors are per-frequency state inside
-`tMesh` (each frequency overwrites the previous one — accumulation across
-the sweep is the `tResult` layer's job, not yet implemented).
+`tMesh` (each frequency overwrites the previous one — `tStudy%runSweep`
+copies `tMesh%voltage`/`current1`/`current2` out into
+`tVoltages`/`tLongCurrents`/`tTransCurrents` after every `run` call, so the
+accumulation across the sweep lives in `tStudy`, not `tMesh`).
 
 **State & ownership.**
 
@@ -137,8 +141,10 @@ the sweep is the `tResult` layer's job, not yet implemented).
   `ZGESV` factorises `Zeq` **in place** — after a solve, `Zeq` holds the LU
   factors and `calcFreq2` must be re-run before another solve.
 
-**Persistence.** None: input is read once; results exist only in memory
-until the CSV/JSON writers land (ROADMAP Phase 3).
+**Persistence.** Input is read once (no environment/config/network). Results
+are written out explicitly by the caller via `mResultsWriter`'s
+`writeResultsCsv`/`writeResultsJson` (ROADMAP Phase 3) — nothing is written
+automatically as a side effect of `runSweep`.
 
 ## 5. Concurrency, precision, errors, logging
 
@@ -162,7 +168,7 @@ until the CSV/JSON writers land (ROADMAP Phase 3).
 | --- | --- | --- |
 | New geometry (ring, catenary, tower, grid…) | Extend `tElement`, implement `assemble` + `report` | Priority list in ROADMAP Phase 7 |
 | New soil/conductor model | Extend `tMaterial`, implement `calcPropagationConstant` | One subtype per literature reference, named after it (ADR 0007) |
-| New output | Extend `tResult`, implement `alloc` (+ future fill/write) | Use the legacy output-class inventory to prioritise (ROADMAP P7) |
+| New output | Extend `tResult`, implement `alloc`/`get`/`set`; wire into `runSweep` and `mResultsWriter` | Use the legacy output-class inventory to prioritise (ROADMAP P7) |
 | Alternate geometry-factor kernel (mHEM 1-D) | Swap inside `mGeometry`; 2-D quadrature stays as test oracle | ROADMAP P1; ADR 0004 |
 | Γ(ω) reflection images | Multiply the image parcel inside `calcZSelf`/`calcZMutual` | ROADMAP P2; ADR 0009 keeps call sites untouched |
 | Other languages | Re-implement the object model; must pass `common/` cases | ADR 0002; JSON schema is the public contract |

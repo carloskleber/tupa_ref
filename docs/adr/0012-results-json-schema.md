@@ -56,6 +56,9 @@ Freeze the following as the v0 results JSON shape:
   backward-compatible; renaming or removing a field, or adding spatial
   outputs, is a breaking change and needs a new ADR revising this one, per
   ADR 0002's cross-implementation contract discipline.
-- v0 is not yet exercised by any writer. The first implementation to write it
-  (ROADMAP Phase 3) should surface any friction here before a second
-  consumer (the GUI, or a second language port) comes to depend on it.
+- **Exercised (2026-07-09)**: Fortran's `mResultsWriter%writeResultsJson`
+  writes exactly this shape, tested in `fortran/test/test_sweep.f90`; no
+  friction found. One implementation choice this ADR left open and the
+  writer had to resolve: `derived.inputImpedance` assumes a single source
+  node (the sweep's first), since the schema doesn't define a multi-port
+  variant — worth a v1 note if a multi-source study ever needs it.

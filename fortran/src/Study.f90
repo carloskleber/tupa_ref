@@ -20,7 +20,7 @@ module mStudy
   use mGeometry, only: buildGeometryMatrices
   use mImpedance, only: internalImpedance
   use mError, only: raiseError
-  use mCtes, only: newl, EPSILON0, MU0, ZERO_CPLX
+  use mCtes, only: newl, PI, EPSILON0, MU0, ZERO_CPLX
   implicit none
 
   type :: tStudy
@@ -40,8 +40,18 @@ module mStudy
     !! Temporary pointer for iteration during element management
     class(tMaterial), pointer :: mat => null()
     !! Temporary pointer for iteration during material management
-    class(tResult), allocatable :: results(:)
-    !! Array of frequency-domain results: voltages, longitudinal currents, transverse currents
+    type(tVoltages) :: voltageResults
+    !! Node voltages V(ω) across the last `runSweep` call
+    type(tLongCurrents) :: longCurrentResults
+    !! Longitudinal electrode currents I_long(ω) across the last `runSweep` call
+    type(tTransCurrents) :: transCurrentResults
+    !! Transverse (leakage) electrode currents I_trans(ω) across the last `runSweep` call
+    real(8), allocatable :: sweepFreqHz(:)
+    !! Frequency axis (Hz) of the last `runSweep` call
+    character(256), allocatable :: sweepSourceIds(:)
+    !! Source node IDs of the last `runSweep` call (for `inputImpedance`)
+    complex(8), allocatable :: sweepSourceCurrents(:)
+    !! Injected currents corresponding to `sweepSourceIds` (A)
 
     logical :: prepared = .false.
     !! Set once assembly and geometry-factor computation have run (theory.md
@@ -63,6 +73,12 @@ module mStudy
     !! Print a human-readable summary of the study contents
     procedure :: run
     !! Execute the full simulation pipeline (discretisation, solving, extraction)
+    procedure :: runSweep
+    !! Execute `run` across a frequency sweep, storing results (ROADMAP Phase 3)
+    procedure :: inputImpedance
+    !! Driving-point impedance Zin(ω) at a sweep source node
+    procedure :: maxVoltageMagnitude
+    !! Per-frequency maximum |V| across all nodes (e.g. ground-potential-rise check)
   end type tStudy
 
 contains
@@ -220,6 +236,142 @@ contains
       call raiseError("tStudy%run: injectSignal failed (ZGESV INFO /= 0)")
     end if
   end subroutine run
+
+  ! =====================================================================
+  ! Frequency sweep, result storage, and convenience queries (ROADMAP Phase 3)
+  ! =====================================================================
+
+  function logFrequencyAxis(freqMinHz, freqMaxHz, nPoints) result(freqHz)
+    !! Default log-spaced frequency axis (ROADMAP.md Phase 3 item 1;
+    !! CONVENTIONS.md: log spacing for harmonic sweeps, linear for
+    !! transients). `nPoints` points from `freqMinHz` to `freqMaxHz`
+    !! inclusive; pass a different axis to `runSweep` directly to override.
+    real(8), intent(in) :: freqMinHz, freqMaxHz
+    !! Endpoints of the sweep (Hz), both > 0
+    integer(4), intent(in) :: nPoints
+    !! Number of frequency points (>= 2)
+    real(8), allocatable :: freqHz(:)
+    real(8) :: logMin, logMax
+    integer(4) :: k
+
+    if (nPoints < 2) then
+      call raiseError("logFrequencyAxis: nPoints must be >= 2")
+      return
+    end if
+
+    allocate(freqHz(nPoints))
+    logMin = log10(freqMinHz)
+    logMax = log10(freqMaxHz)
+    do k = 1, nPoints
+      freqHz(k) = 10.0d0 ** (logMin + (logMax - logMin) * real(k - 1, kind=8) / real(nPoints - 1, kind=8))
+    end do
+  end function logFrequencyAxis
+
+  subroutine runSweep(this, freqHz, sourceNodeIds, sourceCurrents)
+    !! Solve the study once per frequency in `freqHz` (ROADMAP.md Phase 3
+    !! items 1-2), storing node voltages and electrode currents in
+    !! `this%voltageResults`/`longCurrentResults`/`transCurrentResults`.
+    !! Geometry factors are cached after the first `run` call (theory.md
+    !! §4.1), so only the per-frequency fill+solve repeats. Use
+    !! `logFrequencyAxis` to build a default log-spaced axis, or pass any
+    !! user-chosen `freqHz`.
+    class(tStudy), intent(inout) :: this
+    real(8), intent(in) :: freqHz(:)
+    !! Frequency axis (Hz), in the order results are stored
+    character(len=*), intent(in) :: sourceNodeIds(:)
+    !! User-assigned IDs of the nodes receiving current injection
+    complex(8), intent(in) :: sourceCurrents(:)
+    !! Complex current injected at each corresponding node in `sourceNodeIds` (A)
+    real(8), allocatable :: omegaAxis(:)
+    character(256), allocatable :: nodeIds(:), electrodeIds(:)
+    integer(4) :: nf, nno, nseg, i, k
+
+    if (.not. this%prepared) call prepareStudy(this)
+
+    nf = size(freqHz)
+    omegaAxis = 2.0d0 * PI * freqHz
+
+    nno  = this%structure%getNodeCount()
+    nseg = this%structure%getElectrodeCount()
+
+    allocate(nodeIds(nno))
+    do i = 1, nno
+      nodeIds(i) = this%structure%nodes(i)%id
+    end do
+    allocate(electrodeIds(nseg))
+    do i = 1, nseg
+      electrodeIds(i) = this%structure%electrodes(i)%id
+    end do
+
+    call this%voltageResults%alloc(nodeIds, omegaAxis)
+    call this%longCurrentResults%alloc(electrodeIds, omegaAxis)
+    call this%transCurrentResults%alloc(electrodeIds, omegaAxis)
+
+    do k = 1, nf
+      call this%run(omegaAxis(k), sourceNodeIds, sourceCurrents)
+
+      do i = 1, nno
+        call this%voltageResults%set(i, k, this%mesh%voltage(i))
+      end do
+      do i = 1, nseg
+        call this%longCurrentResults%set(i, k, this%mesh%current1(i))
+        call this%transCurrentResults%set(i, k, this%mesh%current2(i))
+      end do
+    end do
+
+    this%sweepFreqHz = freqHz
+    this%sweepSourceIds = sourceNodeIds
+    this%sweepSourceCurrents = sourceCurrents
+  end subroutine runSweep
+
+  function inputImpedance(this, nodeId) result(zin)
+    !! Driving-point impedance Zin(ω) = V(nodeId)/I(nodeId) across the
+    !! frequency axis of the last `runSweep` call (ROADMAP.md Phase 3 item
+    !! 2). `nodeId` must be one of the sweep's source node IDs.
+    class(tStudy), intent(in) :: this
+    character(len=*), intent(in) :: nodeId
+    complex(8), allocatable :: zin(:)
+    integer(4) :: iNode, iSrc, k, nf
+
+    iSrc = 0
+    if (allocated(this%sweepSourceIds)) then
+      do k = 1, size(this%sweepSourceIds)
+        if (trim(this%sweepSourceIds(k)) == trim(nodeId)) then
+          iSrc = k
+          exit
+        end if
+      end do
+    end if
+    if (iSrc == 0) then
+      call raiseError("tStudy%inputImpedance: '" // trim(nodeId) // "' was not a runSweep source node")
+      return
+    end if
+
+    iNode = this%structure%findNodeIndex(trim(nodeId))
+    nf = this%voltageResults%frequencyCount()
+    allocate(zin(nf))
+    do k = 1, nf
+      zin(k) = this%voltageResults%get(iNode, k) / this%sweepSourceCurrents(iSrc)
+    end do
+  end function inputImpedance
+
+  function maxVoltageMagnitude(this) result(vmax)
+    !! Per-frequency maximum |V| across all nodes (ROADMAP.md Phase 3 item
+    !! 2) — e.g. a quick ground-potential-rise check across the sweep.
+    class(tStudy), intent(in) :: this
+    real(8), allocatable :: vmax(:)
+    integer(4) :: nf, nno, i, k
+
+    nf  = this%voltageResults%frequencyCount()
+    nno = this%voltageResults%entityCount()
+    allocate(vmax(nf))
+    do k = 1, nf
+      vmax(k) = 0.0d0
+      do i = 1, nno
+        vmax(k) = max(vmax(k), abs(this%voltageResults%get(i, k)))
+      end do
+    end do
+  end function maxVoltageMagnitude
 
   subroutine report(this)
     !! Print a formatted text report of the study geometry and properties.

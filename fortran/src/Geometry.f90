@@ -266,6 +266,17 @@ contains
       mid(i,:) = 0.5d0 * (p1(i,:) + p2(i,:))
     end do
 
+    ! NOT parallelised (ROADMAP.md Phase 3 item 4 / P6, deliberately deferred):
+    ! the write pattern itself is race-free (for any physical entry (r,c),
+    ! iteration i = min(r,c) is the sole writer, since j only ever ranges
+    ! over [i,n]), but `mutualGeometryFactor`'s quadrature fallback
+    ! (`geometryFactor2D`/`TWODQ` in Impedance.f90) stores integration state
+    ! in module-level procedure pointers and a `COMMON /params/` block —
+    ! non-reentrant, so concurrent calls from different segment pairs would
+    ! corrupt each other's integration (ARCHITECTURE.md §7). Only pairs that
+    ! take the closed-form parallel-segment path are actually safe today;
+    ! real (non-parallel) geometries hit the quadrature. OpenMP here needs
+    ! that reentrancy fix first, not just this loop's own write pattern.
     do i = 1, n
       do j = i, n
         if (i == j) then

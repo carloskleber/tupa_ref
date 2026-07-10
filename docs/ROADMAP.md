@@ -220,15 +220,54 @@ prints the impedance-vs-frequency table for the Portela-1997-parameter
 conductor over 100 Hz–1 MHz (the smoke cases `example1`/`example2` use
 εr = 1 soil and are not the validation case, per `common/README.md`).
 
-### Phase 3 — Frequency sweep, results, output
+### Phase 3 — Frequency sweep, results, output — **done (items 1-3); item 4 deferred**
 
-1. Log-spaced frequency axis (default) with user override.
-2. Fill `tVoltages`/`tLongCurrents`/`tTransCurrents` across the sweep;
-   convenience queries (`inputImpedance`, `maxVoltage`).
-3. CSV writer (primary) and JSON results writer, against the schema frozen
-   in [ADR 0012](adr/0012-results-json-schema.md).
-4. OpenMP on the geometry-factor fill loop (already flagged in build.sh) —
-   only after Phase 2 validation, with a determinism test.
+1. ~~Log-spaced frequency axis (default) with user override.~~ Done:
+   `logFrequencyAxis(fMin, fMax, nPoints)` (Study.f90); pass any other array
+   to `runSweep` directly to override.
+2. ~~Fill `tVoltages`/`tLongCurrents`/`tTransCurrents` across the sweep;
+   convenience queries (`inputImpedance`, `maxVoltage`).~~ Done:
+   `tStudy%runSweep` calls `run` once per frequency and stores every node
+   voltage / electrode current in `this%voltageResults`/
+   `longCurrentResults`/`transCurrentResults`; `tStudy%inputImpedance(nodeId)`
+   and `tStudy%maxVoltageMagnitude()` are the convenience queries. `tResult`
+   itself was simplified along the way (Result.f90): concrete types now own
+   a plain copy of entity IDs and the frequency axis instead of pointers
+   into `tStructure`, with `get`/`set`/`entityId`/`entityCount`/
+   `frequencyCount` accessors — the original pointer-based `alloc_interface`
+   (with an unused `tElement` array parameter `tStructure` never populated)
+   was dead scaffolding with zero callers, so this is a like-for-like
+   simplification, not a behaviour change.
+3. ~~CSV writer (primary) and JSON results writer, against the schema frozen
+   in [ADR 0012](adr/0012-results-json-schema.md).~~ Done:
+   `mResultsWriter` (`writeResultsCsv`/`writeResultsJson`). CSV is tidy/long
+   form (`frequency_hz,quantity,id,re,im`, one row per frequency x entity x
+   quantity) since ADR 0012 only froze the JSON shape; JSON matches the ADR
+   exactly, with `derived.inputImpedance` computed from the sweep's first
+   source node (single-port assumption — the ADR doesn't define a
+   multi-port derived quantity). `example4.f90` demonstrates the full
+   sweep -> query -> write pipeline end to end.
+4. **Deferred, not just unattempted**: OpenMP on the geometry-factor fill
+   loop. The fill loop's own write pattern is already race-free (each
+   matrix entry is written by exactly one outer iteration — see the
+   comment above `buildGeometryMatrices`'s loop, Geometry.f90) and a
+   determinism test pins it (`test_geometry.f90`), but `mutualGeometryFactor`
+   falls back to `geometryFactor2D`/`TWODQ` (Impedance.f90) for any
+   non-parallel segment pair, and that quadrature keeps its integration
+   state in module-level procedure pointers (`pF`/`pG`/`pH`) and a
+   `COMMON /params/` block — non-reentrant (ARCHITECTURE.md §7). Annotating
+   the fill loop with `!$omp parallel do` today would only be safe for
+   geometries where every pair happens to be parallel (which is why the
+   existing 10-segment collinear test wouldn't have caught it); any real
+   grid with non-parallel elements would silently corrupt results under
+   concurrent threads. Needs the mImpedance reentrancy fix first (its own
+   task — likely nesting `inverseDistanceIntegrand`/`lowerLimit`/
+   `upperLimit` and `outer_fcn` as internal procedures closing over their
+   host's local variables instead of module/COMMON state — but
+   `test_impedance.f90` currently unit-tests those three functions directly
+   via a test-side `common /params/` alias, so the fix also touches that
+   test's public-API assumptions), tracked as open work, not folded into
+   this pass.
 
 ### Phase 4 — Dispersive soil
 

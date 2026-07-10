@@ -57,7 +57,7 @@ instructions (retired 2026-07-05).
 | Soil dispersion model | `tPortelaSoil`, Lima–Portela parametrisation (ADR 0007) |
 | JSON library escape hatch | json-fortran (ADR 0006) |
 | Frequency axis | Logarithmic spacing for harmonic sweeps; linear grid for transients (theory.md §8) |
-| Parallelism | OpenMP on the geometry/impedance fill loop — pencilled in; frequency-loop parallelism under evaluation (ROADMAP P6) |
+| Parallelism | OpenMP on the geometry-factor fill loop deferred: blocked on making `mImpedance`'s quadrature reentrant first (ARCHITECTURE.md §7, ROADMAP Phase 3 item 4); frequency-loop parallelism under evaluation (ROADMAP P6) |
 | Output formats | CSV (primary) + JSON (structured) |
 | Element priority | `tLine` (done); next per ROADMAP Phase 7 |
 | Reference validation case | Buried straight conductor, 10 m, 0.5 m depth, σ = 0.01 S/m, εr ≈ 10 (theory.md §9) |
