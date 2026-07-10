@@ -181,26 +181,20 @@ contains
     integer(4) :: nseg, i, j, k
     integer(4), allocatable :: sourcePos(:)
     complex(8) :: zint
-    real(8) :: epsAir, muAir, sigmaAir, epsSoil, muSoil, sigmaSoil
+    real(8) :: muAir, muSoil
     integer(4) :: info
 
     if (.not. this%prepared) call prepareStudy(this)
 
-    epsAir   = this%structure%air%epsilonr * EPSILON0
-    muAir    = this%structure%air%mur * MU0
-    sigmaAir = this%structure%air%sigma
+    muAir  = this%structure%air%mur * MU0
+    muSoil = this%structure%soil%mur * MU0
 
-    select type (soil => this%structure%soil)
-    type is (tLinear)
-      epsSoil   = soil%epsilonr * EPSILON0
-      muSoil    = soil%mur * MU0
-      sigmaSoil = soil%sigma
-    class default
-      call raiseError("tStudy%run: dispersive soil is not supported until ROADMAP Phase 4 (ADR 0007)")
-      return
-    end select
-
-    call calcParam(this%mesh, omega, epsAir, muAir, sigmaAir, epsSoil, muSoil, sigmaSoil)
+    ! this%structure%soil is class(tMaterial): admittance() dispatches to
+    ! whichever concrete model (tLinear, tPortelaSoil, ...) is stored, so any
+    ! dispersive soil (ROADMAP Phase 4, ADR 0007) works here without a
+    ! type-specific branch.
+    call calcParamW(this%mesh, omega, muAir, this%structure%air%admittance(omega), &
+                     muSoil, this%structure%soil%admittance(omega))
 
     nseg = this%structure%getElectrodeCount()
     do i = 1, nseg

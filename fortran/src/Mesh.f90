@@ -155,10 +155,14 @@ contains
   ! =====================================================================
 
   subroutine calcParam(mesh, omega, epsAir, muAir, sigmaAir, epsSoil, muSoil, sigmaSoil)
-    !! Compute frequency-dependent medium constants for a given angular frequency ω.
+    !! Compute frequency-dependent medium constants for a given angular frequency ω,
+    !! for constant-parameter (linear) air/soil media.
     !!
     !! Updates `cE*`, `cM*`, and `prop*` fields of the mesh based on
     !! the permittivity, permeability, and conductivity of air and soil.
+    !! Thin wrapper over `calcParamW` for the linear-medium immittance
+    !! W = sigma + j*omega*eps; dispersive media (ROADMAP Phase 4) call
+    !! `calcParamW` directly with their own W(omega).
     real(8), intent(in), value :: omega
     !! Angular frequency ω (rad/s)
     real(8), intent(in), value :: epsAir, muAir, sigmaAir
@@ -167,16 +171,33 @@ contains
     !! Soil permittivity (F/m), permeability (H/m), conductivity (S/m)
     type(tMesh), intent(inout) :: mesh
 
-    mesh%cEAir  = 1.0d0 / (FOUR_PI * cmplx(sigmaAir, omega * epsAir, kind=8))
-    mesh%cESoil = 1.0d0 / (FOUR_PI * cmplx(sigmaSoil, omega * epsSoil, kind=8))
+    call calcParamW(mesh, omega, muAir, cmplx(sigmaAir, omega * epsAir, kind=8), &
+                     muSoil, cmplx(sigmaSoil, omega * epsSoil, kind=8))
+  end subroutine calcParam
+
+  subroutine calcParamW(mesh, omega, muAir, Wair, muSoil, Wsoil)
+    !! Compute frequency-dependent medium constants from the complex
+    !! immittance W(ω) = σ(ω) + jωε(ω) of each medium directly (theory.md
+    !! §2, §7), rather than from separate real ε/σ — the general form that
+    !! also supports dispersive soil models (`mMaterial%admittance`,
+    !! ROADMAP Phase 4). `calcParam` is the linear-medium special case,
+    !! implemented on top of this routine.
+    real(8), intent(in), value :: omega
+    !! Angular frequency ω (rad/s)
+    real(8), intent(in), value :: muAir, muSoil
+    !! Air/soil permeability (H/m)
+    complex(8), intent(in), value :: Wair, Wsoil
+    !! Air/soil complex immittance W(ω) = σ(ω) + jωε(ω) (S/m)
+    type(tMesh), intent(inout) :: mesh
+
+    mesh%cEAir  = 1.0d0 / (FOUR_PI * Wair)
+    mesh%cESoil = 1.0d0 / (FOUR_PI * Wsoil)
     mesh%cMAir  = cmplx(0.0d0, omega * muAir / FOUR_PI, kind=8)
     mesh%cMSoil = cmplx(0.0d0, omega * muSoil / FOUR_PI, kind=8)
-    ! theory.md §2: gamma = sqrt(j*omega*mu*(sigma + j*omega*eps)), Re(gamma) >= 0
-    mesh%propAir = sqrt(cmplx(0.0d0, omega, kind=8) * muAir &
-                         * cmplx(sigmaAir, omega * epsAir, kind=8))
-    mesh%propSoil = sqrt(cmplx(0.0d0, omega, kind=8) * muSoil &
-                          * cmplx(sigmaSoil, omega * epsSoil, kind=8))
-  end subroutine calcParam
+    ! theory.md §2: gamma = sqrt(j*omega*mu*W), Re(gamma) >= 0
+    mesh%propAir  = sqrt(cmplx(0.0d0, omega, kind=8) * muAir  * Wair)
+    mesh%propSoil = sqrt(cmplx(0.0d0, omega, kind=8) * muSoil * Wsoil)
+  end subroutine calcParamW
 
   ! =====================================================================
   ! Impedance matrix element setting

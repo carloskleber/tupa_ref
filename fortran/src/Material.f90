@@ -33,20 +33,27 @@ module mMaterial
     !! Complex propagation constant γ = α + jβ (rad/m) at the last computed ω.
     !! Updated by `calcPropagationConstant`.
   contains
-    procedure(material_interface), deferred :: calcPropagationConstant
-    !! Compute and store `propagationConstant` for the given ω.
+    procedure(admittance_interface), deferred :: admittance
+    !! Complex immittance W(ω) = σ(ω) + jωε(ω) (theory.md §7). The one
+    !! quantity that differs between material models — every model shares
+    !! the same γ = √(jωμW(ω)) relation, computed once by
+    !! `calcPropagationConstant` below.
+    procedure :: calcPropagationConstant => calcPropagationConstant_base
+    !! Compute and store `propagationConstant` for the given ω, via `admittance`.
     procedure(print_interface), deferred :: report
     !! Append a human-readable description to the accumulator string `str`.
   end type tMaterial
 
   abstract interface
-    subroutine material_interface(this, omega)
-      !! Interface for frequency-dependent propagation-constant update.
+    function admittance_interface(this, omega) result(w)
+      !! Interface for the frequency-dependent complex immittance W(ω).
       import :: tMaterial
-      class(tMaterial), intent(inout) :: this
+      class(tMaterial), intent(in) :: this
       real(8), intent(in) :: omega
       !! Angular frequency ω (rad/s)
-    end subroutine material_interface
+      complex(8) :: w
+      !! W(ω) = σ(ω) + jωε(ω) (S/m)
+    end function admittance_interface
   end interface
 
   abstract interface
@@ -72,25 +79,27 @@ module mMaterial
     real(8) :: sigma
     !! Electrical conductivity σ (S/m)
   contains
-    procedure :: calcPropagationConstant => calcPropagationConstant_linear
-    procedure :: report                  => report_linear
+    procedure :: admittance => admittance_linear
+    procedure :: report     => report_linear
   end type tLinear
 
   type, extends(tMaterial), public :: tPortelaSoil
-    !! Frequency-dependent soil model (Portela's minimum-phase power-law
-    !! formulation — ADR 0007). Other dispersion models (Longmire-Smith,
+    !! Frequency-dependent soil model — Lima–Portela minimum-phase power-law
+    !! formulation, ADR 0007, reference frequency ω₀ = 2π·1 MHz
+    !! (theory.md §7). Other dispersion models (Longmire-Smith,
     !! Visacro-Alipio, ...) are separate `tMaterial` subtypes, not variants
     !! of this one.
-    !!
-    !! Full implementation is pending; `calcPropagationConstant` is currently
-    !! a placeholder that returns zero.
+    real(8) :: sigma0
+    !! Low-frequency (DC) conductivity σ₀ (S/m)
     real(8) :: alpha0
     !! Exponent parameter α₀ for the power-law frequency dependence
     real(8) :: kr
-    !! Scaling factor kr for the loss tangent
+    !! Dispersion magnitude Δᵢ at ω₀ = 2π·1 MHz (S/m) — legacy Matlab `kr`
+    !! values are referenced to ω₀ = 1 rad/s and must be converted before
+    !! reuse (ADR 0007), never copied verbatim.
   contains
-    procedure :: calcPropagationConstant => calcPropagationConstant_freq
-    procedure :: report                  => report_freq
+    procedure :: admittance => admittance_freq
+    procedure :: report     => report_freq
   end type tPortelaSoil
 
 contains
@@ -118,57 +127,79 @@ contains
     this%propagationConstant = cmplx(0.0d0, 0.0d0, kind=8)
   end function newMaterialLinear
 
-  function newMaterialPortela(id, mur, alpha0, kr) result(this)
-    !! Construct a `tPortelaSoil` material with Portela power-law parameters.
+  function newMaterialPortela(id, mur, sigma0, alpha0, kr) result(this)
+    !! Construct a `tPortelaSoil` material with Lima–Portela parameters
+    !! (ADR 0007, ω₀ = 2π·1 MHz).
     character(len=*), intent(in) :: id
     !! Material identifier
     real(8), intent(in) :: mur
     !! Relative permeability μr
+    real(8), intent(in) :: sigma0
+    !! Low-frequency conductivity σ₀ (S/m)
     real(8), intent(in) :: alpha0
     !! Power-law frequency exponent α₀
     real(8), intent(in) :: kr
-    !! Loss-tangent scaling factor kr
+    !! Dispersion magnitude Δᵢ at ω₀ = 2π·1 MHz (S/m)
     type(tPortelaSoil) :: this
 
     this%id                  = id
     this%mur                 = mur
+    this%sigma0              = sigma0
     this%alpha0              = alpha0
     this%kr                  = kr
     this%propagationConstant = cmplx(0.0d0, 0.0d0, kind=8)
   end function newMaterialPortela
 
   ! ------------------------------------------------------------------
-  ! calcPropagationConstant implementations
+  ! calcPropagationConstant: shared by every tMaterial subtype
   ! ------------------------------------------------------------------
 
-  subroutine calcPropagationConstant_linear(this, omega)
-    !! Compute γ = √(jωμ·(σ + jωε)), Re γ ≥ 0, for a linear medium
-    !! (theory.md §2, engineering convention e^{+jωt}).
-    !!
-    !! Expanded: γ² = −ω²με + jωμσ. The principal complex square root
-    !! guarantees Re γ ≥ 0 (decaying propagation factor e^{−γR}).
-    class(tLinear), intent(inout) :: this
+  subroutine calcPropagationConstant_base(this, omega)
+    !! Compute γ = √(jωμ·W(ω)), Re γ ≥ 0 (theory.md §2, engineering
+    !! convention e^{+jωt}). W(ω) comes from the deferred `admittance`
+    !! function, so this formula is shared by every material model —
+    !! only W(ω) differs between a linear medium and a dispersive one.
+    class(tMaterial), intent(inout) :: this
     real(8), intent(in) :: omega
     !! Angular frequency ω (rad/s)
 
-    this%propagationConstant = sqrt(cmplx( &
-      -this%mur * MU0 * this%epsilonr * EPSILON0 * omega * omega, &
-       this%mur * MU0 * this%sigma * omega, kind=8))
-  end subroutine calcPropagationConstant_linear
+    this%propagationConstant = sqrt(cmplx(0.0d0, omega, kind=8) &
+      * this%mur * MU0 * this%admittance(omega))
+  end subroutine calcPropagationConstant_base
 
-  subroutine calcPropagationConstant_freq(this, omega)
-    !! Compute γ for frequency-dependent soil (Portela power-law, ADR 0007).
-    !!
-    !! **Not yet implemented** — currently initialises to zero.
-    class(tPortelaSoil), intent(inout) :: this
+  ! ------------------------------------------------------------------
+  ! admittance implementations: W(omega) = sigma(omega) + j*omega*epsilon(omega)
+  ! ------------------------------------------------------------------
+
+  function admittance_linear(this, omega) result(w)
+    !! W(ω) = σ + jωε for a constant-parameter medium (theory.md §2).
+    class(tLinear), intent(in) :: this
     real(8), intent(in) :: omega
     !! Angular frequency ω (rad/s)
-    real(8) :: ki
+    complex(8) :: w
 
-    ki = this%kr * tan(0.5d0 * PI * this%alpha0)
+    w = cmplx(this%sigma, omega * this%epsilonr * EPSILON0, kind=8)
+  end function admittance_linear
 
-    this%propagationConstant = cmplx(0.0d0, 0.0d0, kind=8) ! TODO: implement Portela power-law
-  end subroutine calcPropagationConstant_freq
+  function admittance_freq(this, omega) result(w)
+    !! W(ω) for the Lima–Portela dispersive soil model (ADR 0007,
+    !! theory.md §7), reference frequency ω₀ = 2π·1 MHz:
+    !!
+    !!     W(ω) = σ₀ + kr·[cot(πα₀/2) + j]·(ω/ω₀)^α₀
+    !!
+    !! As ω → 0, the power-law term vanishes and W → σ₀, i.e. this
+    !! converges to a purely resistive `tLinear(epsilonr=0, sigma=σ₀)`
+    !! medium (ADR 0007's required regression, pinned in test_material.f90).
+    class(tPortelaSoil), intent(in) :: this
+    real(8), intent(in) :: omega
+    !! Angular frequency ω (rad/s)
+    complex(8) :: w
+    real(8), parameter :: OMEGA0 = 2.0d0 * PI * 1.0d6
+
+    w = cmplx(this%sigma0, 0.0d0, kind=8) &
+      + this%kr * cmplx(1.0d0 / tan(0.5d0 * PI * this%alpha0), 1.0d0, kind=8) &
+        * (omega / OMEGA0) ** this%alpha0
+  end function admittance_freq
 
   ! ------------------------------------------------------------------
   ! report implementations
@@ -184,12 +215,16 @@ contains
   end subroutine report_linear
 
   subroutine report_freq(this, str)
-    !! Append a one-line description of the frequency-dependent material to `str`.
+    !! Append a one-line description of the Lima–Portela dispersive soil to `str`.
     class(tPortelaSoil), intent(in) :: this
     character(:), allocatable, intent(inout) :: str
     !! Accumulator string — text is appended
+    character(len=256) :: line
 
-    str = str // "frequency-dependent material" // newl
+    write(line, '("Lima-Portela dispersive soil ",A,": sigma0=",ES10.3, &
+      &" S/m, alpha0=",F0.4,", kr=",ES10.3," S/m, mur=",F0.3)') &
+      trim(this%id), this%sigma0, this%alpha0, this%kr, this%mur
+    str = str // trim(line) // newl
   end subroutine report_freq
 
 end module mMaterial

@@ -26,10 +26,11 @@ module tupa
   use mMaterial
   use mElementLine
   use mJsonParser
+  use mError, only: raiseError
   implicit none
   private
 
-  public :: loadStudy, runFromFile
+  public :: loadStudy, runFromFile, runStudyFromFile
 
 contains
 
@@ -37,7 +38,8 @@ contains
   ! JSON parsing and study loading
   ! =====================================================================
 
-  subroutine loadStudy(filename, study)
+  subroutine loadStudy(filename, study, sourceNodeIds, sourceCurrents, freqHz, &
+                        outputNodeIds, outputElectrodeIds, outputQuantities)
     !! Parse a JSON study file and populate all fields of a tStudy object.
     !!
     !! Performs the following steps:
@@ -47,6 +49,10 @@ contains
     !! 4. Parse "nodes" array to create boundary nodes
     !! 5. Parse "materials" array (if present) to define conductor materials
     !! 6. Parse "elements" array to create geometric elements (line segments, catenaries, etc.)
+    !! 7. If present (ADR 0013, ROADMAP Phase 5), parse the optional
+    !!    "sources"/"frequencies"/"outputs" blocks into the corresponding
+    !!    optional output arguments; a structure-only case file (no such
+    !!    blocks) leaves them unallocated.
     !!
     !! After this call, `study%structure` is fully populated and ready for assembly.
     !! Call `study%structure%assembleStructure()` to discretise elements into nodes
@@ -55,6 +61,19 @@ contains
     !! Path to the JSON study file to parse
     type(tStudy),     intent(out) :: study
     !! Output study object (all fields populated)
+    character(len=256), allocatable, intent(out), optional :: sourceNodeIds(:)
+    !! Node IDs from the "sources" block (ADR 0013), one per current injection
+    complex(8), allocatable, intent(out), optional :: sourceCurrents(:)
+    !! Complex currents corresponding to `sourceNodeIds` (A)
+    real(8), allocatable, intent(out), optional :: freqHz(:)
+    !! Log-spaced frequency axis (Hz) built from the "frequencies" block
+    !! (`min`/`max`/`pointsPerDecade`, ADR 0013)
+    character(len=256), allocatable, intent(out), optional :: outputNodeIds(:)
+    !! Node IDs from "outputs.nodes" (ADR 0013); unallocated means "all nodes"
+    character(len=256), allocatable, intent(out), optional :: outputElectrodeIds(:)
+    !! Electrode IDs from "outputs.electrodes"; unallocated means "all electrodes"
+    character(len=256), allocatable, intent(out), optional :: outputQuantities(:)
+    !! Quantity names from "outputs.quantities"; unallocated means "all quantities"
 
     type(tJsonValue), target  :: root
     !! Root of the parsed JSON tree (must be TARGET for child pointers)
@@ -62,6 +81,9 @@ contains
     !! Pointers to major JSON objects
     type(tJsonValue), pointer :: node_obj, mat_obj, elem_obj, pos_arr, pos_item
     !! Pointers to individual JSON objects and array items
+    type(tJsonValue), pointer :: sources_arr, src_obj, current_obj
+    type(tJsonValue), pointer :: freq_obj, outputs_obj, strArr
+    !! Pointers for the sources/frequencies/outputs blocks (ADR 0013)
     class(tMaterial), allocatable :: mat
     !! Temporary material object for adding to structure
     class(tElement),  allocatable :: elem
@@ -129,7 +151,80 @@ contains
         print *, "mTupa: unknown element type '", trim(elem_type), "' — skipped"
       end select
     end do
+
+    ! ------------------------------------------------------------------
+    ! Optional sources / frequencies / outputs blocks (ADR 0013,
+    ! ROADMAP Phase 5). Each is independently optional; the corresponding
+    ! output argument is left unallocated when its block, or the caller's
+    ! interest in it, is absent.
+    ! ------------------------------------------------------------------
+
+    if (present(sourceNodeIds) .and. present(sourceCurrents) .and. json_has(root, "sources")) then
+      sources_arr => json_child(root, "sources")
+      n = json_size(sources_arr)
+      allocate(sourceNodeIds(n), sourceCurrents(n))
+      do i = 1, n
+        src_obj     => json_item(sources_arr, i)
+        sourceNodeIds(i) = json_str(src_obj, "node")
+        current_obj => json_child(src_obj, "current")
+        if (associated(current_obj)) then
+          sourceCurrents(i) = cmplx(json_real(current_obj, "re"), json_real(current_obj, "im"), kind=8)
+        else
+          sourceCurrents(i) = cmplx(0.0d0, 0.0d0, kind=8)
+        end if
+      end do
+    end if
+
+    if (present(freqHz) .and. json_has(root, "frequencies")) then
+      freq_obj => json_child(root, "frequencies")
+      block
+        real(8) :: fMin, fMax, pointsPerDecade
+        integer :: nPoints
+        fMin = json_real(freq_obj, "min")
+        fMax = json_real(freq_obj, "max")
+        pointsPerDecade = json_real(freq_obj, "pointsPerDecade")
+        ! ADR 0013: nPoints = round(pointsPerDecade * log10(max/min)) + 1
+        nPoints = nint(pointsPerDecade * log10(fMax / fMin)) + 1
+        freqHz = logFrequencyAxis(fMin, fMax, max(2, nPoints))
+      end block
+    end if
+
+    if (json_has(root, "outputs")) then
+      outputs_obj => json_child(root, "outputs")
+      if (present(outputNodeIds) .and. json_has(outputs_obj, "nodes")) then
+        strArr => json_child(outputs_obj, "nodes")
+        call readJsonStringArray(strArr, outputNodeIds)
+      end if
+      if (present(outputElectrodeIds) .and. json_has(outputs_obj, "electrodes")) then
+        strArr => json_child(outputs_obj, "electrodes")
+        call readJsonStringArray(strArr, outputElectrodeIds)
+      end if
+      if (present(outputQuantities) .and. json_has(outputs_obj, "quantities")) then
+        strArr => json_child(outputs_obj, "quantities")
+        call readJsonStringArray(strArr, outputQuantities)
+      end if
+    end if
   end subroutine loadStudy
+
+  subroutine readJsonStringArray(arr, out)
+    !! Read a JSON array of strings into an allocatable character array
+    !! (used for "outputs.nodes"/"electrodes"/"quantities", ADR 0013).
+    type(tJsonValue), intent(in), target :: arr
+    !! JSON_ARRAY of JSON_STRING values
+    character(len=256), allocatable, intent(out) :: out(:)
+    type(tJsonValue), pointer :: item
+    integer :: i, n
+
+    n = json_size(arr)
+    allocate(out(n))
+    do i = 1, n
+      out(i) = ''
+      item => json_item(arr, i)
+      if (associated(item)) then
+        if (item%vtype == JSON_STRING .and. allocated(item%sval)) out(i) = item%sval
+      end if
+    end do
+  end subroutine readJsonStringArray
 
   ! =====================================================================
   ! Convenience entry point
@@ -138,16 +233,10 @@ contains
   subroutine runFromFile(filename)
     !! Convenience entry point: load a JSON file and print a summary.
     !!
-    !! This is a thin wrapper that:
-    !! 1. Calls `loadStudy()` to parse the JSON file
-    !! 2. Calls `study%report()` to print the summary
-    !!
-    !! `study%run()` is not called here: it now takes a frequency and current
-    !! sources (ROADMAP Phase 2), neither of which the JSON schema carries
-    !! yet (ROADMAP Phase 5). Once Phase 5 adds a `sources`/`frequencies`
-    !! section to the schema, this wrapper should parse them and call `run`
-    !! per frequency. Useful for scripting and testing; production code may
-    !! prefer to call `loadStudy()` directly for more control.
+    !! This is a thin wrapper that calls `loadStudy()` (structure only, no
+    !! sweep) then `study%report()`. Use `runStudyFromFile` instead when the
+    !! case file also carries `sources`/`frequencies` (ADR 0013) and a sweep
+    !! should actually run.
     character(len=*), intent(in) :: filename
     !! Path to the JSON study file
     type(tStudy) :: study
@@ -156,5 +245,31 @@ contains
     call loadStudy(filename, study)
     call study%report()
   end subroutine runFromFile
+
+  subroutine runStudyFromFile(filename, study)
+    !! Load a JSON case file and run its frequency sweep (ROADMAP Phase 5,
+    !! ADR 0013): calls `loadStudy` for the `sources`/`frequencies` blocks,
+    !! then `study%runSweep`. Both blocks must be present in the case file —
+    !! a structure-only file (like `example1.json`/`example2.json`) has
+    !! nothing to sweep and raises an error.
+    character(len=*), intent(in) :: filename
+    !! Path to the JSON study file
+    type(tStudy), intent(out) :: study
+    !! Output study object, with sweep results populated
+    character(len=256), allocatable :: sourceNodeIds(:)
+    complex(8), allocatable :: sourceCurrents(:)
+    real(8), allocatable :: freqHz(:)
+
+    call loadStudy(filename, study, sourceNodeIds=sourceNodeIds, &
+                   sourceCurrents=sourceCurrents, freqHz=freqHz)
+
+    if (.not. (allocated(sourceNodeIds) .and. allocated(freqHz))) then
+      call raiseError("runStudyFromFile: '" // trim(filename) // &
+        "' has no 'sources'/'frequencies' block to sweep (ADR 0013)")
+      return
+    end if
+
+    call study%runSweep(freqHz, sourceNodeIds, sourceCurrents)
+  end subroutine runStudyFromFile
 
 end module tupa
