@@ -16,6 +16,7 @@ module mImpedance
   !! A modern refactoring could use module-level pointers instead.
   use mCtes, only: PI, MU0
   use mError, only: raiseError
+  use mGeometryCache, only: geomCacheClear
   implicit none
 
   ! Explicit interface for SLATEC ZBESI (complex modified Bessel function I)
@@ -56,6 +57,11 @@ module mImpedance
   real(8) :: m_epsabs, m_epsrel, m_a, m_b
   !! Tolerance and integration bounds stored for use by nested routines
 
+  real(8), save :: quadEpsRel = 1.0d-6
+  !! Relative-error factor for the adaptive quadrature in `geometryFactor2D`
+  !! (scaled there by the shorter segment length, as the original code did).
+  !! Settable from the CLI via --epsrel (`setQuadEpsRel`).
+
   ! =====================================================================
   ! Gauss-Kronrod quadrature rule: 15-point Kronrod + nested 7-point Gauss
   ! =====================================================================
@@ -92,8 +98,31 @@ module mImpedance
   !! Indices in xgk/wgk that correspond to the 7-point Gauss rule
 
   public :: geometryFactor2D, inverseDistanceIntegrand, lowerLimit, upperLimit, TWODQ, internalImpedance
+  public :: setQuadEpsRel, getQuadEpsRel
 
 contains
+
+  ! =====================================================================
+  ! Quadrature tolerance control (CLI --epsrel)
+  ! =====================================================================
+
+  subroutine setQuadEpsRel(eps)
+    !! Set the relative-error factor used by `geometryFactor2D`. Clears the
+    !! geometry-factor cache: cached values embed the tolerance they were
+    !! computed at.
+    real(8), intent(in) :: eps
+
+    if (eps <= 0.0d0) then
+      call raiseError("setQuadEpsRel: relative error must be positive")
+      return
+    end if
+    quadEpsRel = eps
+    call geomCacheClear()
+  end subroutine setQuadEpsRel
+
+  real(8) function getQuadEpsRel() result(eps)
+    eps = quadEpsRel
+  end function getQuadEpsRel
 
   ! =====================================================================
   ! Internal (skin-effect) impedance of a solid cylindrical conductor
@@ -177,7 +206,7 @@ contains
     la = zla
     lb = zlb
     errabs = 0.0d0
-    errrel = dmin1(la, lb) * 1.0d-6
+    errrel = dmin1(la, lb) * quadEpsRel
     call TWODQ(inverseDistanceIntegrand, 0.0d0, la, lowerLimit, upperLimit, errabs, errrel, res, errest)
   end subroutine geometryFactor2D
 

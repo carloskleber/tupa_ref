@@ -8,6 +8,8 @@ module mGeometry
   !! `tElectrode`) — it operates on plain segment endpoints and radii, so it
   !! can be tested and reasoned about in isolation.
   use mImpedance, only: geometryFactor2D
+  use mGeometryCache, only: geomCacheKey, geomCacheGet, geomCachePut, &
+                            geomCacheClear, geomCacheIsEnabled
   implicit none
   private
 
@@ -83,6 +85,12 @@ contains
     !! parallel, falling back to adaptive 2D quadrature (`geometryFactor2D`) for
     !! non-parallel pairs, or if the closed form hits a degenerate
     !! (NaN/Inf) edge case, exactly as the reference does.
+    !!
+    !! The quadrature path is memoised through `mGeometryCache`: congruent
+    !! pairs (same lengths and cross endpoint distances — ubiquitous in
+    !! regular meshes) reuse the first pair's quadrature result instead of
+    !! re-running TWODQ. The cheap closed-form path is deliberately not
+    !! cached.
     real(8), intent(in)  :: a1(:), a2(:)
     !! Endpoints of segment a (m)
     real(8), intent(in)  :: b1(:), b2(:)
@@ -93,8 +101,8 @@ contains
     !! When present and .true., always use quadrature, even for parallel
     !! segments (matches `barraquad`'s `numerico` flag). Useful for
     !! testing the closed form against its quadrature oracle.
-    real(8) :: va(3), vb(3), la, lb
-    logical :: tryClosedForm, ok
+    real(8) :: va(3), vb(3), la, lb, key(6)
+    logical :: tryClosedForm, ok, useCache
 
     call segmentVector(a1, a2, va, la)
     call segmentVector(b1, b2, vb, lb)
@@ -108,7 +116,13 @@ contains
       if (ok) return
     end if
 
+    useCache = geomCacheIsEnabled()
+    if (useCache) then
+      key = geomCacheKey(a1, a2, la, b1, b2, lb)
+      if (geomCacheGet(key, g)) return
+    end if
     call geometryFactor2D(a1, va, la, b1, vb, lb, g)
+    if (useCache) call geomCachePut(key, g)
   end subroutine mutualGeometryFactor
 
   function crossProduct(u, v) result(w)
@@ -261,6 +275,12 @@ contains
     real(8) :: p1i(3), p2i(3), midi(3), diri(3), gij
     integer :: i, j
 
+    ! Start each build with an empty memo table so statistics are per-build
+    ! and no memory is carried across studies (entries would still be valid —
+    ! keys are pure congruence invariants — but a fresh table keeps growth
+    ! bounded by this geometry).
+    call geomCacheClear()
+
     do i = 1, n
       call segmentVector(p1(i,:), p2(i,:), dir(i,:), len(i))
       mid(i,:) = 0.5d0 * (p1(i,:) + p2(i,:))
@@ -273,10 +293,14 @@ contains
     ! (`geometryFactor2D`/`TWODQ` in Impedance.f90) stores integration state
     ! in module-level procedure pointers and a `COMMON /params/` block —
     ! non-reentrant, so concurrent calls from different segment pairs would
-    ! corrupt each other's integration (ARCHITECTURE.md §7). Only pairs that
-    ! take the closed-form parallel-segment path are actually safe today;
-    ! real (non-parallel) geometries hit the quadrature. OpenMP here needs
-    ! that reentrancy fix first, not just this loop's own write pattern.
+    ! corrupt each other's integration (ARCHITECTURE.md §7). The
+    ! mGeometryCache memo table added around that fallback is shared mutable
+    ! state too, so it joins the list of things needing a reentrancy story
+    ! (per-thread tables or a critical section) before OpenMP lands here.
+    ! Only pairs that take the closed-form parallel-segment path are
+    ! actually safe today; real (non-parallel) geometries hit the
+    ! quadrature. OpenMP here needs that reentrancy fix first, not just
+    ! this loop's own write pattern.
     do i = 1, n
       do j = i, n
         if (i == j) then

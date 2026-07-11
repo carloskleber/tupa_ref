@@ -194,7 +194,12 @@ contains
     read(eRe, *) vExpRe
     read(eIm, *) vExpIm
 
-    scaleVal = max(1.0d-12, abs(vExpRe), abs(vExpIm))
+    ! Floor the row-local scale at 1e-6: with ~1 A / ~10 V problem scales,
+    ! rows far below that (e.g. the symmetric grid case's transverse branch
+    ! currents, ~1e-16 A) are round-off zeros whose row-relative comparison
+    ! would amplify machine noise into spurious failures; the floor turns
+    ! them into an absolute check at reltol*1e-6 instead.
+    scaleVal = max(1.0d-6, abs(vExpRe), abs(vExpIm))
     ok = abs(vFreshRe - vExpRe) < reltol * scaleVal .and. &
          abs(vFreshIm - vExpIm) < reltol * scaleVal
   end function rowMatches

@@ -18,6 +18,7 @@ module mStudy
   use mMaterial
   use mResult
   use mGeometry, only: buildGeometryMatrices
+  use mGeometryCache, only: geomCacheStats
   use mImpedance, only: internalImpedance
   use mError, only: raiseError
   use mCtes, only: newl, PI, EPSILON0, MU0, ZERO_CPLX
@@ -128,6 +129,16 @@ contains
     call buildGeometryMatrices(p1, p2, this%geomRadius, nseg, &
       this%geomG, this%geomGi, this%geomRbar, this%geomRbari, &
       this%geomCosTheta, this%geomCosThetaI)
+
+    if (verbosityLevel() .eq. VERB_VERBOSE) then
+      block
+        integer(8) :: cacheHits, cacheMisses
+        integer :: cacheEntries
+        call geomCacheStats(cacheHits, cacheMisses, cacheEntries)
+        print '(A,I0,A,I0,A,I0,A)', " Geometry-factor quadrature cache: ", &
+          cacheHits, " hits, ", cacheMisses, " misses (", cacheEntries, " entries)"
+      end block
+    end if
 
     call initMesh(this%mesh, nno, nseg)
     call calcTopology(this%mesh, nseg, n1, n2)

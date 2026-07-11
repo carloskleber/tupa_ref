@@ -7,7 +7,8 @@
 	"settings": {
 		"fortran.formatting.findentArgs": [
 			"-i2"
-		]
+		],
+		"perfanno.perfFile": "fortran/perf.data"
 	},
 	"extensions": {
 		"recommendations": [

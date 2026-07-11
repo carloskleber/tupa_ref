@@ -61,6 +61,35 @@ practical under `--profile release` — in the default debug profile they run
 for many minutes (see [../docs/ROADMAP.md](../docs/ROADMAP.md) §5). There is
 no hosted CI; a local `fpm build && fpm test` is the merge gate.
 
+## Profiling
+
+The hot path is almost always the adaptive quadrature (`TWODQ` /
+`geometryFactor2D` in `Impedance.f90`) behind `mutualGeometryFactor` — see
+the `test_geometry`/`test_impedance` runtime note above. To profile:
+
+```bash
+export LIBRARY_PATH=$HOME/.local/lib:$LIBRARY_PATH
+fpm build --profile release --flag "-g"
+perf record --call-graph dwarf ./build/gfortran_*/app/Tupa ../common/rod_air.json
+perf report
+```
+
+`perf` (Linux, `linux-tools`/`perf` package) needs no special compiler flags
+beyond `-g` for symbol names, and works on the optimized `release` binary —
+profiling the `debug` profile mostly just tells you debug builds are slow.
+If `perf_event_paranoid` blocks unprivileged use and you'd rather not
+change it, `gprof` is a lower-resolution fallback that doesn't need it:
+
+```bash
+fpm build --profile release --flag "-pg"
+./build/gfortran_*/app/Tupa ../common/rod_air.json
+gprof ./build/gfortran_*/app/Tupa gmon.out | less
+```
+
+For exact call counts and a navigable call graph (much slower to run),
+`valgrind --tool=callgrind ./build/gfortran_*/app/Tupa ../common/rod_air.json`
+then open the resulting `callgrind.out.*` in `kcachegrind`.
+
 ## Running Tupa
 
 The standalone solver executable (`app/main.f90`, package name `Tupa` in
@@ -84,6 +113,19 @@ the study path, in any order, e.g. `fpm run -- -q ../common/portela1997.json`.
 `-q` suppresses the routine report/summary output; errors and warnings
 (e.g. an unrecognised element type) still print regardless of verbosity
 (`mVerbosity`, [ARCHITECTURE.md](../docs/ARCHITECTURE.md) §5).
+
+Two flags control the geometry-factor quadrature, the dominant cost of the
+assembly phase:
+
+* `--epsrel <value>` sets the relative-error factor of the adaptive
+  Gauss–Kronrod quadrature (`mImpedance%geometryFactor2D`); default
+  `1.0e-6`. Looser values (e.g. `--epsrel 1e-4`) trade accuracy for speed.
+* `--no-cache` disables the quadrature memo table (`mGeometryCache`),
+  which otherwise reuses the geometry factor of congruent segment pairs
+  (same segment lengths and cross endpoint distances, e.g. translated
+  copies in a regular grid) instead of re-integrating them. Mainly useful
+  for benchmarking the cache itself. `-v` prints per-build hit/miss
+  statistics.
 
 `main` always discretises the structure and prints a report (node/material/
 element list, each element's generated electrode-segment IDs). If — and

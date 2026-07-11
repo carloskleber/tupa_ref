@@ -3,7 +3,8 @@ program test_geometry
   !! (mImpedance%internalImpedance), per ROADMAP.md Phase 1.
   use mCtes
   use mGeometry
-  use mImpedance, only: internalImpedance
+  use mImpedance, only: internalImpedance, setQuadEpsRel, getQuadEpsRel
+  use mGeometryCache, only: geomCacheClear, geomCacheStats, geomCacheSetEnabled
   use check
   implicit none
 
@@ -249,6 +250,105 @@ program test_geometry
     call test_ok("Rbari bit-identical across two calls", all(Rbari == Rbari2), "image mean distance matrix is nondeterministic")
     call test_ok("cosTheta bit-identical across two calls", all(cosTheta == cosTheta2), "direction cosine matrix is nondeterministic")
     call test_ok("cosThetaI bit-identical across two calls", all(cosThetaI == cosThetaI2), "image direction cosine matrix is nondeterministic")
+  end block
+
+  ! ----------------------------------------------------------------
+  ! Quadrature memo table (mGeometryCache): congruent pairs must hit the
+  ! cache and return the identical value; non-congruent pairs that share
+  ! the four cross endpoint distances but differ in segment length must
+  ! NOT collide (the lengths are part of the key precisely for this).
+  ! ----------------------------------------------------------------
+  call test_init("Geometry-factor quadrature cache (mGeometryCache)")
+
+  block
+    real(8) :: gFirst, gCongruent, gUncached, gShort, t(3)
+    integer(8) :: hits0, hits1, misses0, misses1
+    integer :: entries
+
+    ! Non-parallel (perpendicular) pair: always takes the quadrature path.
+    a1 = [0.0d0, 0.0d0, 0.0d0]
+    a2 = [1.0d0, 0.0d0, 0.0d0]
+    b1 = [2.0d0, 1.0d0, 0.0d0]
+    b2 = [2.0d0, 1.0d0, 1.0d0]
+
+    call geomCacheClear()
+    call mutualGeometryFactor(a1, a2, b1, b2, gFirst)
+    call geomCacheStats(hits0, misses0, entries)
+
+    ! Congruent copy: translated by (5, -3, 2), with segment a's endpoint
+    ! order reversed — the canonical key must absorb both.
+    t = [5.0d0, -3.0d0, 2.0d0]
+    call mutualGeometryFactor(a2 + t, a1 + t, b1 + t, b2 + t, gCongruent)
+    call geomCacheStats(hits1, misses1, entries)
+
+    call test_ok("congruent (translated + reversed) pair hits the cache", &
+                 hits1 == hits0 + 1, &
+                 "a rigid copy of an already-integrated pair must not re-run TWODQ")
+    call test_ok("cache hit returns the bit-identical value", gCongruent == gFirst, &
+                 "cached geometry factor differs from the first computation")
+
+    ! The cached value must agree with an independent (cache-disabled) run.
+    call geomCacheSetEnabled(.false.)
+    call mutualGeometryFactor(a2 + t, a1 + t, b1 + t, b2 + t, gUncached)
+    call geomCacheSetEnabled(.true.)
+    call test_ok("cache-disabled quadrature agrees with the cached value", &
+                 abs(gUncached - gFirst) < 1.0d-9 * abs(gFirst), &
+                 "memoised value disagrees with a fresh quadrature of the congruent pair")
+
+    ! Same four cross distances, different lengths: la = lb = 1 with b at
+    ! y = 1 gives all cross distances sqrt(0.25 + 1 + 0.25) = sqrt(1.5);
+    ! halving a to la = 0.5 and moving b to y = sqrt(1.1875) keeps all four
+    ! at sqrt(0.0625 + 1.1875 + 0.25) = sqrt(1.5) while g clearly changes.
+    call geomCacheClear()
+    a1 = [-0.5d0, 0.0d0, 0.0d0]
+    a2 = [ 0.5d0, 0.0d0, 0.0d0]
+    b1 = [0.0d0, 1.0d0, -0.5d0]
+    b2 = [0.0d0, 1.0d0,  0.5d0]
+    call mutualGeometryFactor(a1, a2, b1, b2, gFirst)
+    a1 = [-0.25d0, 0.0d0, 0.0d0]
+    a2 = [ 0.25d0, 0.0d0, 0.0d0]
+    b1 = [0.0d0, sqrt(1.1875d0), -0.5d0]
+    b2 = [0.0d0, sqrt(1.1875d0),  0.5d0]
+    call mutualGeometryFactor(a1, a2, b1, b2, gShort)
+    call geomCacheStats(hits1, misses1, entries)
+
+    call test_ok("equal cross distances, different lengths: no false hit", &
+                 hits1 == 0 .and. misses1 == 2, &
+                 "two non-congruent pairs sharing the four cross distances collided in the cache")
+    call test_ok("the two configurations indeed differ", &
+                 abs(gShort - gFirst) > 1.0d-2 * abs(gFirst), &
+                 "test premise broken: the two configurations should have distinct g")
+  end block
+
+  ! ----------------------------------------------------------------
+  ! Quadrature tolerance control (CLI --epsrel -> setQuadEpsRel)
+  ! ----------------------------------------------------------------
+  call test_init("setQuadEpsRel controls the geometryFactor2D tolerance")
+
+  block
+    real(8) :: gTight, gLoose
+    integer(8) :: hits1, misses1
+    integer :: entries
+
+    a1 = [0.0d0, 0.0d0, 0.0d0]
+    a2 = [1.0d0, 0.0d0, 0.0d0]
+    b1 = [2.0d0, 1.0d0, 0.0d0]
+    b2 = [2.0d0, 1.0d0, 1.0d0]
+
+    call setQuadEpsRel(1.0d-6)
+    call mutualGeometryFactor(a1, a2, b1, b2, gTight)
+    call setQuadEpsRel(1.0d-2)
+    call geomCacheStats(hits1, misses1, entries)
+    call test_ok("changing epsrel clears the cache", entries == 0, &
+                 "cached values computed at the old tolerance must be dropped")
+    call mutualGeometryFactor(a1, a2, b1, b2, gLoose)
+    call setQuadEpsRel(1.0d-6)
+
+    call test_ok("getQuadEpsRel returns the restored default", &
+                 getQuadEpsRel() == 1.0d-6, "setter/getter round trip failed")
+    call test_ok("loose-tolerance result stays within its own tolerance", &
+                 abs(gLoose - gTight) < 1.0d-2 * abs(gTight), &
+                 "epsrel = 1e-2 quadrature strayed more than 1e-2 from the tight result")
   end block
 
   ! ----------------------------------------------------------------
