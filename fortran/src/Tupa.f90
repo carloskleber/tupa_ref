@@ -26,6 +26,7 @@ module tupa
   use mMaterial
   use mElementLine
   use mJsonParser
+  use mResultsWriter, only: writeResultsCsv, writeResultsJson
   use mError, only: raiseError
   implicit none
   private
@@ -231,20 +232,74 @@ contains
   ! =====================================================================
 
   subroutine runFromFile(filename)
-    !! Convenience entry point: load a JSON file and print a summary.
+    !! CLI entry point (`app/main.f90`): load a JSON case file, run it end
+    !! to end, and report.
     !!
-    !! This is a thin wrapper that calls `loadStudy()` (structure only, no
-    !! sweep) then `study%report()`. Use `runStudyFromFile` instead when the
-    !! case file also carries `sources`/`frequencies` (ADR 0013) and a sweep
-    !! should actually run.
+    !! Always discretises the structure (`assembleStructure`, directly for
+    !! a structure-only case or via `runSweep` -> `prepareStudy` when a
+    !! sweep runs) before `study%report()`, so the printed element list
+    !! shows real electrode segment IDs instead of "None" (report() before
+    !! assembly cannot see them — the elements haven't been split into
+    !! segments yet). If the case also carries `sources`/`frequencies`
+    !! (ADR 0013), additionally runs the sweep and writes
+    !! `<basename>_results.csv`/`.json` (`mResultsWriter`) to the current
+    !! directory, honouring an `outputs` selection if present. A
+    !! structure-only case (like `buried_conductor_short.json`) stops
+    !! after the summary — there is nothing to sweep.
     character(len=*), intent(in) :: filename
     !! Path to the JSON study file
     type(tStudy) :: study
     !! Local study object (created, reported, then destroyed)
+    character(len=256), allocatable :: sourceNodeIds(:)
+    character(len=256), allocatable :: outputNodeIds(:), outputElectrodeIds(:), outputQuantities(:)
+    complex(8), allocatable :: sourceCurrents(:)
+    real(8), allocatable :: freqHz(:)
+    character(len=512) :: base, csvFile, jsonFile
 
-    call loadStudy(filename, study)
-    call study%report()
+    call loadStudy(filename, study, sourceNodeIds=sourceNodeIds, &
+                   sourceCurrents=sourceCurrents, freqHz=freqHz, &
+                   outputNodeIds=outputNodeIds, outputElectrodeIds=outputElectrodeIds, &
+                   outputQuantities=outputQuantities)
+
+    if (allocated(sourceNodeIds) .and. allocated(freqHz)) then
+      call study%runSweep(freqHz, sourceNodeIds, sourceCurrents)
+      call study%report()
+
+      base     = basenameNoExt(filename)
+      csvFile  = trim(base) // "_results.csv"
+      jsonFile = trim(base) // "_results.json"
+      call writeResultsCsv(study, trim(csvFile), nodeIds=outputNodeIds, &
+                            electrodeIds=outputElectrodeIds, quantities=outputQuantities)
+      call writeResultsJson(study, trim(jsonFile), nodeIds=outputNodeIds, &
+                             electrodeIds=outputElectrodeIds, quantities=outputQuantities)
+      print *, ""
+      print *, "Wrote ", trim(csvFile), " and ", trim(jsonFile)
+    else
+      call study%structure%assembleStructure()
+      call study%report()
+      print *, ""
+      print *, "(structure-only case: no sources/frequencies block -- nothing to sweep)"
+    end if
   end subroutine runFromFile
+
+  function basenameNoExt(path) result(base)
+    !! Last path component of `path` with its extension stripped, used to
+    !! derive `<basename>_results.csv`/`.json` output filenames from the
+    !! input case path (e.g. "../common/rod.json" -> "rod").
+    character(len=*), intent(in) :: path
+    character(len=256) :: base
+    integer :: slashPos, dotPos, startPos, endPos
+
+    slashPos = index(path, "/", back=.true.)
+    startPos = slashPos + 1
+    dotPos   = index(path(startPos:), ".", back=.true.)
+    if (dotPos > 0) then
+      endPos = startPos + dotPos - 2
+    else
+      endPos = len_trim(path)
+    end if
+    base = path(startPos:endPos)
+  end function basenameNoExt
 
   subroutine runStudyFromFile(filename, study)
     !! Load a JSON case file and run its frequency sweep (ROADMAP Phase 5,

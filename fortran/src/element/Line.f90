@@ -170,6 +170,7 @@ contains
         str = str // newl // "    Electrode " // trim(buf) // &
           ": ID = " // trim(this%electrodes(i)%id)
       end do
+      str = str // newl
     else
       str = str // " None" // newl
     end if

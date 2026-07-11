@@ -79,6 +79,29 @@ also be run directly, e.g.
 `./build/gfortran_*/app/Tupa ../common/portela1997.json`, or install it to
 a stable path with `fpm install` and invoke it as `Tupa <study.json>`.
 
+`main` always discretises the structure and prints a report (node/material/
+element list, each element's generated electrode-segment IDs). If — and
+only if — the case file also carries `sources`/`frequencies` (ADR 0013,
+like `portela1997.json`/`rod.json`/`grid.json`/`rod_air.json`), it
+additionally runs the frequency sweep and writes
+`<basename>_results.csv`/`.json` (tidy CSV + ADR 0012 JSON,
+`mResultsWriter`) into the *current working directory* — e.g. running from
+`fortran/` writes `fortran/portela1997_results.csv`. A structure-only case
+(`buried_conductor_short.json`/`buried_conductor_long.json`) stops after
+the report; there is nothing to sweep, and no output files are written.
+`outputs.nodes`/`electrodes`/`quantities`, if present in the case file,
+filter what gets written, same as `runStudyFromFile` (see
+[common/README.md](../common/README.md)).
+
+**`Electrodes: None` in a report**: `study%report()` only shows real
+`..._e1`/`..._n1` electrode/node IDs *after* the structure has been
+discretised (`assembleStructure`, run either directly for a
+structure-only case or via `runSweep` for a sweep case). Calling
+`report()` before that point — e.g. from custom code that calls
+`loadStudy` then `report()` directly, skipping assembly — prints
+`Electrodes: None` for every element, because the element hasn't been
+split into segments yet.
+
 Bundled Fortran demo programs (hand-written studies, not JSON-driven) are
 run with `fpm run --example <name>`:
 

@@ -87,6 +87,34 @@ Gaps in this repository, in dependency order (1–4, 7, 8 resolved by Phases
    The July 2026 legacy re-inspection (§8) traced the bug to the Matlab
    original and found a second defect in the same expression: a literal `1`
    where `l` belongs in the log argument, carried verbatim into the C++.
+9. ~~**`tStructure%air` is never populated — any electrode actually in air
+   (z>0) produces NaN.**~~ **Resolved (2026-07-10)** — `tStructure%air`
+   now default-initialises to vacuum (εr=1, μr=1, σ=0), the same
+   hardcoded air both legacies use (the Matlab reference constructs it
+   unconditionally at startup; the C++ defaults its `Meio` to vacuum).
+   Decision: Matlab-faithful hardcode, **no** JSON `"air"` block — air is
+   not configurable from case files. `common/rod_air.json` now runs
+   NaN-free with a physically sensible low-frequency Zin ≈ 20.9 Ω
+   (analytical rod ground resistance ≈ 21.0 Ω). Original finding
+   (2026-07-10, while adding
+   `common/rod_air.json`, the first committed case with an element above
+   the interface): `loadStudy` (`Tupa.f90`) only reads the JSON `"soil"`
+   block; `tStructure%air` (`Structure.f90`, then a bare `type(tLinear)`
+   field with no default component values) was never assigned anywhere in
+   the production load path — only `test_mesh.f90` constructs an air
+   material by hand for its own unit test. `tStudy%run` (`Study.f90:189-196`) always
+   passes `structure%air%mur`/`structure%air%admittance(omega)` into
+   `calcParamW` regardless of geometry, so `muAir`/`Wair` ended up zero;
+   that only stayed harmless while every electrode's `geomPos` was 2
+   (soil) — true of `portela1997.json`/`rod.json`/`grid.json`, which is
+   why this was never caught. With an electrode's `geomPos` at 1 (air),
+   the γ-dependent self/mutual impedance formula divided by the zeroed air
+   admittance (`cEAir = 1/(4π·0)`), and the resulting NaN poisoned the
+   whole `Zeq` solve (every node, not just the air ones, once `ZGESV`
+   mixed a NaN row in). A legacy re-inspection during the fix also
+   confirmed the surrounding model: mixed air↔soil coupling is zeroed in
+   the Matlab too (its cross-media routine was left unfinished, with a
+   syntactically incomplete body), matching theory.md §5 / ADR 0005.
 
 Housekeeping: stray `*.mod` files at `fortran/` root and the `.history/`
 folder are gitignored (no longer an issue in practice — stray `.mod` files

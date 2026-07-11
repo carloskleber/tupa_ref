@@ -6,7 +6,7 @@ specified in [theory.md](theory.md) (normative); forward plans live in
 [ROADMAP.md](ROADMAP.md); individual decisions in [adr/](adr/). Terms are
 defined in [GLOSSARY.md](GLOSSARY.md).
 
-Everything below describes the **Fortran** implementation as of 2026-07-09.
+Everything below describes the **Fortran** implementation as of 2026-07-10.
 Statements about intent (rather than code) are marked *(intent)*; the object
 model itself is language-agnostic by decision
 ([ADR 0002](adr/0002-language-agnostic-object-model.md)) and future
@@ -58,7 +58,7 @@ Correctness is preferred over performance everywhere until validation exists
 
 | Component | File | Role | Status |
 | --- | --- | --- | --- |
-| `main` | `fortran/app/main.f90` | CLI entry: JSON path → run → report | working (solver not wired) |
+| `main` | `fortran/app/main.f90` | CLI entry: JSON path → `runFromFile` → assemble/report, then (only if the case carries `sources`/`frequencies`) `runSweep` + write `<basename>_results.csv`/`.json` to the working directory | working |
 | `tupa` | `fortran/src/Tupa.f90` | JSON → object model mapping | working for the current schema |
 | `mJsonParser` | `fortran/src/JsonParser.f90` | Minimal recursive-descent JSON subset (ADR 0006) | working within subset limits |
 | `tStudy` | `fortran/src/Study.f90` | Top container; owns structure, mesh, results; `run` solves one ω, `runSweep` drives the full frequency axis | working (Phase 2 `run`, Phase 3 `runSweep`) |

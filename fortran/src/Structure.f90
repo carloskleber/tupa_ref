@@ -37,8 +37,11 @@ module mStructure
     !! Linked list of conductor materials
     class(tMaterial), allocatable :: soil
     !! Soil electrical properties (fixed across all frequencies)
-    type(tLinear) :: air
-    !! Air electrical properties (permittivity, conductivity, permeability)
+    type(tLinear) :: air = tLinear(id="air", mur=1.0d0, &
+      propagationConstant=(0.0d0, 0.0d0), epsilonr=1.0d0, sigma=0.0d0)
+    !! Air electrical properties, fixed at vacuum (εr=1, μr=1, σ=0) like the
+    !! Matlab reference (`tupa.m`'s `Meio('Ar',1,1,0)`); not configurable
+    !! from case files (ROADMAP §1 item 9 decision)
 
     integer :: nodeCount = 0
     !! Current number of nodes in the `nodes` array
