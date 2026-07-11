@@ -151,13 +151,13 @@ contains
     !!
     !! The integrand is 1/r, where r is the distance between a point on the first
     !! segment and a point on the second. Uses adaptive Gauss-Kronrod quadrature.
-    real(8) :: za1(3)
+    real(8) :: za1(:)
     !! Starting point of the first segment (m)
     real(8) :: zva(3)
     !! Direction vector of the first segment (normalised or scaled by length)
     real(8) :: zla
     !! Length of the first segment (m)
-    real(8) :: zb1(3)
+    real(8) :: zb1(:)
     !! Starting point of the second segment (m)
     real(8) :: zvb(3)
     !! Direction vector of the second segment

@@ -79,6 +79,12 @@ also be run directly, e.g.
 `./build/gfortran_*/app/Tupa ../common/portela1997.json`, or install it to
 a stable path with `fpm install` and invoke it as `Tupa <study.json>`.
 
+`-v`/`--verbose` and `-q`/`--quiet` may be passed alongside (or in place of)
+the study path, in any order, e.g. `fpm run -- -q ../common/portela1997.json`.
+`-q` suppresses the routine report/summary output; errors and warnings
+(e.g. an unrecognised element type) still print regardless of verbosity
+(`mVerbosity`, [ARCHITECTURE.md](../docs/ARCHITECTURE.md) §5).
+
 `main` always discretises the structure and prints a report (node/material/
 element list, each element's generated electrode-segment IDs). If — and
 only if — the case file also carries `sources`/`frequencies` (ADR 0013,
@@ -114,26 +120,13 @@ run with `fpm run --example <name>`:
 
 ## Code documentation
 
-Using [FORD](https://forddocs.readthedocs.io/en/stable/). A Python is needed, but only if you need to generated the docs.
-
-Config the enviroment:
-
-### Windows
-
-```powershell
-python.exe -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python.exe -m pip install ford lxml
-python.exe -m ford Tupa.md
-```
-
-### Linux
+Using [FORD](https://forddocs.readthedocs.io/en/stable/), installed as a `uv`
+tool (see "Recommended setup" above) — no separate venv needed, and this
+works the same on Windows (inside WSL) and Linux:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install ford lxml
-python -m ford Tupa.md
+uv tool install ford --with lxml
+ford Tupa.md
 ```
 
 After that the docs can be accessed in [doc/index.html](doc/index.html).

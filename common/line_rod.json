@@ -1,0 +1,50 @@
+{
+  "title": "Horizontal line in air with grounded rod",
+  "soil": {
+    "conductivity": 0.001,
+    "permittivity": 10.0,
+    "permeability": 1.0
+  },
+  "nodes": [
+    { "id": "Node_0", "position": [  0.0, 0.0, 30.0] },
+    { "id": "Node_1", "position": [300.0, 0.0, 30.0] },
+    { "id": "Node_2", "position": [300.0, 0.0,  0.0] },
+    { "id": "Node_3", "position": [300.0, 0.0, -5.0] }
+  ],
+  "materials": [
+    { "id": "copper", "epsilonr": 1.0, "mur": 1.0, "sigma": 5.96e7 }
+  ],
+  "elements": [
+    {
+      "type": "line",
+      "id": "Line",
+      "from": "Node_0",
+      "to": "Node_1",
+      "radius": 0.01,
+      "segments": 30,
+      "material": "copper"
+    }, {
+      "type": "line",
+      "id": "Rod_1",
+      "from": "Node_1",
+      "to": "Node_2",
+      "radius": 0.01,
+      "segments": 6,
+      "material": "copper"
+    }, {
+      "type": "line",
+      "id": "Rod_2",
+      "from": "Node_2",
+      "to": "Node_3",
+      "radius": 0.01,
+      "segments": 6,
+      "material": "copper"
+    }
+  ],
+
+  "sources": [ { "node": "Node_0", "current": { "re": 1e3, "im": 0.0 } } ],
+  "frequencies": { "min": 10.0, "max": 1.0e6, "pointsPerDecade": 8 },
+  "outputs": {
+    "quantities": ["voltage", "inputImpedance"]
+  }
+}

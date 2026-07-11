@@ -34,9 +34,9 @@ contains
 
   subroutine segmentVector(p1, p2, dir, length)
     !! Decompose a segment into a unit direction vector and its length.
-    real(8), intent(in)  :: p1(3), p2(3)
+    real(8), intent(in)  :: p1(:), p2(:)
     !! Segment endpoints (m)
-    real(8), intent(out) :: dir(3)
+    real(8), intent(out) :: dir(:)
     !! Unit direction vector from p1 to p2
     real(8), intent(out) :: length
     !! Segment length (m)
@@ -83,9 +83,9 @@ contains
     !! parallel, falling back to adaptive 2D quadrature (`geometryFactor2D`) for
     !! non-parallel pairs, or if the closed form hits a degenerate
     !! (NaN/Inf) edge case, exactly as the reference does.
-    real(8), intent(in)  :: a1(3), a2(3)
+    real(8), intent(in)  :: a1(:), a2(:)
     !! Endpoints of segment a (m)
-    real(8), intent(in)  :: b1(3), b2(3)
+    real(8), intent(in)  :: b1(:), b2(:)
     !! Endpoints of segment b (m)
     real(8), intent(out) :: g
     !! Geometry factor (m)
@@ -132,8 +132,8 @@ contains
     !! near-machine-precision edge case in the log terms — the caller
     !! should then fall back to `geometryFactor2D` quadrature, exactly as the
     !! reference does (its `isnan(fg)` check in `barraquad`).
-    real(8), intent(in)  :: a1(3), a2(3), la, va(3)
-    real(8), intent(in)  :: b1(3), b2(3), lb, vb(3)
+    real(8), intent(in)  :: a1(:), a2(:), la, va(3)
+    real(8), intent(in)  :: b1(:), b2(:), lb, vb(3)
     real(8), intent(out) :: g
     logical, intent(out) :: ok
     real(8) :: alignment, da1b1, da1b2, da2b1, da2b2, x2
@@ -198,7 +198,7 @@ contains
 
   real(8) function meanDistance(p1, p2) result(Rbar)
     !! Distance between two points (segment midpoints), theory.md §4.1.
-    real(8), intent(in) :: p1(3), p2(3)
+    real(8), intent(in) :: p1(:), p2(:)
 
     Rbar = norm2(p2 - p1)
   end function meanDistance
@@ -207,7 +207,7 @@ contains
     !! Mirror a position or direction vector through the z=0 air-soil
     !! interface (theory.md §5): the image reverses the sign of the
     !! z-component.
-    real(8), intent(in) :: d(3)
+    real(8), intent(in) :: d(:)
     real(8) :: di(3)
 
     di = [d(1), d(2), -d(3)]
@@ -217,7 +217,7 @@ contains
     !! cos(theta) between two direction vectors (theory.md §4).
     !!
     !! Returns 0 if either vector has zero length (degenerate segment).
-    real(8), intent(in) :: d1(3), d2(3)
+    real(8), intent(in) :: d1(:), d2(:)
     real(8) :: n1, n2
 
     n1 = norm2(d1)

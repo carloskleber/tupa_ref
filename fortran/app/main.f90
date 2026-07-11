@@ -6,12 +6,15 @@ program main
   !! Loads a JSON study file and runs the complete electromagnetic analysis pipeline:
   !!
   !! **Usage:**
-  !!   fpm run -- <study.json>
-  !!   ./tupa <study.json>
+  !!   fpm run -- [-v|--verbose] [-q|--quiet] <study.json>
+  !!   ./tupa [-v|--verbose] [-q|--quiet] <study.json>
   !!
   !! **Input:**
   !! - `<study.json>` — path to a JSON file describing the electromagnetic study
   !!   - See [JSON format details](../src/Tupa.f90) for schema
+  !! - `-v`/`--verbose` — extra progress detail (`mVerbosity`'s `VERB_VERBOSE`)
+  !! - `-q`/`--quiet` — suppress the routine report/summary output
+  !!   (`mVerbosity`'s `VERB_QUIET`); errors and warnings still print
   !!
   !! **Output:**
   !! - Printed summary of study geometry (nodes, materials, elements)
@@ -45,16 +48,31 @@ program main
   !!   ```
   use tupa, only: runFromFile
   use mError, only: raiseError
+  use mVerbosity, only: setVerbosity, VERB_QUIET, VERB_VERBOSE
   implicit none
 
-  character(len=512) :: filename
-  !! Path to the JSON study file (from command-line argument)
-  integer :: ios
-  !! Status flag for command-line argument retrieval
+  character(len=512) :: filename, arg
+  !! Path to the JSON study file, and a scratch buffer for each argument
+  integer :: ios, i, nargs
+  !! Status flag for command-line argument retrieval, loop index, argument count
 
-  call get_command_argument(1, filename, status=ios)
-  if (ios /= 0 .or. len_trim(filename) == 0) then
-    print *, "Usage: tupa <study.json>"
+  filename = ""
+  nargs = command_argument_count()
+  do i = 1, nargs
+    call get_command_argument(i, arg, status=ios)
+    if (ios /= 0) cycle
+    select case (trim(arg))
+    case ("-v", "--verbose")
+      call setVerbosity(VERB_VERBOSE)
+    case ("-q", "--quiet")
+      call setVerbosity(VERB_QUIET)
+    case default
+      filename = arg
+    end select
+  end do
+
+  if (len_trim(filename) == 0) then
+    print *, "Usage: tupa [-v|--verbose] [-q|--quiet] <study.json>"
     call raiseError("missing study file argument")
   end if
 

@@ -32,3 +32,16 @@ main = "example1.f90"
 name = "example3"
 main = "example3.f90"
 
+[extra.ford]
+project = "TUPÃ"
+preprocess = false
+
+summary = """
+Reference model for electromagnetic field transient simulations — codename TUPÃ.
+
+TUPÃ computes the frequency-domain (and, via inverse transform, time-domain)
+response of networks of thin cylindrical conductors in air and soil — tower
+footings, counterpoises, grounding grids — under lightning-type excitation.
+It is an application of the Method of Moments (MoM), known in the power
+community as the Hybrid Electromagnetic Model (HEM).
+"""

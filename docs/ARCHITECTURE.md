@@ -161,6 +161,10 @@ automatically as a side effect of `runSweep`.
   the caller, not raised — the study layer decides.
 - **Logging**: `print`-based, with ANSI colours from `mCtes`; `tStudy%report`
   builds human-readable summaries. No logging framework, none planned.
+  `mVerbosity` holds a global `VERB_QUIET`/`VERB_NORMAL`/`VERB_VERBOSE` level,
+  set from `app/main.f90`'s `-v`/`--verbose`/`-q`/`--quiet` flags; it gates
+  routine output (`tStudy%report`, sweep summary lines) but never
+  errors/warnings.
 
 ## 6. Extension mechanisms
 

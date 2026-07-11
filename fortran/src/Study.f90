@@ -21,6 +21,7 @@ module mStudy
   use mImpedance, only: internalImpedance
   use mError, only: raiseError
   use mCtes, only: newl, PI, EPSILON0, MU0, ZERO_CPLX
+  use mVerbosity
   implicit none
 
   type :: tStudy
@@ -97,6 +98,7 @@ contains
     integer(4), allocatable :: n1(:), n2(:)
     real(8), allocatable :: p1(:,:), p2(:,:)
 
+    if (verbosityLevel() .eq. VERB_VERBOSE) print *, "Assembling structure and computing geometry factors..."
     call this%structure%assembleStructure()
 
     nno  = this%structure%getNodeCount()
@@ -302,6 +304,7 @@ contains
     call this%transCurrentResults%alloc(electrodeIds, omegaAxis)
 
     do k = 1, nf
+      if (verbosityLevel() .eq. VERB_VERBOSE) write(*, '("f = ",EN0.1E2," Hz")') freqHz(k)
       call this%run(omegaAxis(k), sourceNodeIds, sourceCurrents)
 
       do i = 1, nno
@@ -376,12 +379,16 @@ contains
     !! - Detailed list of all nodes with coordinates
     !! - Detailed list of all materials with properties
     !! - Detailed list of all elements with their parameters
+    !!
+    !! Suppressed under `mVerbosity`'s `VERB_QUIET` (`-q`/`--quiet`).
     class(tStudy), intent(in) :: this
     character(:), allocatable :: str
     character(len=256) :: line
     integer :: i
     class(tElement), pointer :: element => null()
     class(tMaterial), pointer :: mat => null()
+
+    if (verbosityLevel() < VERB_NORMAL) return
 
     str = "=========================================" // newl // &
           "Example Study Initialization" // newl // &

@@ -28,6 +28,7 @@ module tupa
   use mJsonParser
   use mResultsWriter, only: writeResultsCsv, writeResultsJson
   use mError, only: raiseError
+  use mVerbosity
   implicit none
   private
 
@@ -256,6 +257,11 @@ contains
     real(8), allocatable :: freqHz(:)
     character(len=512) :: base, csvFile, jsonFile
 
+
+    if (verbosityLevel() .eq. VERB_VERBOSE) then
+      print *, ""
+      print *, "Loading study ", trim(filename)
+    end if
     call loadStudy(filename, study, sourceNodeIds=sourceNodeIds, &
                    sourceCurrents=sourceCurrents, freqHz=freqHz, &
                    outputNodeIds=outputNodeIds, outputElectrodeIds=outputElectrodeIds, &
@@ -272,13 +278,17 @@ contains
                             electrodeIds=outputElectrodeIds, quantities=outputQuantities)
       call writeResultsJson(study, trim(jsonFile), nodeIds=outputNodeIds, &
                              electrodeIds=outputElectrodeIds, quantities=outputQuantities)
-      print *, ""
-      print *, "Wrote ", trim(csvFile), " and ", trim(jsonFile)
+      if (verbosityLevel() >= VERB_NORMAL) then
+        print *, ""
+        print *, "Wrote ", trim(csvFile), " and ", trim(jsonFile)
+      end if
     else
       call study%structure%assembleStructure()
       call study%report()
-      print *, ""
-      print *, "(structure-only case: no sources/frequencies block -- nothing to sweep)"
+      if (verbosityLevel() >= VERB_NORMAL) then
+        print *, ""
+        print *, "(structure-only case: no sources/frequencies block -- nothing to sweep)"
+      end if
     end if
   end subroutine runFromFile
 

@@ -2,8 +2,8 @@ mapping.md
 .history/
 fortran/doc/
 fortran/*.mod
-fortran/example*_results.*
 CLAUDE.local.md
 gui/.venv/
 gui/**/__pycache__/
 gui/.pytest_cache/
+fortran/*_results.*

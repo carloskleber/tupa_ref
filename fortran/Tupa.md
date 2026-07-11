@@ -1,1 +1,1 @@
-TUPÃ - Reference model for Electromagnetic Field Transient Simulations
+Reference model for Electromagnetic Field Transient Simulations
