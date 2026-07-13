@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QStandardItem, QStandardItemModel
 
 from tupa_gui.data import Study
+
+# Qt.UserRole payload on a node/element's tree item: ("node"|"element", id).
+# Lets the controller (main_window) map a tree selection to the matching 3D
+# entity, and vice versa, without re-deriving it from the item's label text.
+ENTITY_ROLE = Qt.ItemDataRole.UserRole + 1
 
 
 def _row(label: str, value: str = "") -> QStandardItem:
@@ -13,10 +19,12 @@ def _row(label: str, value: str = "") -> QStandardItem:
     return item
 
 
-def build_study_model(study: Study) -> QStandardItemModel:
+def build_study_model(study: Study) -> tuple[QStandardItemModel, dict[tuple[str, str], QStandardItem]]:
+    """Build the tree model plus a (kind, id) -> item map for selection sync."""
     model = QStandardItemModel()
     model.setHorizontalHeaderLabels([study.title])
     root = model.invisibleRootItem()
+    entity_items: dict[tuple[str, str], QStandardItem] = {}
 
     soil = _row("Soil")
     soil.appendRow(_row("conductivity", f"{study.soil.conductivity} S/m"))
@@ -35,12 +43,17 @@ def build_study_model(study: Study) -> QStandardItemModel:
 
     nodes = _row("Nodes", f"({len(study.nodes)})")
     for n in study.nodes:
-        nodes.appendRow(_row(n.id, str(tuple(n.position))))
+        item = _row(n.id, str(tuple(n.position)))
+        item.setData(("node", n.id), ENTITY_ROLE)
+        entity_items[("node", n.id)] = item
+        nodes.appendRow(item)
     root.appendRow(nodes)
 
     elements = _row("Elements", f"({len(study.elements)})")
     for e in study.elements:
         item = _row(e.id, f"line {e.from_node} -> {e.to_node}")
+        item.setData(("element", e.id), ENTITY_ROLE)
+        entity_items[("element", e.id)] = item
         item.appendRow(_row("radius", f"{e.radius} m"))
         item.appendRow(_row("segments", str(e.segments)))
         item.appendRow(_row("material", e.material))
@@ -72,4 +85,4 @@ def build_study_model(study: Study) -> QStandardItemModel:
         outputs.setText("Outputs  (none, everything stored)")
     root.appendRow(outputs)
 
-    return model
+    return model, entity_items

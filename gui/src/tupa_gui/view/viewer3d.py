@@ -7,11 +7,14 @@ solver-side structure-dump export that does not exist yet).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from PySide6.Qt3DCore import Qt3DCore
 from PySide6.Qt3DExtras import Qt3DExtras
 from PySide6.Qt3DRender import Qt3DRender
-from PySide6.QtGui import QColor, QVector3D, QQuaternion
-from PySide6.QtWidgets import QWidget
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor, QQuaternion, QVector3D
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from tupa_gui.data import Study
 
@@ -27,30 +30,70 @@ def _to_qt3d(position: tuple[float, float, float]) -> QVector3D:
 NODE_COLOR = QColor(255, 205, 60)
 CONDUCTOR_COLOR = QColor(200, 120, 60)
 SOIL_COLOR = QColor(110, 80, 55, 120)
+HIGHLIGHT_COLOR = QColor(255, 60, 60)
+
+# Conductor radius floor, as a fraction of the *scene's* overall extent —
+# deliberately not a fraction of each conductor's own length. A study's
+# authored radius (cm-scale) is routinely invisible at metre/decametre
+# scene scale, so a floor is needed for conductors to render at all; but it
+# must be the same floor for every conductor in the scene, or two elements
+# authored with an identical radius end up drawn at different apparent
+# thicknesses just because one is longer than the other.
+MIN_VISIBLE_RADIUS_FRACTION = 0.0025
+
+
+@dataclass
+class _Highlightable:
+    material: Qt3DExtras.QPhongMaterial
+    base_color: QColor
 
 
 class GeometryViewer(QWidget):
     """Embeds a Qt3DWindow showing a study's authored geometry."""
 
+    nodeClicked = Signal(str)
+    elementClicked = Signal(str)
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._window = Qt3DExtras.Qt3DWindow()
         self._window.defaultFrameGraph().setClearColor(QColor(32, 34, 38))
+        self._window.renderSettings().pickingSettings().setPickMethod(
+            Qt3DRender.QPickingSettings.PickMethod.TrianglePicking
+        )
         container = QWidget.createWindowContainer(self._window, self)
         # Keep the embedded window from being laid out to zero size (e.g. a
         # fully collapsed splitter pane): a windowed 3D surface at 0x0 is a
         # state some platforms/drivers recover from poorly.
         container.setMinimumSize(200, 200)
 
-        from PySide6.QtWidgets import QVBoxLayout
-
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(container)
 
+        self._camera = self._window.camera()
+        # Reposition node-id labels whenever the camera moves (orbit/pan/zoom
+        # all change the view or projection matrix) or the pane is resized.
+        self._camera.viewMatrixChanged.connect(self._update_label_positions)
+        self._camera.projectionMatrixChanged.connect(self._update_label_positions)
+
         # Python references to every Qt3D object of the current scene — see
         # the ownership note in load_study.
         self._scene: list[object] = []
+        self._node_entries: dict[str, _Highlightable] = {}
+        self._element_entries: dict[str, _Highlightable] = {}
+        self._node_positions: dict[str, QVector3D] = {}
+        self._element_centers: dict[str, QVector3D] = {}
+        # Node-id labels are plain QLabels overlaid on top of the Qt3D
+        # window container and repositioned every frame the camera moves,
+        # rather than Qt3D QText2DEntity billboards: on this Qt/driver combo
+        # QText2DEntity's glyph atlas floods the log with RHI "failed to
+        # upload buffers" every frame (reproduces with a minimal QText2DEntity
+        # scene, unrelated to anything else in this view) — a 2D overlay
+        # sidesteps that entirely and is the standard way to annotate a Qt3D
+        # viewport anyway.
+        self._node_labels: dict[str, QLabel] = {}
+        self._highlighted: _Highlightable | None = None
 
     def load_study(self, study: Study) -> None:
         # PySide6 does not register Qt3D's QNode parent-child links as
@@ -63,6 +106,13 @@ class GeometryViewer(QWidget):
         # here must therefore be appended to `scene` and kept alive on self
         # for as long as it is displayed.
         scene: list[object] = []
+        node_entries: dict[str, _Highlightable] = {}
+        element_entries: dict[str, _Highlightable] = {}
+        node_positions: dict[str, QVector3D] = {}
+        element_centers: dict[str, QVector3D] = {}
+
+        self._clear_labels()
+
         root = Qt3DCore.QEntity()
         scene.append(root)
 
@@ -76,19 +126,31 @@ class GeometryViewer(QWidget):
         light_entity.addComponent(light_transform)
         scene += [light_entity, light, light_transform]
 
-        positions = [_to_qt3d(n.position) for n in study.nodes]
+        for node in study.nodes:
+            node_positions[node.id] = _to_qt3d(node.position)
+        positions = list(node_positions.values())
         extent = max((v.length() for v in positions), default=1.0)
         extent = max(extent, 1.0)
+        min_visible_radius = extent * MIN_VISIBLE_RADIUS_FRACTION
+        # A fixed sphere radius (as the original code used) is a sub-pixel
+        # dot once a study spans tens/hundreds of metres; scale with the
+        # scene like the conductor floor above so node markers stay visible.
+        node_radius = extent * 0.012
 
         self._add_soil_plane(root, scene, extent)
         for node in study.nodes:
-            self._add_node(root, scene, _to_qt3d(node.position))
+            position = node_positions[node.id]
+            entry = self._add_node(root, scene, position, node.id, node_radius)
+            node_entries[node.id] = entry
+            self._node_labels[node.id] = self._make_label(node.id)
         for element in study.elements:
-            a = _to_qt3d(study.node(element.from_node).position)
-            b = _to_qt3d(study.node(element.to_node).position)
-            self._add_conductor(root, scene, a, b, element.radius)
+            a = node_positions[element.from_node]
+            b = node_positions[element.to_node]
+            entry = self._add_conductor(root, scene, a, b, element.radius, min_visible_radius, element.id)
+            element_entries[element.id] = entry
+            element_centers[element.id] = (a + b) * 0.5
 
-        camera = self._window.camera()
+        camera = self._camera
         camera.lens().setPerspectiveProjection(45.0, 16.0 / 9.0, 0.01, extent * 100)
         center = QVector3D(
             sum((p.x() for p in positions), 0.0) / len(positions) if positions else 0.0,
@@ -101,7 +163,12 @@ class GeometryViewer(QWidget):
 
         controller = Qt3DExtras.QOrbitCameraController(root)
         controller.setCamera(camera)
-        controller.setLinearSpeed(extent * 20)
+        # Qt3D's defaults (linearSpeed ~10) don't scale with scene size; the
+        # previous extent*20 made pan/zoom fly across the whole scene on a
+        # single wheel tick or drag for any study bigger than a few metres.
+        # A gentler multiplier keeps a wheel tick/drag a small fraction of
+        # the scene instead of blowing straight past it.
+        controller.setLinearSpeed(max(extent * 1.5, 0.5))
         controller.setLookSpeed(180)
         scene.append(controller)
 
@@ -109,6 +176,102 @@ class GeometryViewer(QWidget):
         # Swap only after the new root is installed; releasing the previous
         # scene's references lets GC destroy the old (now undisplayed) scene.
         self._scene = scene
+        self._node_entries = node_entries
+        self._element_entries = element_entries
+        self._node_positions = node_positions
+        self._element_centers = element_centers
+        self._highlighted = None
+        self._update_label_positions()
+
+    def highlight_node(self, node_id: str) -> None:
+        """Highlight a node and re-centre orbiting on it (tree/3D selection sync)."""
+        entry = self._node_entries.get(node_id)
+        if entry is None:
+            return
+        self._set_highlight(entry)
+        self._focus_camera(self._node_positions[node_id])
+
+    def highlight_element(self, element_id: str) -> None:
+        """Highlight an element and re-centre orbiting on it (tree/3D selection sync)."""
+        entry = self._element_entries.get(element_id)
+        if entry is None:
+            return
+        self._set_highlight(entry)
+        self._focus_camera(self._element_centers[element_id])
+
+    def clear_highlight(self) -> None:
+        if self._highlighted is not None:
+            self._highlighted.material.setDiffuse(self._highlighted.base_color)
+            self._highlighted = None
+
+    def _set_highlight(self, entry: _Highlightable) -> None:
+        self.clear_highlight()
+        entry.material.setDiffuse(HIGHLIGHT_COLOR)
+        self._highlighted = entry
+
+    def _focus_camera(self, target: QVector3D) -> None:
+        # Re-centre the orbit controller on `target` while preserving the
+        # current viewing distance/angle, so orbiting continues around
+        # whatever was last selected instead of jumping to a fixed pose.
+        camera = self._camera
+        offset = camera.position() - camera.viewCenter()
+        if offset.length() < 1e-6:
+            offset = QVector3D(1.0, 1.0, 1.0)
+        camera.setViewCenter(target)
+        camera.setPosition(target + offset)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 (Qt override)
+        super().resizeEvent(event)
+        self._update_label_positions()
+
+    def _make_label(self, text: str) -> QLabel:
+        label = QLabel(text, self)
+        label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        label.setStyleSheet(
+            "color: rgb(230, 230, 230); background-color: rgba(20, 20, 20, 150);"
+            " padding: 0px 3px; border-radius: 2px; font-size: 11px;"
+        )
+        label.adjustSize()
+        label.show()
+        label.raise_()
+        return label
+
+    def _clear_labels(self) -> None:
+        for label in self._node_labels.values():
+            label.deleteLater()
+        self._node_labels = {}
+
+    def _update_label_positions(self) -> None:
+        if not self._node_labels:
+            return
+        camera = self._camera
+        view = camera.viewMatrix()
+        view_projection = camera.projectionMatrix() * view
+        width, height = self.width(), self.height()
+        for node_id, label in self._node_labels.items():
+            position = self._node_positions.get(node_id)
+            if position is None:
+                label.hide()
+                continue
+            # A point behind the camera still lands in [-1, 1] NDC after
+            # QMatrix4x4.map's perspective divide (dividing by a negative w
+            # flips the sign), so it must be culled using view-space depth
+            # (Qt3D/OpenGL convention: camera looks down -Z, so z < 0 is in
+            # front) rather than the mapped NDC coordinates alone.
+            if view.map(position).z() >= 0:
+                label.hide()
+                continue
+            # QMatrix4x4.map(QVector3D) applies the full projective
+            # transform *and* the perspective divide, landing directly in
+            # normalised device coordinates (each axis in [-1, 1] on screen).
+            ndc = view_projection.map(position)
+            if not (-1.2 <= ndc.x() <= 1.2 and -1.2 <= ndc.y() <= 1.2):
+                label.hide()
+                continue
+            x = (ndc.x() * 0.5 + 0.5) * width
+            y = (1.0 - (ndc.y() * 0.5 + 0.5)) * height
+            label.show()
+            label.move(int(x - label.width() / 2), int(y - label.height() - 6))
 
     def _add_soil_plane(self, root: Qt3DCore.QEntity, scene: list[object], extent: float) -> None:
         entity = Qt3DCore.QEntity(root)
@@ -123,30 +286,48 @@ class GeometryViewer(QWidget):
         entity.addComponent(material)
         scene += [entity, mesh, material]
 
-    def _add_node(self, root: Qt3DCore.QEntity, scene: list[object], position: QVector3D) -> None:
+    def _add_node(
+        self,
+        root: Qt3DCore.QEntity,
+        scene: list[object],
+        position: QVector3D,
+        node_id: str,
+        radius: float,
+    ) -> _Highlightable:
         entity = Qt3DCore.QEntity(root)
         mesh = Qt3DExtras.QSphereMesh(entity)
-        mesh.setRadius(0.05)
+        mesh.setRadius(radius)
         material = Qt3DExtras.QPhongMaterial(entity)
         material.setDiffuse(NODE_COLOR)
         transform = Qt3DCore.QTransform(entity)
         transform.setTranslation(position)
+        picker = Qt3DRender.QObjectPicker(entity)
+        picker.clicked.connect(lambda _event, nid=node_id: self._on_node_picked(nid))
         entity.addComponent(mesh)
         entity.addComponent(material)
         entity.addComponent(transform)
-        scene += [entity, mesh, material, transform]
+        entity.addComponent(picker)
+        scene += [entity, mesh, material, transform, picker]
+        return _Highlightable(material, NODE_COLOR)
 
     def _add_conductor(
-        self, root: Qt3DCore.QEntity, scene: list[object], a: QVector3D, b: QVector3D, radius: float
-    ) -> None:
+        self,
+        root: Qt3DCore.QEntity,
+        scene: list[object],
+        a: QVector3D,
+        b: QVector3D,
+        radius: float,
+        min_visible_radius: float,
+        element_id: str,
+    ) -> _Highlightable | None:
         direction = b - a
         length = direction.length()
         if length == 0:
-            return
+            return None
 
         entity = Qt3DCore.QEntity(root)
         mesh = Qt3DExtras.QCylinderMesh(entity)
-        mesh.setRadius(max(radius, length * 0.005))
+        mesh.setRadius(max(radius, min_visible_radius))
         mesh.setLength(length)
         material = Qt3DExtras.QPhongMaterial(entity)
         material.setDiffuse(CONDUCTOR_COLOR)
@@ -158,7 +339,20 @@ class GeometryViewer(QWidget):
         transform.setRotation(rotation)
         transform.setTranslation((a + b) * 0.5)
 
+        picker = Qt3DRender.QObjectPicker(entity)
+        picker.clicked.connect(lambda _event, eid=element_id: self._on_element_picked(eid))
+
         entity.addComponent(mesh)
         entity.addComponent(material)
         entity.addComponent(transform)
-        scene += [entity, mesh, material, transform]
+        entity.addComponent(picker)
+        scene += [entity, mesh, material, transform, picker]
+        return _Highlightable(material, CONDUCTOR_COLOR)
+
+    def _on_node_picked(self, node_id: str) -> None:
+        self.highlight_node(node_id)
+        self.nodeClicked.emit(node_id)
+
+    def _on_element_picked(self, element_id: str) -> None:
+        self.highlight_element(element_id)
+        self.elementClicked.emit(element_id)

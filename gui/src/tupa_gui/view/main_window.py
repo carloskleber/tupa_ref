@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QFileDialog, QMainWindow, QMessageBox, QSplitter, 
 from tupa_gui.data import Results, ResultsLoadError, Study, StudyLoadError, load_results, load_study
 
 from .plot_panel import PlotPanel
-from .tree import build_study_model
+from .tree import ENTITY_ROLE, build_study_model
 from .viewer3d import GeometryViewer
 
 
@@ -24,6 +24,9 @@ class MainWindow(QMainWindow):
         self._tree.setHeaderHidden(False)
         self._viewer = GeometryViewer()
         self._plot_panel = PlotPanel()
+        # (kind, id) -> tree item, rebuilt on every display_study; lets a 3D
+        # click select the matching tree row (selection sync is bidirectional).
+        self._tree_entity_items: dict[tuple[str, str], object] = {}
 
         splitter = QSplitter(Qt.Orientation.Horizontal, self)
         splitter.addWidget(self._tree)
@@ -31,6 +34,9 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self._plot_panel)
         splitter.setSizes([300, 650, 450])
         self.setCentralWidget(splitter)
+
+        self._viewer.nodeClicked.connect(lambda node_id: self._select_tree_item("node", node_id))
+        self._viewer.elementClicked.connect(lambda element_id: self._select_tree_item("element", element_id))
 
         self._build_menu()
 
@@ -60,9 +66,28 @@ class MainWindow(QMainWindow):
         self.display_study(study)
 
     def display_study(self, study: Study) -> None:
-        self._tree.setModel(build_study_model(study))
+        model, entity_items = build_study_model(study)
+        self._tree_entity_items = entity_items
+        self._tree.setModel(model)
         self._tree.expandAll()
+        self._tree.selectionModel().currentChanged.connect(self._on_tree_selection_changed)
         self._viewer.load_study(study)
+
+    def _on_tree_selection_changed(self, current, _previous) -> None:
+        entity = current.data(ENTITY_ROLE)
+        if entity is None:
+            return
+        kind, entity_id = entity
+        if kind == "node":
+            self._viewer.highlight_node(entity_id)
+        else:
+            self._viewer.highlight_element(entity_id)
+
+    def _select_tree_item(self, kind: str, entity_id: str) -> None:
+        item = self._tree_entity_items.get((kind, entity_id))
+        if item is None:
+            return
+        self._tree.setCurrentIndex(item.index())
 
     def open_results(self, path: str | Path) -> None:
         try:
