@@ -201,6 +201,43 @@ $\lambda/10$; the project default stays $\lambda/10$, with coarsening per
 - **Parallel segments** and **orthogonal segments**: closed-form expressions
   exist (logarithms and arctangents of the corner distances); see [3, annex]
   for the derivation. Used both as fast paths and as quadrature test oracles.
+
+  ![2-D quadrature convergence to the closed-form parallel-segment factor, swept over requested tolerance and pair separation](figures/quadrature-tolerance-sweep.svg)
+
+  The figure sweeps the 2-D quadrature's requested relative tolerance
+  (`epsrel`; `setQuadEpsRel`/`getQuadEpsRel`, 4 points per decade from
+  $10^{-1}$ to $10^{-4}$) against the closed-form `parallelGeometryFactor`
+  as an independent oracle, for parallel 10 m segments at four separations.
+  Looser tolerances only visibly degrade accuracy for close pairs — the far
+  pair (offset = length) is already accurate to near machine precision even
+  at `epsrel = 1e-1` — and each curve breaks from its plateau and collapses
+  to a floor within a single decade of `epsrel` once the requested tolerance
+  passes the corresponding separation scale, arriving at an error set by the
+  adaptive quadrature's own subdivision limit rather than by the requested
+  tolerance. The floor is worse for closer pairs (~$10^{-11}$ relative error
+  at offset = length/1000, vs. ~$10^{-15}$ at offset = length), mirroring
+  the smooth-unless-touching caveat above. This is why the closed form is
+  the default fast path for parallel segments rather than a mere speed
+  optimisation: for the closest pairs, quadrature needs `epsrel` below
+  about $10^{-3}$ before it is trustworthy at all, and even then never
+  reaches the precision the closed form gives for free. See the
+  tolerance-sweep test in `fortran/test/test_geometry.f90` for the
+  assertions this figure is drawn from.
+
+  ![2-D quadrature convergence for perpendicular segments, no closed form available, swept over requested tolerance and segment-centre separation](figures/quadrature-tolerance-sweep-perpendicular.svg)
+
+  Perpendicular segments take the same quadrature path as the general
+  position case — `mutualGeometryFactor` only fast-paths *parallel* pairs
+  today, even though [3, annex] gives a closed form for the orthogonal case
+  too (not yet ported here). With no closed form to check against, the
+  oracle for this figure is instead the same quadrature at a very tight
+  `epsrel = 1e-14`, and the separation is the distance between the two
+  segments' midpoints rather than a perpendicular offset. The qualitative
+  picture is the same as the parallel case — a plateau, then a collapse to
+  a floor as `epsrel` passes the separation scale — confirming that the
+  general 2-D quadrature path behaves the same way for both segment
+  orientations, and that a future orthogonal closed form would earn the
+  same trustworthiness argument as `parallelGeometryFactor` does today.
 - **Coincident (self) factor**: for a segment of length $l$ and radius $r_0$,
   integrating axis-to-surface:
 

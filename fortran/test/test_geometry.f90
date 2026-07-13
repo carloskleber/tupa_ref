@@ -69,7 +69,8 @@ program test_geometry
   ! ----------------------------------------------------------------
   ! Parallel-segment closed-form fast path (mutualGeometryFactor's default
   ! path), ported from the Matlab reference barraquad.m's posparal. Cases
-  ! mirror mom_matlab/test/testesIntegralxAnalitica.m.
+  ! mirror all 8 cases of mom_matlab/test/testesIntegralxAnalitica.m (its
+  ! Cases 8a/8b/8c are the X/Y/Z-aligned repeats of one offset ratio).
   !
   ! Touching/consecutive collinear cases (1-2) are NOT compared against
   ! forced quadrature: that is exactly the near-singular, slow-to-converge
@@ -138,6 +139,51 @@ program test_geometry
                  "reversing b's parametrisation must not change the mutual geometry factor")
   end block
 
+  ! Case 5: parallel, offset = length/10 (1 m over 10 m) -- safe for quadrature.
+  a1 = [0.0d0, 0.0d0, 1.0d0]
+  a2 = [10.0d0, 0.0d0, 1.0d0]
+  b1 = [0.0d0, 1.0d0, 1.0d0]
+  b2 = [10.0d0, 1.0d0, 1.0d0]
+  call mutualGeometryFactor(a1, a2, b1, b2, gClosed)
+  call mutualGeometryFactor(a1, a2, b1, b2, gQuad, forceNumeric=.true.)
+  call test_ok("parallel, offset = length/10: closed form matches quadrature", &
+               abs(gClosed - gQuad) < 1.0d-4 * abs(gQuad), &
+               "closed form and quadrature disagree for an offset = length/10 parallel pair")
+
+  ! Cases 8a/8b/8c: parallel, offset = length/1000 (0.1 m over 100 m), with
+  ! the pair oriented along each of the three axes in turn -- checks that the
+  ! closed form (and its (xi1,xi2,d..) bookkeeping) is axis-orientation
+  ! invariant, not just correct for the X-aligned case already exercised above.
+  a1 = [0.0d0, 0.0d0, 1.0d0]
+  a2 = [100.0d0, 0.0d0, 1.0d0]
+  b1 = [0.0d0, 0.1d0, 1.0d0]
+  b2 = [100.0d0, 0.1d0, 1.0d0]
+  call mutualGeometryFactor(a1, a2, b1, b2, gClosed)
+  call mutualGeometryFactor(a1, a2, b1, b2, gQuad, forceNumeric=.true.)
+  call test_ok("parallel along X, offset = length/1000: closed form matches quadrature", &
+               abs(gClosed - gQuad) < 1.0d-3 * abs(gQuad), &
+               "closed form and quadrature disagree for an X-aligned offset = length/1000 parallel pair")
+
+  a1 = [0.0d0, 0.0d0, 1.0d0]
+  a2 = [0.0d0, 100.0d0, 1.0d0]
+  b1 = [0.1d0, 0.0d0, 1.0d0]
+  b2 = [0.1d0, 100.0d0, 1.0d0]
+  call mutualGeometryFactor(a1, a2, b1, b2, gClosed)
+  call mutualGeometryFactor(a1, a2, b1, b2, gQuad, forceNumeric=.true.)
+  call test_ok("parallel along Y, offset = length/1000: closed form matches quadrature", &
+               abs(gClosed - gQuad) < 1.0d-3 * abs(gQuad), &
+               "closed form and quadrature disagree for a Y-aligned offset = length/1000 parallel pair")
+
+  a1 = [0.0d0, 0.0d0, 1.0d0]
+  a2 = [0.0d0, 0.0d0, 101.0d0]
+  b1 = [0.0d0, 0.1d0, 1.0d0]
+  b2 = [0.0d0, 0.1d0, 101.0d0]
+  call mutualGeometryFactor(a1, a2, b1, b2, gClosed)
+  call mutualGeometryFactor(a1, a2, b1, b2, gQuad, forceNumeric=.true.)
+  call test_ok("parallel along Z, offset = length/1000: closed form matches quadrature", &
+               abs(gClosed - gQuad) < 1.0d-3 * abs(gQuad), &
+               "closed form and quadrature disagree for a Z-aligned offset = length/1000 parallel pair")
+
   ! forceNumeric must actually route through geometryFactor2D: a non-parallel pair
   ! only ever uses quadrature, so it must agree with itself regardless of
   ! the flag (sanity check that the flag doesn't corrupt the non-parallel path).
@@ -150,6 +196,78 @@ program test_geometry
   call test_ok("non-parallel pair: forceNumeric is a no-op (both paths are quadrature)", &
                abs(gClosed - gQuad) < 1.0d-12 * abs(gQuad), &
                "a non-parallel pair must give the identical result regardless of forceNumeric")
+
+  ! ----------------------------------------------------------------
+  ! Numeric quadrature tolerance sweep vs closed form, mirroring
+  ! testesIntegralxAnalitica.m's roda() helper (which sweeps INT_TOL over
+  ! 1e-2, 1e-3, 1e-4 and prints numeric vs analytic side by side). Here the
+  ! knob is geometryFactor2D's epsrel (setQuadEpsRel/getQuadEpsRel), and the
+  ! "analytic" reference is the closed-form parallelGeometryFactor. Loosening
+  ! epsrel only visibly degrades quadrature accuracy on a close (sharply
+  ! peaked) pair; the far Case-4-style pair above is already accurate to
+  ! machine precision even at epsrel=1e-1, so it is not repeated here.
+  ! ----------------------------------------------------------------
+  call test_init("Quadrature tolerance sweep vs closed form (testesIntegralxAnalitica.m INT_TOL sweep)")
+
+  block
+    real(8) :: epsrel(4), err(4), gTol
+    integer :: k
+
+    ! Case 6 config (offset = length/100): moderately close pair.
+    epsrel = [1.0d-1, 5.0d-2, 2.0d-2, 1.0d-2]
+    a1 = [0.0d0, 0.0d0, 1.0d0]
+    a2 = [10.0d0, 0.0d0, 1.0d0]
+    b1 = [0.0d0, 0.1d0, 1.0d0]
+    b2 = [10.0d0, 0.1d0, 1.0d0]
+    call mutualGeometryFactor(a1, a2, b1, b2, gClosed)
+
+    do k = 1, 4
+      call setQuadEpsRel(epsrel(k))
+      call mutualGeometryFactor(a1, a2, b1, b2, gTol, forceNumeric=.true.)
+      err(k) = abs(gTol - gClosed) / abs(gClosed)
+    end do
+    call setQuadEpsRel(1.0d-6)
+
+    call test_ok("offset = length/100: relative error shrinks monotonically as epsrel tightens", &
+                 err(1) >= err(2) .and. err(2) >= err(3) .and. err(3) >= err(4), &
+                 "loosening epsrel should not make the quadrature agree better with the closed form")
+    call test_ok("offset = length/100: loosest epsrel (1e-1) is visibly inaccurate", &
+                 err(1) > 1.0d-2, &
+                 "epsrel=1e-1 was expected to show a visible (percent-level) discrepancy here")
+    call test_ok("offset = length/100: tightest epsrel (1e-2) matches closed form to 1e-6 relative", &
+                 err(4) < 1.0d-6, &
+                 "epsrel=1e-2 quadrature strayed more than 1e-6 relative from the closed form")
+
+    ! Case 8a config (offset = length/1000): closer pair, harder integrand --
+    ! needs tighter epsrel before the sweep converges.
+    epsrel = [1.0d-1, 1.0d-2, 1.0d-3, 1.0d-4]
+    a1 = [0.0d0, 0.0d0, 1.0d0]
+    a2 = [100.0d0, 0.0d0, 1.0d0]
+    b1 = [0.0d0, 0.1d0, 1.0d0]
+    b2 = [100.0d0, 0.1d0, 1.0d0]
+    call mutualGeometryFactor(a1, a2, b1, b2, gClosed)
+
+    do k = 1, 4
+      call setQuadEpsRel(epsrel(k))
+      call mutualGeometryFactor(a1, a2, b1, b2, gTol, forceNumeric=.true.)
+      err(k) = abs(gTol - gClosed) / abs(gClosed)
+    end do
+    call setQuadEpsRel(1.0d-6)
+
+    call test_ok("offset = length/1000: relative error shrinks monotonically as epsrel tightens", &
+                 err(1) >= err(2) .and. err(2) >= err(3) .and. err(3) >= err(4), &
+                 "loosening epsrel should not make the quadrature agree better with the closed form")
+    call test_ok("offset = length/1000: loosest epsrel (1e-1) is grossly inaccurate", &
+                 err(1) > 1.0d0, &
+                 "epsrel=1e-1 was expected to show a gross (>100% relative) discrepancy for this closer pair")
+    call test_ok("offset = length/1000: tightest epsrel (1e-4) matches closed form to 1e-8 relative", &
+                 err(4) < 1.0d-8, &
+                 "epsrel=1e-4 quadrature strayed more than 1e-8 relative from the closed form")
+
+    call test_ok("getQuadEpsRel restored to default 1e-6 after the sweep", &
+                 getQuadEpsRel() == 1.0d-6, &
+                 "the sweep must leave global quadrature state as it found it for later tests")
+  end block
 
   ! ----------------------------------------------------------------
   ! Direction cosines, including image (z-flip)
