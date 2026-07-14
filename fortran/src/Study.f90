@@ -128,7 +128,7 @@ contains
 
     call buildGeometryMatrices(p1, p2, this%geomRadius, nseg, &
       this%geomG, this%geomGi, this%geomRbar, this%geomRbari, &
-      this%geomCosTheta, this%geomCosThetaI)
+      this%geomCosTheta, this%geomCosThetaI, pos=this%geomPos)
 
     if (verbosityLevel() .eq. VERB_VERBOSE) then
       block

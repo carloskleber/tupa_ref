@@ -190,8 +190,31 @@ contains
     y = sqrt(max(0.0d0, d11 * d11 - l11 * l11)) / la
 
     if (y < NUMP) then
-      if (abs(xi1 - x2) < NUMP) then
-        g = xi1 * log(-(xi1 - xi2) / xi1) + xi2 * log(-xi2 / (xi1 - xi2))
+      if (abs(xi1) < NUMP .or. abs(xi1 - x2) < NUMP .or. &
+          abs(xi2) < NUMP .or. abs(xi2 - x2) < NUMP) then
+        ! Touching, non-overlapping collinear segments: any of xi1/xi2 ~ 0 or
+        ! ~ x2 signals that a and b meet at exactly one shared point (theory.md
+        ! S4.2). Distance between any point on a and any point on b is then
+        ! just the sum of their distances from that shared point, regardless
+        ! of which physical direction each segment extends from it, so
+        !   g = int_0^la int_0^lb 1/(u+v) du dv
+        !     = (la+lb)*ln(la+lb) - la*ln(la) - lb*ln(lb)
+        ! is exact for BOTH orientations. `posparal`'s original log-difference
+        ! form (xi1*log(-(..)/xi1) + ...) is the same limit taken through a
+        ! coefficient -> 0 while its paired log argument -> +-infinity: fine
+        ! numerically when alignment > 0 (same-direction chaining, xi1 -> x2,
+        ! matches this formula -- see test_geometry.f90's Case 1/2), but for
+        ! alignment <= 0 (opposite-direction, e.g. a segment touching its own
+        ! mirror image across the air/soil interface, xi1 -> 0) it hits
+        ! `coef * log(arg)` with coef exactly 0 and arg diverging: 0 * Inf =
+        ! NaN in IEEE arithmetic (the true t*ln(k/t) -> 0 limit isn't taken),
+        ! or even log of a negative argument, both misdiagnosed as the
+        ! genuine "degenerate pair" case and sent to `geometryFactor2D`
+        ! quadrature -- catastrophically slow there since the integrand has a
+        ! real 1/r corner singularity at the touch point (this is what was
+        ! driving ~700M `inverseDistanceIntegrand` calls for a single
+        ! straight vertical rod crossing the interface).
+        g = (la + lb) * log(la + lb) - la * log(la) - lb * log(lb)
       else
         g = x2 * log((x2 - xi2) / (x2 - xi1)) + xi1 * log(-(x2 - xi1) / xi1) &
           + xi2 * log(-xi2 / (x2 - xi2))
@@ -247,7 +270,7 @@ contains
   ! Full geometry-matrix assembly
   ! =====================================================================
 
-  subroutine buildGeometryMatrices(p1, p2, radius, n, G, Gi, Rbar, Rbari, cosTheta, cosThetaI, forceNumeric)
+  subroutine buildGeometryMatrices(p1, p2, radius, n, G, Gi, Rbar, Rbari, cosTheta, cosThetaI, forceNumeric, pos)
     !! Build the full set of n x n geometry matrices for n straight segments
     !! (theory.md §4-5): real geometry factor G, image geometry factor Gi,
     !! mean distance Rbar, image mean distance Rbari, direction cosine
@@ -271,9 +294,19 @@ contains
     logical, intent(in), optional :: forceNumeric
     !! Forwarded to `mutualGeometryFactor` (see there); always use
     !! quadrature even for parallel segment pairs.
+    integer(4), intent(in), optional :: pos(n)
+    !! Optional per-segment medium code (1 = air, 2 = soil; `tStudy%geomPos`
+    !! convention). When present, mutual (i /= j) pairs whose segments sit
+    !! in different media are skipped here instead of run through
+    !! quadrature: Mesh.f90's `calcZMutual` discards direct and image terms
+    !! alike for such pairs (zeroed unconditionally, theory.md §5 / ADR
+    !! 0005), so computing them is pure waste. G/Gi and their distances/
+    !! cosines are set to 0 for those entries. Omit `pos` to compute every
+    !! pair unconditionally (e.g. in geometry-only tests).
     real(8) :: dir(n,3), len(n), mid(n,3)
     real(8) :: p1i(3), p2i(3), midi(3), diri(3), gij
     integer :: i, j
+    logical :: mixedMedia
 
     ! Start each build with an empty memo table so statistics are per-build
     ! and no memory is carried across studies (entries would still be valid —
@@ -303,10 +336,17 @@ contains
     ! this loop's own write pattern.
     do i = 1, n
       do j = i, n
+        mixedMedia = .false.
+        if (i /= j .and. present(pos)) mixedMedia = (pos(i) /= pos(j))
+
         if (i == j) then
           G(i,i)        = selfGeometryFactor(len(i), radius(i))
           Rbar(i,i)     = radius(i)
           cosTheta(i,i) = 1.0d0
+        else if (mixedMedia) then
+          G(i,j) = 0.0d0;                     G(j,i) = 0.0d0
+          Rbar(i,j) = 0.0d0;                  Rbar(j,i) = 0.0d0
+          cosTheta(i,j) = 0.0d0;              cosTheta(j,i) = 0.0d0
         else
           call mutualGeometryFactor(p1(i,:), p2(i,:), p1(j,:), p2(j,:), gij, forceNumeric)
           G(i,j) = gij;                       G(j,i) = gij
@@ -314,6 +354,13 @@ contains
           Rbar(j,i) = Rbar(i,j)
           cosTheta(i,j) = directionCosine(dir(i,:), dir(j,:))
           cosTheta(j,i) = cosTheta(i,j)
+        end if
+
+        if (mixedMedia) then
+          Gi(i,j) = 0.0d0;                    Gi(j,i) = 0.0d0
+          Rbari(i,j) = 0.0d0;                 Rbari(j,i) = 0.0d0
+          cosThetaI(i,j) = 0.0d0;              cosThetaI(j,i) = 0.0d0
+          cycle
         end if
 
         ! Image term: segment i against the mirror image of segment j

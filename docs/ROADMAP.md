@@ -192,10 +192,17 @@ segments, consistent with gap 8 — no self-term regularisation exists yet).
      factor of 2; see gap 8 below). theory.md's formula was independently
      re-derived from the defining integral and verified against quadrature.
    - ~~direction cosines, incl. image direction (z-component flipped);~~ done.
-   - same-medium test; mixed pairs skipped (ADR 0005): **not implemented in
-     mGeometry** — this is medium/position information, not a geometric
-     property (theory.md §5), so it correctly lives in `Mesh.f90`'s
+   - same-medium test; mixed pairs skipped (ADR 0005): the *decision* to zero
+     mixed-media coupling is medium/position information, not a geometric
+     property (theory.md §5), so it still lives in `Mesh.f90`'s
      `calcZSelf`/`calcZMutual` (`pos1`/`pos2` args), not the geometry layer.
+     `buildGeometryMatrices` does take an optional `pos(n)` array, but only
+     as a perf hint: since `calcZMutual` discards direct and image terms
+     alike for a mixed pair, computing them is pure waste, so
+     `buildGeometryMatrices` skips both `mutualGeometryFactor` calls (and
+     stores 0) whenever `pos(i) /= pos(j)`, instead of paying for the
+     quadrature. Geometry-only callers (e.g. tests) can omit `pos` and get
+     the old unconditional behaviour.
 3. ~~Internal impedance `Z_int`: solid conductor Bessel formula (SLATEC or
    stdlib Bessel); tubular later.~~ Done for the solid conductor
    (`mImpedance%internalImpedance`, SLATEC `ZBESI`); tubular deferred (Phase 7).
