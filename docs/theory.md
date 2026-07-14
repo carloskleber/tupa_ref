@@ -205,22 +205,30 @@ $\lambda/10$; the project default stays $\lambda/10$, with coarsening per
   ![2-D quadrature convergence to the closed-form parallel-segment factor, swept over requested tolerance and pair separation](figures/quadrature-tolerance-sweep.svg)
 
   The figure sweeps the 2-D quadrature's requested relative tolerance
-  (`epsrel`; `setQuadEpsRel`/`getQuadEpsRel`, 4 points per decade from
-  $10^{-1}$ to $10^{-4}$) against the closed-form `parallelGeometryFactor`
-  as an independent oracle, for parallel 10 m segments at four separations.
-  Looser tolerances only visibly degrade accuracy for close pairs — the far
-  pair (offset = length) is already accurate to near machine precision even
-  at `epsrel = 1e-1` — and each curve breaks from its plateau and collapses
-  to a floor within a single decade of `epsrel` once the requested tolerance
-  passes the corresponding separation scale, arriving at an error set by the
-  adaptive quadrature's own subdivision limit rather than by the requested
-  tolerance. The floor is worse for closer pairs (~$10^{-11}$ relative error
-  at offset = length/1000, vs. ~$10^{-15}$ at offset = length), mirroring
-  the smooth-unless-touching caveat above. This is why the closed form is
-  the default fast path for parallel segments rather than a mere speed
-  optimisation: for the closest pairs, quadrature needs `epsrel` below
-  about $10^{-3}$ before it is trustworthy at all, and even then never
-  reaches the precision the closed form gives for free. See the
+  (`epsrel`; `setQuadEpsRel`/`getQuadEpsRel`, 8 points per decade from
+  $10^{-3}$ down to $10^{-6}$, the library's default) against the
+  closed-form `parallelGeometryFactor` as an independent oracle, for
+  parallel 10 m segments at four separations. Looser tolerances only
+  visibly degrade accuracy for close pairs — the far pair (offset = length)
+  is already accurate to machine precision across the whole range — and
+  each closer pair's error trends gradually and somewhat noisily downward
+  as `epsrel` tightens, rather than collapsing sharply at one particular
+  tolerance: e.g. offset = length/1000 goes from ~7 % relative error at
+  `epsrel = 1e-3` down to ~$8\times10^{-8}$ by `epsrel = 1e-6`, with visible
+  ups and downs along the way rather than a smooth curve. That gradual,
+  non-monotonic trend (an occasional uptick between neighbouring `epsrel`
+  values) is expected of an adaptive integrator honouring a tolerance
+  rather than chasing machine precision regardless of what was asked for —
+  the corrected behaviour after `Impedance.f90`'s embedded 7-point Gauss
+  weights were fixed (they previously used the Kronrod weights at the
+  Gauss nodes instead of the actual Gauss weights, so the error *estimate*
+  never converged and every call over-refined to the interval cap
+  regardless of `epsrel` — correct final values, but ~1000x slower and
+  with no real tolerance control). This is why the closed form is the
+  default fast path for parallel segments rather than a mere speed
+  optimisation: even at the tightest practical tolerance shown here, the
+  closest pairs still carry ~$10^{-7}$–$10^{-8}$ relative error against the
+  closed form, which gives an exact answer for free instead. See the
   tolerance-sweep test in `fortran/test/test_geometry.f90` for the
   assertions this figure is drawn from.
 
@@ -231,13 +239,15 @@ $\lambda/10$; the project default stays $\lambda/10$, with coarsening per
   today, even though [3, annex] gives a closed form for the orthogonal case
   too (not yet ported here). With no closed form to check against, the
   oracle for this figure is instead the same quadrature at a very tight
-  `epsrel = 1e-14`, and the separation is the distance between the two
-  segments' midpoints rather than a perpendicular offset. The qualitative
-  picture is the same as the parallel case — a plateau, then a collapse to
-  a floor as `epsrel` passes the separation scale — confirming that the
-  general 2-D quadrature path behaves the same way for both segment
-  orientations, and that a future orthogonal closed form would earn the
-  same trustworthiness argument as `parallelGeometryFactor` does today.
+  `epsrel = 1e-14`, swept over the same $10^{-3}$–$10^{-6}$ `epsrel` range
+  as above, and the separation is the distance between the two segments'
+  midpoints rather than a perpendicular offset. The qualitative
+  picture matches the parallel case — the far pair is accurate immediately,
+  closer pairs need progressively tighter `epsrel` and converge gradually
+  rather than at one sharp threshold — confirming that the general 2-D
+  quadrature path behaves the same way for both segment orientations, and
+  that a future orthogonal closed form would earn the same trustworthiness
+  argument `parallelGeometryFactor` already does today.
 - **Coincident (self) factor**: for a segment of length $l$ and radius $r_0$,
   integrating axis-to-surface:
 
