@@ -101,6 +101,23 @@ program test_impedance
                abs(result - expected) < tolerance, &
                "Result: " // trim(adjustl(real_to_str(result))))
 
+  ! Error-estimator sanity: for a smooth integrand the Kronrod-vs-Gauss
+  ! error estimate must be near machine precision, so the adaptive loop
+  ! converges immediately instead of subdividing to the interval cap.
+  ! Guards against wg holding anything other than the true 7-point
+  ! Gauss-Legendre weights (a historical bug: wg held the Kronrod weights
+  ! at the Gauss nodes, making abserr ~ result/2 for ANY integrand, so
+  ! every dqag_k15 call burned the full maxint budget).
+  block
+    real(8) :: abserr
+    call dqag_k15(sin_func, 0.0d0, acos(-1.0d0), 0.0d0, 1.0d-6, result, abserr)
+    call test_ok("dqag_k15 error estimate is tiny for smooth integrand", &
+                 abserr < 1.0d-10 * abs(result), &
+                 "abserr = " // trim(adjustl(real_to_str(abserr))) // &
+                 " -- GK15/G7 estimate should be ~machine eps for sin; " // &
+                 "check the wg Gauss weights in mImpedance")
+  end block
+
   ! ----------------------------------------------------------------
   ! Test 5: 2D integration - TWODQ
   ! ----------------------------------------------------------------

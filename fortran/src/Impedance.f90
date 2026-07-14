@@ -89,11 +89,13 @@ module mImpedance
         0.02293532201052922D+00 ]
   !! Weights for the 15-point Kronrod rule
   real(8), parameter :: wg(7) = [ &
-        0.06309209262997855D+00,  0.1406532597155259D+00, &
-        0.1903505780647854D+00,   0.2094821410847278D+00, &
-        0.1903505780647854D+00,   0.1406532597155259D+00, &
-        0.06309209262997855D+00 ]
-  !! Weights for the nested 7-point Gauss rule (subset of Kronrod nodes)
+        0.1294849661688697D+00,   0.2797053914892767D+00, &
+        0.3818300505051189D+00,   0.4179591836734694D+00, &
+        0.3818300505051189D+00,   0.2797053914892767D+00, &
+        0.1294849661688697D+00 ]
+  !! Weights for the nested 7-point Gauss rule (Gauss-Legendre weights at
+  !! the Gauss nodes, which are a subset of the Kronrod nodes; they sum to
+  !! 2 like the Kronrod weights — NOT the Kronrod weights at those nodes)
   integer, parameter :: igauss(7) = [2, 4, 6, 8, 10, 12, 14]
   !! Indices in xgk/wgk that correspond to the 7-point Gauss rule
 
