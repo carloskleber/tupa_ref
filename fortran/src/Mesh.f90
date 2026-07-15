@@ -437,8 +437,8 @@ contains
     write (*,*)
     write (*,*) desc
     do i = 1, m
-      write(*, "(1x,*(g10.3))") ((real(a(i,j)), " ", j=1,n), j=1,n)
-      write(*, "(1x,*(g10.3))") ((aimag(a(i,j)), " ", j=1,n), j=1,n)
+      write(*, "(1x,*(g10.3))") (real(a(i,j)), " ", j=1,n)
+      write(*, "(1x,*(g10.3))") (aimag(a(i,j)), " ", j=1,n)
     end do
   end subroutine printM
 
