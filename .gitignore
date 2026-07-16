@@ -6,6 +6,6 @@ CLAUDE.local.md
 gui/.venv/
 gui/**/__pycache__/
 gui/.pytest_cache/
-fortran/*_results.*
+fortran/*results.*
 fortran/perf.data
 fortran/gmon.out

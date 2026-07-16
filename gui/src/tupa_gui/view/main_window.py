@@ -5,11 +5,21 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFileDialog, QMainWindow, QMessageBox, QSplitter, QTreeView
+from PySide6.QtWidgets import QFileDialog, QMainWindow, QMessageBox, QSplitter, QTabWidget, QTreeView
 
-from tupa_gui.data import Results, ResultsLoadError, Study, StudyLoadError, load_results, load_study
+from tupa_gui.data import (
+    Results,
+    ResultsLoadError,
+    Study,
+    StudyLoadError,
+    TransientResults,
+    is_transient_results_file,
+    load_results,
+    load_study,
+    load_transient_results,
+)
 
-from .plot_panel import PlotPanel
+from .plot_panel import PlotPanel, TransientPlotPanel
 from .tree import ENTITY_ROLE, build_study_model
 from .viewer3d import GeometryViewer
 
@@ -24,6 +34,10 @@ class MainWindow(QMainWindow):
         self._tree.setHeaderHidden(False)
         self._viewer = GeometryViewer()
         self._plot_panel = PlotPanel()
+        self._transient_plot_panel = TransientPlotPanel()
+        self._results_tabs = QTabWidget()
+        self._results_tabs.addTab(self._plot_panel, "Frequency-domain")
+        self._results_tabs.addTab(self._transient_plot_panel, "Transient")
         # (kind, id) -> tree item, rebuilt on every display_study; lets a 3D
         # click select the matching tree row (selection sync is bidirectional).
         self._tree_entity_items: dict[tuple[str, str], object] = {}
@@ -31,7 +45,7 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Horizontal, self)
         splitter.addWidget(self._tree)
         splitter.addWidget(self._viewer)
-        splitter.addWidget(self._plot_panel)
+        splitter.addWidget(self._results_tabs)
         splitter.setSizes([300, 650, 450])
         self.setCentralWidget(splitter)
 
@@ -91,11 +105,20 @@ class MainWindow(QMainWindow):
 
     def open_results(self, path: str | Path) -> None:
         try:
-            results = load_results(path)
+            transient = is_transient_results_file(path)
+            results = load_transient_results(path) if transient else load_results(path)
         except ResultsLoadError as exc:
             QMessageBox.critical(self, "Failed to load results", str(exc))
             return
-        self.display_results(results)
+        if transient:
+            self.display_transient_results(results)
+        else:
+            self.display_results(results)
 
     def display_results(self, results: Results) -> None:
         self._plot_panel.load_results(results)
+        self._results_tabs.setCurrentWidget(self._plot_panel)
+
+    def display_transient_results(self, results: TransientResults) -> None:
+        self._transient_plot_panel.load_results(results)
+        self._results_tabs.setCurrentWidget(self._transient_plot_panel)

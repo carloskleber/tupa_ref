@@ -17,6 +17,7 @@ when it reproduces every case within the stated tolerance.
 | `rod.json` | Single vertical buried rod (3 m, -0.5 to -3.5 m), same soil, 1∠0° A at `Node_1`, 10 Hz-1 MHz, 8 points/decade | `rod_expected.csv` |
 | `rod_air.json` | Two collinear rods sharing `Node_2` at the air-soil interface (z=0): 10 m above ground down to a 5 m buried rod, same soil/material, 1∠0° A at `Node_1` (top), 10 Hz-1 MHz | none yet — runs NaN-free since the ROADMAP §1 item 9 fix; fixture still to be generated (see below) |
 | `grid.json` | Small buried grounding grid, one square mesh (4 nodes/edges), 1∠0° A at `Node_A`, 100 Hz-100 kHz | `grid_expected.csv` |
+| `portela1997_transient.json` | Same geometry/soil as `portela1997.json`, but a `signal` block (ADR 0015) instead of `sources`/`frequencies`: transient GPR under a 1.2/50 µs, 30 kA double-exponential surge | none (internal-consistency check only, theory.md §9.2 data gap — see `test_transient.f90`) |
 
 `buried_conductor_short.json`/`buried_conductor_long.json` stay εr = 1 soil smoke tests with no
 `sources`/`frequencies` block. The other four carry `sources`/
@@ -52,7 +53,7 @@ which costs roughly 1-2 s per pair regardless of touching/singularity at
 today's tolerances (ROADMAP §6 "Quadrature tolerances", §7 P1) — a bigger
 grid is worth adding once the P1 mHEM single-integral kernel lands.
 
-## Schema (v1 — [ADR 0006](../docs/adr/0006-json-io.md) format, `sources`/`frequencies`/`outputs` frozen by [ADR 0013](../docs/adr/0013-input-schema-sources-frequencies-outputs.md))
+## Schema (v1 — [ADR 0006](../docs/adr/0006-json-io.md) format, `sources`/`frequencies`/`outputs` frozen by [ADR 0013](../docs/adr/0013-input-schema-sources-frequencies-outputs.md), `signal` added by [ADR 0015](../docs/adr/0015-time-domain-signal-schema.md))
 
 ```json
 {
@@ -66,7 +67,13 @@ grid is worth adding once the P1 mHEM single-integral kernel lands.
   "sources": [ { "node": "Node_1", "current": { "re": 1.0, "im": 0.0 } } ],
   "frequencies": { "min": 100.0, "max": 1.0e6, "pointsPerDecade": 3 },
   "outputs": { "nodes": ["Node_1"], "electrodes": ["Line_1"],
-               "quantities": ["voltage", "i1", "i2", "inputImpedance"] }
+               "quantities": ["voltage", "i1", "i2", "inputImpedance"] },
+
+  "signal": {
+    "waveform": "doubleExp", "imax": 30000.0, "front": "f1_2_50", "jones": false,
+    "sourceNode": "Node_1", "observeNodes": ["Node_1"], "observeElectrodes": ["Line_1_e1"],
+    "nyquistHz": 1.0e6, "fftPoints": 1024, "freqZeroHz": 1.0e-6
+  }
 }
 ```
 
@@ -106,6 +113,17 @@ Semantics:
   `outputs.electrodes` for this reason (only `outputs.quantities`, which
   has no such gotcha) — see `test_common_cases.f90` for a worked filtering
   example using the correct generated ID.
+- **`signal`** ([ADR 0015](../docs/adr/0015-time-domain-signal-schema.md))
+  is optional and independent of `sources`/`frequencies` — a case runs a
+  transient (time-domain) solve instead of, or alongside, a harmonic sweep.
+  `waveform` is `"doubleExp"` or `"heidler"` (`fortran/src/Signal.f90`);
+  `front`/`jones` apply only to `"doubleExp"`. `observeNodes` is an array
+  (v(t) is computed for every entry at no extra solve cost — the transient
+  pipeline's single unit-current sweep already covers every node);
+  `observeElectrodes` is an optional array of *discretised* electrode IDs
+  (same ID gotcha as `outputs.electrodes` above) for i1(t)/i2(t). `fftPoints`
+  is the time/FFT sample count, stated explicitly (must be a power of two).
+  See `portela1997_transient.json` for a worked example.
 
 ## Parser subset limits (ADR 0006)
 

@@ -29,7 +29,7 @@ program test_transient
   real(dp), parameter :: length = 10.0d0, r0 = 0.007d0, depth = 0.5d0
   real(dp), parameter :: sigmaSoil = 0.01d0, epsrSoil = 10.0d0
   type(tDoubleExpSignal) :: surge
-  real(dp), allocatable :: t(:), injectedCurrent(:), response(:)
+  real(dp), allocatable :: t(:), injectedCurrent(:), response(:,:)
   complex(dp), allocatable :: zin(:)
   real(dp) :: imax, nyquistHz, freqZeroHz, ratioAtPeak, zinLowFreqMag
   integer(4), parameter :: nSamples = 1024
@@ -56,11 +56,12 @@ program test_transient
   ! ----------------------------------------------------------------
   call test_init("transientResponse: runs end to end")
 
-  call transientResponse(study, surge, "Node_1", "Node_1", nyquistHz, nSamples, freqZeroHz, &
+  call transientResponse(study, surge, "Node_1", ["Node_1"], nyquistHz, nSamples, freqZeroHz, &
                           t, injectedCurrent, response)
 
   call test_ok("time axis has nSamples points", size(t) == nSamples, "")
-  call test_ok("response has nSamples points", size(response) == nSamples, "")
+  call test_ok("response has one row per observe node", size(response, 1) == 1, "")
+  call test_ok("response has nSamples points", size(response, 2) == nSamples, "")
   call test_ok("no NaNs in the response", .not. any(ieee_is_nan(response)), "transient response contains NaN")
   call test_ok("time axis starts at 0", abs(t(1)) < 1.0d-12, "")
   call test_ok("time axis is increasing", all(t(2:) > t(:nSamples - 1)), "")
@@ -77,7 +78,7 @@ program test_transient
   zinLowFreqMag = abs(zin(2))  ! first bin above the freqZero substitute
 
   iPeak = maxloc(injectedCurrent, dim=1)
-  ratioAtPeak = response(iPeak) / injectedCurrent(iPeak)
+  ratioAtPeak = response(1, iPeak) / injectedCurrent(iPeak)
 
   call test_ok("Re(Zin) >= 0 across the transient's frequency axis (passivity)", &
                all(real(zin) >= -1.0d-9 * max(1.0d0, abs(zin))), &

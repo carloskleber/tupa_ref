@@ -24,7 +24,7 @@ program example5
   real(8), parameter :: length = 10.0d0, r0 = 0.007d0, depth = 0.5d0
   real(8), parameter :: sigmaSoil = 0.01d0, epsrSoil = 10.0d0
   type(tDoubleExpSignal) :: surge
-  real(8), allocatable :: t(:), injectedCurrent(:), response(:)
+  real(8), allocatable :: t(:), injectedCurrent(:), response(:,:)
   real(8) :: imax, nyquistHz, freqZeroHz
   integer, parameter :: nSamples = 1024
   integer :: k, stride
@@ -47,19 +47,19 @@ program example5
   nyquistHz = 1.0d6
   freqZeroHz = 1.0d-6
 
-  call transientResponse(study, surge, "Node_1", "Node_1", nyquistHz, nSamples, freqZeroHz, &
+  call transientResponse(study, surge, "Node_1", ["Node_1"], nyquistHz, nSamples, freqZeroHz, &
                           t, injectedCurrent, response)
 
   print *, ""
   print '(A14,A16,A16)', "t (us)", "i(t) (A)", "GPR v(t) (V)"
   stride = nSamples / 32
   do k = 1, nSamples, stride
-    print '(F14.3,F16.2,F16.2)', t(k) * 1.0d6, injectedCurrent(k), response(k)
+    print '(F14.3,F16.2,F16.2)', t(k) * 1.0d6, injectedCurrent(k), response(1, k)
   end do
 
   print *, ""
   print '(A,F0.2,A)', "Peak injected current: ", maxval(injectedCurrent), " A"
-  print '(A,F0.2,A)', "Peak GPR: ", maxval(response), " V"
+  print '(A,F0.2,A)', "Peak GPR: ", maxval(response(1,:)), " V"
 
   print *, color_green, "Example 5 completed.", color_reset
 end program example5

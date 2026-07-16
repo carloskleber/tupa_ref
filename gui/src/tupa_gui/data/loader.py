@@ -16,9 +16,13 @@ from .model import (
     NodeVoltage,
     Outputs,
     Results,
+    Signal,
     Soil,
     Source,
     Study,
+    TransientElectrodeCurrent,
+    TransientNodeVoltage,
+    TransientResults,
 )
 
 logger = logging.getLogger(__name__)
@@ -78,6 +82,22 @@ def load_study(path: str | Path) -> Study:
             quantities=list(o.get("quantities", [])),
         )
 
+    signal = None
+    if "signal" in raw:
+        sig = raw["signal"]
+        signal = Signal(
+            waveform=sig["waveform"],
+            imax=sig["imax"],
+            source_node=sig["sourceNode"],
+            observe_nodes=list(sig["observeNodes"]),
+            nyquist_hz=sig["nyquistHz"],
+            fft_points=sig["fftPoints"],
+            front=sig.get("front"),
+            jones=sig.get("jones", False),
+            observe_electrodes=list(sig.get("observeElectrodes", [])),
+            freq_zero_hz=sig.get("freqZeroHz", 1.0e-6),
+        )
+
     return Study(
         title=raw.get("title", path.stem),
         soil=soil,
@@ -87,6 +107,7 @@ def load_study(path: str | Path) -> Study:
         sources=sources,
         frequencies=frequencies,
         outputs=outputs,
+        signal=signal,
     )
 
 
@@ -127,3 +148,50 @@ def load_results(path: str | Path) -> Results:
         electrodes=electrodes,
         input_impedance=input_impedance,
     )
+
+
+def load_transient_results(path: str | Path) -> TransientResults:
+    """Load a transient (time-domain) results JSON (ADR 0015) — real-valued
+    time series, distinct from `load_results`'s frequency-domain shape."""
+    path = Path(path)
+    try:
+        raw = json.loads(path.read_text())
+    except json.JSONDecodeError as exc:
+        raise ResultsLoadError(f"{path}: invalid JSON ({exc})") from exc
+
+    try:
+        time = [float(v) for v in raw["time"]]
+        injected_current = [float(v) for v in raw["injectedCurrent"]]
+        nodes = [TransientNodeVoltage(id=n["id"], voltage=[float(v) for v in n["voltage"]]) for n in raw.get("nodes", [])]
+        electrodes = [
+            TransientElectrodeCurrent(
+                id=e["id"],
+                i1=[float(v) for v in e["i1"]],
+                i2=[float(v) for v in e["i2"]],
+            )
+            for e in raw.get("electrodes", [])
+        ]
+    except KeyError as exc:
+        raise ResultsLoadError(f"{path}: missing required field {exc}") from exc
+
+    return TransientResults(
+        title=raw.get("title", path.stem),
+        source_node=raw.get("sourceNode", ""),
+        time=time,
+        injected_current=injected_current,
+        nodes=nodes,
+        electrodes=electrodes,
+    )
+
+
+def is_transient_results_file(path: str | Path) -> bool:
+    """True if the JSON at `path` is a transient results file (ADR 0015,
+    top-level `"time"` key) rather than a frequency-domain one (ADR 0012,
+    `"frequencies"`) — lets the GUI dispatch "Open results…" to the right
+    loader/panel without the caller parsing JSON itself."""
+    path = Path(path)
+    try:
+        raw = json.loads(path.read_text())
+    except json.JSONDecodeError as exc:
+        raise ResultsLoadError(f"{path}: invalid JSON ({exc})") from exc
+    return "time" in raw

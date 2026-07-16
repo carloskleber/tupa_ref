@@ -1,16 +1,20 @@
 module mResultsWriter
   !! CSV (primary) and JSON results writers for a solved `tStudy` sweep
-  !! (ROADMAP.md Phase 3 item 3). The JSON shape is frozen by
-  !! [ADR 0012](../../docs/adr/0012-results-json-schema.md); the CSV shape
-  !! is this writer's own choice (CONVENTIONS.md only fixes CSV as primary,
-  !! not its columns) — tidy/long form (one row per frequency x quantity x
-  !! entity) so column count doesn't depend on node/electrode count.
+  !! (ROADMAP.md Phase 3 item 3), plus the transient (time-domain) results
+  !! writer (ADR 0015). The JSON shapes are frozen by
+  !! [ADR 0012](../../docs/adr/0012-results-json-schema.md) (frequency
+  !! domain) and [ADR 0015](../../docs/adr/0015-time-domain-signal-schema.md)
+  !! (transient); the CSV shape is this writer's own choice (CONVENTIONS.md
+  !! only fixes CSV as primary, not its columns) — tidy/long form (one row
+  !! per axis-point x quantity x entity) so column count doesn't depend on
+  !! node/electrode count.
   use mStudy
   use mError, only: raiseError
   implicit none
   private
 
   public :: writeResultsCsv, writeResultsJson
+  public :: writeTransientResultsCsv, writeTransientResultsJson
 
 contains
 
@@ -229,5 +233,142 @@ contains
 
     close(unit)
   end subroutine writeResultsJson
+
+  ! =====================================================================
+  ! Transient (time-domain) results, ADR 0015
+  ! =====================================================================
+
+  subroutine writeTransientResultsCsv(sourceNodeId, t, injectedCurrent, observeNodeIds, &
+                                       nodeResponses, filename, observeElectrodeIds, i1Responses, i2Responses)
+    !! Tidy (long) CSV for a `mTransient%transientResponse` run: one row per
+    !! (time, quantity, entity), columns `time_s,quantity,id,value`.
+    !! `quantity` is `injectedCurrent` (id = `sourceNodeId`), `voltage`
+    !! (id = an `observeNodeIds` entry), or `i1`/`i2` (id = an
+    !! `observeElectrodeIds` entry, only written if present). No `title`
+    !! column, matching `writeResultsCsv`'s convention of not carrying the
+    !! study title into the tidy CSV.
+    character(len=*), intent(in) :: sourceNodeId
+    real(8), intent(in) :: t(:)
+    real(8), intent(in) :: injectedCurrent(:)
+    character(len=*), intent(in) :: observeNodeIds(:)
+    real(8), intent(in) :: nodeResponses(:,:)
+    !! Shape (size(observeNodeIds), size(t))
+    character(len=*), intent(in) :: filename
+    character(len=*), intent(in), optional :: observeElectrodeIds(:)
+    real(8), intent(in), optional :: i1Responses(:,:), i2Responses(:,:)
+    !! Shape (size(observeElectrodeIds), size(t)) each, if present
+    integer :: unit, nt, k, i
+    character(len=256) :: id
+
+    nt = size(t)
+    open(newunit=unit, file=filename, status="replace", action="write")
+    write(unit, '(A)') "time_s,quantity,id,value"
+
+    do k = 1, nt
+      write(unit, '(A)') trim(fmtReal(t(k))) // ",injectedCurrent," // trim(sourceNodeId) // "," // &
+        trim(fmtReal(injectedCurrent(k)))
+      do i = 1, size(observeNodeIds)
+        id = trim(observeNodeIds(i))
+        write(unit, '(A)') trim(fmtReal(t(k))) // ",voltage," // trim(id) // "," // &
+          trim(fmtReal(nodeResponses(i, k)))
+      end do
+      if (present(observeElectrodeIds)) then
+        do i = 1, size(observeElectrodeIds)
+          id = trim(observeElectrodeIds(i))
+          if (present(i1Responses)) write(unit, '(A)') trim(fmtReal(t(k))) // ",i1," // trim(id) // "," // &
+            trim(fmtReal(i1Responses(i, k)))
+          if (present(i2Responses)) write(unit, '(A)') trim(fmtReal(t(k))) // ",i2," // trim(id) // "," // &
+            trim(fmtReal(i2Responses(i, k)))
+        end do
+      end if
+    end do
+
+    close(unit)
+  end subroutine writeTransientResultsCsv
+
+  subroutine writeTransientResultsJson(title, sourceNodeId, t, injectedCurrent, observeNodeIds, &
+                                        nodeResponses, filename, observeElectrodeIds, i1Responses, i2Responses)
+    !! Write a `mTransient%transientResponse` run as ADR 0015 transient
+    !! results JSON: `{title, sourceNode, time, injectedCurrent,
+    !! nodes[{id,voltage}], electrodes[{id,i1,i2}]}`. `electrodes` is
+    !! present only when `observeElectrodeIds` is given.
+    character(len=*), intent(in) :: title
+    character(len=*), intent(in) :: sourceNodeId
+    real(8), intent(in) :: t(:)
+    real(8), intent(in) :: injectedCurrent(:)
+    character(len=*), intent(in) :: observeNodeIds(:)
+    real(8), intent(in) :: nodeResponses(:,:)
+    !! Shape (size(observeNodeIds), size(t))
+    character(len=*), intent(in) :: filename
+    character(len=*), intent(in), optional :: observeElectrodeIds(:)
+    real(8), intent(in), optional :: i1Responses(:,:), i2Responses(:,:)
+    !! Shape (size(observeElectrodeIds), size(t)) each, if present
+    integer :: unit, nt, i, k
+
+    nt = size(t)
+    open(newunit=unit, file=filename, status="replace", action="write")
+    write(unit, '(A)') "{"
+    write(unit, '(A)') '  "title": "' // trim(title) // '",'
+    write(unit, '(A)') '  "sourceNode": "' // trim(sourceNodeId) // '",'
+
+    write(unit, '(A)', advance="no") '  "time": ['
+    do k = 1, nt
+      write(unit, '(A)', advance="no") trim(fmtReal(t(k)))
+      if (k < nt) write(unit, '(A)', advance="no") ", "
+    end do
+    write(unit, '(A)') "],"
+
+    write(unit, '(A)', advance="no") '  "injectedCurrent": ['
+    do k = 1, nt
+      write(unit, '(A)', advance="no") trim(fmtReal(injectedCurrent(k)))
+      if (k < nt) write(unit, '(A)', advance="no") ", "
+    end do
+    write(unit, '(A)') "],"
+
+    write(unit, '(A)') '  "nodes": ['
+    do i = 1, size(observeNodeIds)
+      write(unit, '(A)', advance="no") '    { "id": "' // trim(observeNodeIds(i)) // '", "voltage": ['
+      do k = 1, nt
+        write(unit, '(A)', advance="no") trim(fmtReal(nodeResponses(i, k)))
+        if (k < nt) write(unit, '(A)', advance="no") ", "
+      end do
+      write(unit, '(A)', advance="no") "] }"
+      if (i < size(observeNodeIds)) write(unit, '(A)') ","
+    end do
+    write(unit, '(A)') ""
+    if (present(observeElectrodeIds)) then
+      write(unit, '(A)') "  ],"
+      write(unit, '(A)') '  "electrodes": ['
+      do i = 1, size(observeElectrodeIds)
+        write(unit, '(A)', advance="no") '    { "id": "' // trim(observeElectrodeIds(i)) // '"'
+        if (present(i1Responses)) then
+          write(unit, '(A)', advance="no") ', "i1": ['
+          do k = 1, nt
+            write(unit, '(A)', advance="no") trim(fmtReal(i1Responses(i, k)))
+            if (k < nt) write(unit, '(A)', advance="no") ", "
+          end do
+          write(unit, '(A)', advance="no") "]"
+        end if
+        if (present(i2Responses)) then
+          write(unit, '(A)', advance="no") ', "i2": ['
+          do k = 1, nt
+            write(unit, '(A)', advance="no") trim(fmtReal(i2Responses(i, k)))
+            if (k < nt) write(unit, '(A)', advance="no") ", "
+          end do
+          write(unit, '(A)', advance="no") "]"
+        end if
+        write(unit, '(A)', advance="no") " }"
+        if (i < size(observeElectrodeIds)) write(unit, '(A)') ","
+      end do
+      write(unit, '(A)') ""
+      write(unit, '(A)') "  ]"
+    else
+      write(unit, '(A)') "  ],"
+      write(unit, '(A)') '  "electrodes": []'
+    end if
+    write(unit, '(A)') "}"
+
+    close(unit)
+  end subroutine writeTransientResultsJson
 
 end module mResultsWriter

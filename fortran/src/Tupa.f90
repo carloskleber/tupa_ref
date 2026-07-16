@@ -26,7 +26,10 @@ module tupa
   use mMaterial
   use mElementLine
   use mJsonParser
-  use mResultsWriter, only: writeResultsCsv, writeResultsJson
+  use mSignal, only: tSignal, newHeidlerSignal, newDoubleExpSignal
+  use mTransient, only: transientResponse
+  use mResultsWriter, only: writeResultsCsv, writeResultsJson, &
+                             writeTransientResultsCsv, writeTransientResultsJson
   use mError, only: raiseError
   use mVerbosity
   implicit none
@@ -41,7 +44,9 @@ contains
   ! =====================================================================
 
   subroutine loadStudy(filename, study, sourceNodeIds, sourceCurrents, freqHz, &
-                        outputNodeIds, outputElectrodeIds, outputQuantities)
+                        outputNodeIds, outputElectrodeIds, outputQuantities, &
+                        signal, signalSourceNode, signalObserveNodeIds, signalObserveElectrodeIds, &
+                        signalNyquistHz, signalFftPoints, signalFreqZeroHz)
     !! Parse a JSON study file and populate all fields of a tStudy object.
     !!
     !! Performs the following steps:
@@ -55,6 +60,8 @@ contains
     !!    "sources"/"frequencies"/"outputs" blocks into the corresponding
     !!    optional output arguments; a structure-only case file (no such
     !!    blocks) leaves them unallocated.
+    !! 8. If present (ADR 0015), parse the optional "signal" block into the
+    !!    corresponding optional output arguments.
     !!
     !! After this call, `study%structure` is fully populated and ready for assembly.
     !! Call `study%structure%assembleStructure()` to discretise elements into nodes
@@ -76,6 +83,22 @@ contains
     !! Electrode IDs from "outputs.electrodes"; unallocated means "all electrodes"
     character(len=256), allocatable, intent(out), optional :: outputQuantities(:)
     !! Quantity names from "outputs.quantities"; unallocated means "all quantities"
+    class(tSignal), allocatable, intent(out), optional :: signal
+    !! Excitation waveform from the "signal" block (ADR 0015); unallocated
+    !! means the case file has no transient run to perform
+    character(len=256), intent(out), optional :: signalSourceNode
+    !! "signal.sourceNode" — node receiving the excitation current
+    character(len=256), allocatable, intent(out), optional :: signalObserveNodeIds(:)
+    !! "signal.observeNodes" — node(s) whose v(t) is computed
+    character(len=256), allocatable, intent(out), optional :: signalObserveElectrodeIds(:)
+    !! "signal.observeElectrodes" (optional in the JSON); unallocated means
+    !! no electrode current is computed for this run
+    real(8), intent(out), optional :: signalNyquistHz
+    !! "signal.nyquistHz" — spectrum upper bound (Hz)
+    integer, intent(out), optional :: signalFftPoints
+    !! "signal.fftPoints" — number of time/FFT samples (power of two)
+    real(8), intent(out), optional :: signalFreqZeroHz
+    !! "signal.freqZeroHz", default 1.0e-6 if absent from the JSON
 
     type(tJsonValue), target  :: root
     !! Root of the parsed JSON tree (must be TARGET for child pointers)
@@ -86,6 +109,8 @@ contains
     type(tJsonValue), pointer :: sources_arr, src_obj, current_obj
     type(tJsonValue), pointer :: freq_obj, outputs_obj, strArr
     !! Pointers for the sources/frequencies/outputs blocks (ADR 0013)
+    type(tJsonValue), pointer :: signal_obj
+    !! Pointer for the "signal" block (ADR 0015)
     class(tMaterial), allocatable :: mat
     !! Temporary material object for adding to structure
     class(tElement),  allocatable :: elem
@@ -206,6 +231,52 @@ contains
         call readJsonStringArray(strArr, outputQuantities)
       end if
     end if
+
+    ! ------------------------------------------------------------------
+    ! Optional signal block (ADR 0015): time-domain excitation, independent
+    ! of sources/frequencies (a case may carry either, both, or neither).
+    ! ------------------------------------------------------------------
+
+    if (present(signal) .and. json_has(root, "signal")) then
+      signal_obj => json_child(root, "signal")
+      block
+        character(len=256) :: waveformType, front
+        real(8) :: imax
+
+        waveformType = json_str(signal_obj, "waveform")
+        imax = json_real(signal_obj, "imax")
+        select case (trim(waveformType))
+        case ("heidler")
+          allocate(signal, source=newHeidlerSignal(imax))
+        case ("doubleExp")
+          front = json_str(signal_obj, "front")
+          allocate(signal, source=newDoubleExpSignal(imax, trim(front), jones=json_getbool(signal_obj, "jones")))
+        case default
+          call raiseError("mTupa: unknown signal.waveform '" // trim(waveformType) // &
+                           "' (expected heidler or doubleExp)")
+          return
+        end select
+
+        if (present(signalSourceNode)) signalSourceNode = json_str(signal_obj, "sourceNode")
+        if (present(signalObserveNodeIds)) then
+          strArr => json_child(signal_obj, "observeNodes")
+          call readJsonStringArray(strArr, signalObserveNodeIds)
+        end if
+        if (present(signalObserveElectrodeIds) .and. json_has(signal_obj, "observeElectrodes")) then
+          strArr => json_child(signal_obj, "observeElectrodes")
+          call readJsonStringArray(strArr, signalObserveElectrodeIds)
+        end if
+        if (present(signalNyquistHz)) signalNyquistHz = json_real(signal_obj, "nyquistHz")
+        if (present(signalFftPoints)) signalFftPoints = json_int(signal_obj, "fftPoints")
+        if (present(signalFreqZeroHz)) then
+          if (json_has(signal_obj, "freqZeroHz")) then
+            signalFreqZeroHz = json_real(signal_obj, "freqZeroHz")
+          else
+            signalFreqZeroHz = 1.0d-6
+          end if
+        end if
+      end block
+    end if
   end subroutine loadStudy
 
   subroutine readJsonStringArray(arr, out)
@@ -237,16 +308,23 @@ contains
     !! to end, and report.
     !!
     !! Always discretises the structure (`assembleStructure`, directly for
-    !! a structure-only case or via `runSweep` -> `prepareStudy` when a
-    !! sweep runs) before `study%report()`, so the printed element list
-    !! shows real electrode segment IDs instead of "None" (report() before
-    !! assembly cannot see them — the elements haven't been split into
-    !! segments yet). If the case also carries `sources`/`frequencies`
-    !! (ADR 0013), additionally runs the sweep and writes
-    !! `<basename>_results.csv`/`.json` (`mResultsWriter`) to the current
-    !! directory, honouring an `outputs` selection if present. A
-    !! structure-only case (like `buried_conductor_short.json`) stops
-    !! after the summary — there is nothing to sweep.
+    !! a structure-only case or via `runSweep`/`transientResponse` ->
+    !! `prepareStudy` when either runs) before `study%report()`, so the
+    !! printed element list shows real electrode segment IDs instead of
+    !! "None" (report() before assembly cannot see them — the elements
+    !! haven't been split into segments yet). `sources`/`frequencies`
+    !! (ADR 0013) and `signal` (ADR 0015) are independent: either, both, or
+    !! neither may be present. Each that is writes its own results
+    !! (`<basename>_results.csv/.json` for the sweep,
+    !! `<basename>_transient_results.csv/.json` for the transient run,
+    !! `mResultsWriter`) to the current directory, honouring an `outputs`
+    !! selection if present. The sweep's results are written before
+    !! `transientResponse` runs, since `transientResponse` calls
+    !! `study%runSweep` internally (its own unit-current, FFT-sample
+    !! frequency axis) and would otherwise overwrite the harmonic sweep's
+    !! stored results first. A structure-only case (like
+    !! `buried_conductor_short.json`) stops after the summary — there is
+    !! nothing to solve.
     character(len=*), intent(in) :: filename
     !! Path to the JSON study file
     type(tStudy) :: study
@@ -255,6 +333,13 @@ contains
     character(len=256), allocatable :: outputNodeIds(:), outputElectrodeIds(:), outputQuantities(:)
     complex(8), allocatable :: sourceCurrents(:)
     real(8), allocatable :: freqHz(:)
+    class(tSignal), allocatable :: signal
+    character(len=256) :: signalSourceNode
+    character(len=256), allocatable :: signalObserveNodeIds(:), signalObserveElectrodeIds(:)
+    real(8) :: signalNyquistHz, signalFreqZeroHz
+    integer :: signalFftPoints
+    real(8), allocatable :: t(:), injectedCurrent(:), nodeResponses(:,:), i1Responses(:,:), i2Responses(:,:)
+    logical :: ranSweep, ranTransient
     character(len=512) :: base, csvFile, jsonFile
     integer(8) :: clockStart, clockEnd, clockRate
 
@@ -267,13 +352,21 @@ contains
     call loadStudy(filename, study, sourceNodeIds=sourceNodeIds, &
                    sourceCurrents=sourceCurrents, freqHz=freqHz, &
                    outputNodeIds=outputNodeIds, outputElectrodeIds=outputElectrodeIds, &
-                   outputQuantities=outputQuantities)
+                   outputQuantities=outputQuantities, &
+                   signal=signal, signalSourceNode=signalSourceNode, &
+                   signalObserveNodeIds=signalObserveNodeIds, &
+                   signalObserveElectrodeIds=signalObserveElectrodeIds, &
+                   signalNyquistHz=signalNyquistHz, signalFftPoints=signalFftPoints, &
+                   signalFreqZeroHz=signalFreqZeroHz)
 
-    if (allocated(sourceNodeIds) .and. allocated(freqHz)) then
+    ranSweep     = allocated(sourceNodeIds) .and. allocated(freqHz)
+    ranTransient = allocated(signal)
+    base = basenameNoExt(filename)
+
+    if (ranSweep) then
       call study%runSweep(freqHz, sourceNodeIds, sourceCurrents)
       call study%report()
 
-      base     = basenameNoExt(filename)
       csvFile  = trim(base) // "_results.csv"
       jsonFile = trim(base) // "_results.json"
       call writeResultsCsv(study, trim(csvFile), nodeIds=outputNodeIds, &
@@ -284,12 +377,39 @@ contains
         print *, ""
         print *, "Wrote ", trim(csvFile), " and ", trim(jsonFile)
       end if
-    else
+    end if
+
+    if (ranTransient) then
+      if (allocated(signalObserveElectrodeIds)) then
+        call transientResponse(study, signal, trim(signalSourceNode), signalObserveNodeIds, &
+          signalNyquistHz, signalFftPoints, signalFreqZeroHz, t, injectedCurrent, nodeResponses, &
+          observeElectrodeIds=signalObserveElectrodeIds, i1Responses=i1Responses, i2Responses=i2Responses)
+      else
+        call transientResponse(study, signal, trim(signalSourceNode), signalObserveNodeIds, &
+          signalNyquistHz, signalFftPoints, signalFreqZeroHz, t, injectedCurrent, nodeResponses)
+      end if
+      if (.not. ranSweep) call study%report()
+
+      csvFile  = trim(base) // "_transient_results.csv"
+      jsonFile = trim(base) // "_transient_results.json"
+      call writeTransientResultsCsv(trim(signalSourceNode), t, injectedCurrent, &
+        signalObserveNodeIds, nodeResponses, trim(csvFile), &
+        observeElectrodeIds=signalObserveElectrodeIds, i1Responses=i1Responses, i2Responses=i2Responses)
+      call writeTransientResultsJson(study%title, trim(signalSourceNode), t, injectedCurrent, &
+        signalObserveNodeIds, nodeResponses, trim(jsonFile), &
+        observeElectrodeIds=signalObserveElectrodeIds, i1Responses=i1Responses, i2Responses=i2Responses)
+      if (verbosityLevel() >= VERB_NORMAL) then
+        print *, ""
+        print *, "Wrote ", trim(csvFile), " and ", trim(jsonFile)
+      end if
+    end if
+
+    if (.not. (ranSweep .or. ranTransient)) then
       call study%structure%assembleStructure()
       call study%report()
       if (verbosityLevel() >= VERB_NORMAL) then
         print *, ""
-        print *, "(structure-only case: no sources/frequencies block -- nothing to sweep)"
+        print *, "(structure-only case: no sources/frequencies/signal block -- nothing to solve)"
       end if
     end if
 

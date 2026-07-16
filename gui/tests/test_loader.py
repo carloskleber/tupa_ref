@@ -52,6 +52,28 @@ def test_load_example2_two_elements():
     assert [n.id for n in study.nodes] == ["Node_1", "Node_2", "Node_3"]
     assert [e.id for e in study.elements] == ["Line_1", "Line_2"]
 
+    assert study.signal is None
+
+
+def test_load_portela1997_transient_signal_block():
+    study = load_study(COMMON / "portela1997_transient.json")
+
+    assert study.sources == []
+    assert study.frequencies is None
+
+    assert study.signal is not None
+    signal = study.signal
+    assert signal.waveform == "doubleExp"
+    assert signal.imax == pytest.approx(30000.0)
+    assert signal.front == "f1_2_50"
+    assert signal.jones is False
+    assert signal.source_node == "Node_1"
+    assert signal.observe_nodes == ["Node_1", "Node_2"]
+    assert signal.observe_electrodes == ["Line_1_e1"]
+    assert signal.nyquist_hz == pytest.approx(1.0e6)
+    assert signal.fft_points == 1024
+    assert signal.freq_zero_hz == pytest.approx(1.0e-6)  # default, omitted in the JSON
+
 
 def test_unknown_element_type_is_skipped(tmp_path, caplog):
     data = {

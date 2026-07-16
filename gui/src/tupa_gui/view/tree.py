@@ -85,4 +85,22 @@ def build_study_model(study: Study) -> tuple[QStandardItemModel, dict[tuple[str,
         outputs.setText("Outputs  (none, everything stored)")
     root.appendRow(outputs)
 
+    signal = _row("Signal")
+    if study.signal is not None:
+        s = study.signal
+        signal.appendRow(_row("waveform", s.waveform))
+        signal.appendRow(_row("imax", f"{s.imax} A"))
+        if s.front is not None:
+            signal.appendRow(_row("front", s.front))
+            signal.appendRow(_row("jones", str(s.jones)))
+        signal.appendRow(_row("sourceNode", s.source_node))
+        signal.appendRow(_row("observeNodes", ", ".join(s.observe_nodes)))
+        signal.appendRow(_row("observeElectrodes", ", ".join(s.observe_electrodes) if s.observe_electrodes else "(none)"))
+        signal.appendRow(_row("nyquistHz", f"{s.nyquist_hz} Hz"))
+        signal.appendRow(_row("fftPoints", str(s.fft_points)))
+        signal.appendRow(_row("freqZeroHz", f"{s.freq_zero_hz} Hz"))
+    else:
+        signal.setText("Signal  (none)")
+    root.appendRow(signal)
+
     return model, entity_items

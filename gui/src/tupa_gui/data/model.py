@@ -72,6 +72,24 @@ class Outputs:
     quantities: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class Signal:
+    """Time-domain excitation spec (ADR 0015) — independent of
+    `sources`/`frequencies`; a study may carry either, both, or neither.
+    `front`/`jones` only apply to `waveform == "doubleExp"`."""
+
+    waveform: str
+    imax: float
+    source_node: str
+    observe_nodes: list[str]
+    nyquist_hz: float
+    fft_points: int
+    front: str | None = None
+    jones: bool = False
+    observe_electrodes: list[str] = field(default_factory=list)
+    freq_zero_hz: float = 1.0e-6
+
+
 @dataclass
 class Study:
     title: str
@@ -82,6 +100,7 @@ class Study:
     sources: list[Source] = field(default_factory=list)
     frequencies: FrequencySweep | None = None
     outputs: Outputs | None = None
+    signal: Signal | None = None
 
     def node(self, node_id: str) -> Node:
         for n in self.nodes:
@@ -129,6 +148,49 @@ class Results:
         raise KeyError(f"unknown node id: {node_id!r}")
 
     def electrode(self, electrode_id: str) -> ElectrodeCurrent:
+        for e in self.electrodes:
+            if e.id == electrode_id:
+                return e
+        raise KeyError(f"unknown electrode id: {electrode_id!r}")
+
+
+@dataclass(frozen=True)
+class TransientNodeVoltage:
+    id: str
+    voltage: list[float]
+    """Real-valued v(t) (V) — the transient response, not a phasor."""
+
+
+@dataclass(frozen=True)
+class TransientElectrodeCurrent:
+    id: str
+    i1: list[float]
+    """Longitudinal current i1(t) (A)."""
+    i2: list[float]
+    """Transverse (leakage) current i2(t) (A)."""
+
+
+@dataclass
+class TransientResults:
+    """Mirrors the transient results JSON schema (ADR 0015) — real-valued
+    time series, structurally parallel to `Results` (ADR 0012) but a
+    distinct shape since the axis/quantities are unrelated (`time`, not
+    `frequencies`; real values, not `{"re":..,"im":..}` phasors)."""
+
+    title: str
+    source_node: str
+    time: list[float]
+    injected_current: list[float]
+    nodes: list[TransientNodeVoltage] = field(default_factory=list)
+    electrodes: list[TransientElectrodeCurrent] = field(default_factory=list)
+
+    def node(self, node_id: str) -> TransientNodeVoltage:
+        for n in self.nodes:
+            if n.id == node_id:
+                return n
+        raise KeyError(f"unknown node id: {node_id!r}")
+
+    def electrode(self, electrode_id: str) -> TransientElectrodeCurrent:
         for e in self.electrodes:
             if e.id == electrode_id:
                 return e

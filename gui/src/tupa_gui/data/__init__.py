@@ -1,4 +1,11 @@
-from .loader import ResultsLoadError, StudyLoadError, load_results, load_study
+from .loader import (
+    ResultsLoadError,
+    StudyLoadError,
+    is_transient_results_file,
+    load_results,
+    load_study,
+    load_transient_results,
+)
 from .model import (
     ElectrodeCurrent,
     FrequencySweep,
@@ -8,9 +15,13 @@ from .model import (
     NodeVoltage,
     Outputs,
     Results,
+    Signal,
     Soil,
     Source,
     Study,
+    TransientElectrodeCurrent,
+    TransientNodeVoltage,
+    TransientResults,
 )
 
 __all__ = [
@@ -23,10 +34,16 @@ __all__ = [
     "Outputs",
     "Results",
     "ResultsLoadError",
+    "Signal",
     "Soil",
     "Source",
     "Study",
     "StudyLoadError",
+    "TransientElectrodeCurrent",
+    "TransientNodeVoltage",
+    "TransientResults",
+    "is_transient_results_file",
     "load_results",
     "load_study",
+    "load_transient_results",
 ]

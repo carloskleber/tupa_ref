@@ -1,0 +1,13 @@
+{
+  "title": "Portela 1997 validation conductor - transient GPR under 1.2/50 us surge",
+  "sourceNode": "Node_1",
+  "time": [0.0, 5e-7, 1e-6, 1.5e-6],
+  "injectedCurrent": [0.0, 25487.88, 30500.12, 29102.55],
+  "nodes": [
+    { "id": "Node_1", "voltage": [56032.24, 356818.18, 421903.77, 401255.60] },
+    { "id": "Node_2", "voltage": [-25334.87, 198765.43, 250112.09, 238904.31] }
+  ],
+  "electrodes": [
+    { "id": "Line_1_e1", "i1": [0.0, 22614.79, 27012.33, 25801.47], "i2": [651.93, 5123.66, 6055.80, 5788.21] }
+  ]
+}
