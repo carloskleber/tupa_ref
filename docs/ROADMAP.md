@@ -387,16 +387,50 @@ change to the `tLinear` path it was factored alongside.
 `outputs` runs end to end (`runStudyFromFile` → `mResultsWriter`) with no
 hand-wired Fortran, and three such cases are pinned as regression fixtures.
 
-### Phase 6 — Sources and time domain
+### Phase 6 — Sources and time domain — **done (items 1-2); item 3 internal-consistency scope**
 
-1. Signal waveforms: Heidler, double exponential (the Matlab reference ships
-   Heidler, double exponential plus a Jones-parametrised variant, single
-   exponential, impulse/step, Portela's concave model and sine — port as
-   needed).
-2. FFT driver: excitation spectrum → transfer function → IFFT (stdlib FFT or
-   FFTW); Hanning taper / analytic-continuation notes in theory.md §8.
-3. Validation: impulse response of the Phase 2 conductor vs published
-   waveforms.
+1. ~~Signal waveforms: Heidler, double exponential (the Matlab reference
+   ships Heidler, double exponential plus a Jones-parametrised variant,
+   single exponential, impulse/step, Portela's concave model and sine —
+   port as needed).~~ Done in `fortran/src/Signal.f90` (`mSignal`):
+   `tHeidlerSignal` (the legacy 6-term parameter set, "Baseada na
+   implementacao do Tony" — no independently citable source, ported
+   verbatim and flagged as such) and `tDoubleExpSignal` (the four named
+   front/tail forms, `f1_2_5`/`f1_2_50`/`f1_2_200`/`f250_2500`, plus the
+   Jones-corrected zero-initial-slope front, `jones=.true.`). The
+   remaining legacy waveforms (single exponential, impulse/step, Portela's
+   concave model, sine) are not ported — no case has needed them yet.
+2. ~~FFT driver: excitation spectrum → transfer function → IFFT (stdlib FFT
+   or FFTW); Hanning taper / analytic-continuation notes in theory.md
+   §8.~~ Done: `fortran/src/Transient.f90` (`mTransient`)'s
+   `transientResponse` samples the waveform, applies the legacy sigmoid
+   tail taper (`mSignal%tailTaper`), forward-transforms, solves a unit-current
+   `tStudy%runSweep` across a linear one-sided frequency axis (the DC bin
+   replaced by a small nonzero `freqZeroHz`, matching the legacy
+   `FREQ_ZERO` convention — §3 finding 9's zero-admittance singularity
+   otherwise bites at exactly ω=0), multiplies spectra, rebuilds the full
+   spectrum by conjugate symmetry, and inverse-transforms — mirroring
+   `sinais.Sinal.fourier`/`ifourier.m`/`lesinais.m` bin-for-bin, quirks
+   included. Neither stdlib (no FFT module in the pinned 0.8.1 dependency)
+   nor SLATEC's `CFFTF`/`CFFTB` (single precision only — would downcast the
+   double-precision physics) fit; **decision**: a small in-repo
+   double-precision radix-2 FFT (`fortran/src/Fft.f90`, `mFft`), see
+   [ADR 0014](adr/0014-fft-implementation.md) — resolves the §6 "FFT
+   dependency" open decision.
+3. **Internal-consistency scope, not curve validation**: no tabulated
+   time-domain reference waveform exists for the Phase 2 conductor (same
+   data gap as the harmonic curve, theory.md §9.2), so
+   `fortran/test/test_transient.f90` checks that the transient GPR at the
+   injection node tracks the already-validated low-frequency input
+   impedance (test_solve.f90/test_sweep.f90) instead: for a slow
+   (250/2500 µs) double-exponential surge, whose spectral energy sits
+   almost entirely inside the resistive low-frequency plateau, the
+   response-to-current ratio at the excitation peak matches `|Zin|` at the
+   lowest nonzero frequency bin within 25%. `fortran/example/example5.f90`
+   demonstrates the full pipeline on a standard 1.2/50 µs surge and prints
+   the GPR waveform for inspection; matching a published curve is deferred
+   the same way Phase 2/4's harmonic validation was, pending real reference
+   data or a cross-code oracle (§7 P3).
 
 ### Phase 7 — More elements and media (as needed)
 
@@ -487,7 +521,7 @@ There is **no hosted CI** (decision §9): the gate is a local
 | Soil dispersion model | **Decided and implemented** — ADR 0007 accepted 2026-07-05: `tPortelaSoil` first, Lima–Portela [31] parametrisation, ω₀ = 2π·1 MHz; implemented Phase 4 |
 | Voltage-source handling | **Decided** — current-injection equivalent ([ADR 0010](adr/0010-sources-as-current-injections.md)) |
 | Impedance-fill interface | **Decided** — theory factors inside `calcZ*` ([ADR 0009](adr/0009-impedance-fill-interface.md)) |
-| FFT dependency | stdlib vs FFTW — decide in Phase 6; NLT proposed on top (P4 in §7) |
+| FFT dependency | **Decided and implemented** — neither stdlib (no FFT module in the pinned 0.8.1) nor SLATEC's `CFFTF`/`CFFTB` (single precision) fit; a small in-repo double-precision radix-2 FFT instead ([ADR 0014](adr/0014-fft-implementation.md), Phase 6); NLT proposed on top (P4 in §7) |
 | JSON schema v1 | **Decided and implemented (Fortran, GUI)** — shape frozen ([ADR 0013](adr/0013-input-schema-sources-frequencies-outputs.md): `sources`/`frequencies`/`outputs`); Fortran reader done (Phase 5 item 1, `Tupa.f90`); GUI study loader/tree view done (`gui/src/tupa_gui/data/`, display-only); Python/Rust readers pending those ports (Phase 8) |
 | Reduced `Z_g` solver | deferred optimisation (ADR 0003) |
 | GUI module | **Decided** — Python/PySide6/Qt3D, view-only v1, own `gui/` folder ([ADR 0011](adr/0011-gui-module-technology-and-scope.md)) |

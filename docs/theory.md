@@ -480,6 +480,22 @@ study.
    transfer function $H(\omega)$ between injected signal and each observed quantity.
 3. Multiply and inverse-FFT.
 
+**Implemented (ROADMAP.md Phase 6).** The Fortran implementation follows
+this route literally: a one-sided linear-frequency spectrum (0 to a chosen
+Nyquist bound) of the tapered excitation is multiplied, bin by bin, by the
+transfer function from a unit-current `tStudy%runSweep`, then rebuilt to a
+full spectrum by conjugate symmetry and inverse-transformed — the DC bin is
+solved at a small nonzero substitute frequency rather than exactly $\omega=0$
+(same convention as the legacy Matlab's `FREQ_ZERO`, needed since a
+zero-conductivity medium's transverse admittance is singular at exactly
+$\omega = 0$, ROADMAP.md §3 finding 9). The FFT itself is a small in-repo
+double-precision transform, not SLATEC's `CFFTF`/`CFFTB` (single precision
+only) or stdlib (no FFT module in the pinned version) — see
+[ADR 0014](adr/0014-fft-implementation.md). Heidler and double-exponential
+(plain and Jones-corrected) excitation waveforms are implemented; the
+Matlab reference's remaining waveforms (single exponential, impulse/step,
+Portela's concave model, sine) are ported on demand, not spawned in advance.
+
 Practical notes from [1] and [3]: 512–8192 frequencies in $[0, 1\, \text{MHz}]$ suffice
 for lightning impulses; for large structures, the smooth behaviour of $H(\omega)$
 allows computing a reduced set of frequencies and interpolating (analytic

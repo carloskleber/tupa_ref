@@ -1,0 +1,43 @@
+{
+  "title": "Counterpoise configuration type 3 - closed square with 2 cables at center",
+  "comment": "Ref.: ",
+  "soil": {
+    "conductivity": 0.001,
+    "permittivity": 10.0,
+    "permeability": 1.0
+  },
+  "nodes": [
+    { "id": "Node_1", "position": [   0.00,   0.00, -0.5] },
+    { "id": "Node_2a", "position": [ 10.86,  10.86, -0.5] },
+    { "id": "Node_2b", "position": [ 10.86,   0.00, -0.5] },
+    { "id": "Node_2c", "position": [ 10.86, -10.86, -0.5] },
+    { "id": "Node_2d", "position": [-10.86, -10.86, -0.5] },
+    { "id": "Node_2e", "position": [-10.86,   0.00, -0.5] },
+    { "id": "Node_2f", "position": [-10.86,  10.86, -0.5] },
+    { "id": "Node_3a", "position": [ 310.86,   0.00, -0.5] },
+    { "id": "Node_3b", "position": [-310.86,   0.00, -0.5] }
+  ],
+  "materials": [
+    { "id": "copper", "epsilonr": 1.0, "mur": 1.0, "sigma": 5.96e7 }
+  ],
+  "elements": [
+    { "type": "line", "id": "Rod_1a", "from": "Node_1", "to": "Node_2a", "radius": 0.01, "segments": 2, "material": "copper"},
+    { "type": "line", "id": "Rod_1b", "from": "Node_1", "to": "Node_2c", "radius": 0.01, "segments": 2, "material": "copper"},
+    { "type": "line", "id": "Rod_1c", "from": "Node_1", "to": "Node_2d", "radius": 0.01, "segments": 2, "material": "copper"},
+    { "type": "line", "id": "Rod_1d", "from": "Node_1", "to": "Node_2f", "radius": 0.01, "segments": 2, "material": "copper"},
+    { "type": "line", "id": "Rod_2a", "from": "Node_2a", "to": "Node_2b", "radius": 0.01, "segments": 2, "material": "copper"},
+    { "type": "line", "id": "Rod_2a", "from": "Node_2a", "to": "Node_2b", "radius": 0.01, "segments": 2, "material": "copper"},
+    { "type": "line", "id": "Rod_2b", "from": "Node_2b", "to": "Node_2c", "radius": 0.01, "segments": 2, "material": "copper"},
+    { "type": "line", "id": "Rod_2c", "from": "Node_2c", "to": "Node_2d", "radius": 0.01, "segments": 4, "material": "copper"},
+    { "type": "line", "id": "Rod_2d", "from": "Node_2d", "to": "Node_2e", "radius": 0.01, "segments": 2, "material": "copper"},
+    { "type": "line", "id": "Rod_2e", "from": "Node_2e", "to": "Node_2f", "radius": 0.01, "segments": 2, "material": "copper"},
+    { "type": "line", "id": "Rod_2f", "from": "Node_2f", "to": "Node_2a", "radius": 0.01, "segments": 4, "material": "copper"},
+    { "type": "line", "id": "Rod_3a", "from": "Node_2b", "to": "Node_3a", "radius": 0.01, "segments": 100, "material": "copper"},
+    { "type": "line", "id": "Rod_3b", "from": "Node_2e", "to": "Node_3b", "radius": 0.01, "segments": 100, "material": "copper"}
+  ],
+  "sources": [ { "node": "Node_1", "current": { "re": 1.0, "im": 0.0 } } ],
+  "frequencies": { "min": 10.0, "max": 1.0e6, "pointsPerDecade": 8 },
+  "outputs": {
+    "quantities": ["voltage", "i1", "i2", "inputImpedance"]
+  }
+}
