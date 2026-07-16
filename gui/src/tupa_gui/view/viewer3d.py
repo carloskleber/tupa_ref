@@ -7,6 +7,7 @@ solver-side structure-dump export that does not exist yet).
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from PySide6.Qt3DCore import Qt3DCore
@@ -31,6 +32,11 @@ NODE_COLOR = QColor(255, 205, 60)
 CONDUCTOR_COLOR = QColor(200, 120, 60)
 SOIL_COLOR = QColor(110, 80, 55, 120)
 HIGHLIGHT_COLOR = QColor(255, 60, 60)
+GRID_COLOR = QColor(255, 255, 255, 45)
+AXIS_COLOR_X = QColor(210, 70, 70)
+AXIS_COLOR_Y = QColor(80, 190, 100)
+AXIS_COLOR_Z = QColor(80, 140, 230)
+INJECTION_COLOR = QColor(255, 40, 180)
 
 # Conductor radius floor, as a fraction of the *scene's* overall extent —
 # deliberately not a fraction of each conductor's own length. A study's
@@ -76,6 +82,13 @@ class GeometryViewer(QWidget):
         # all change the view or projection matrix) or the pane is resized.
         self._camera.viewMatrixChanged.connect(self._update_label_positions)
         self._camera.projectionMatrixChanged.connect(self._update_label_positions)
+        # A camera aspect ratio that doesn't match the actual viewport
+        # stretches everything non-uniformly (spheres render as ellipsoids,
+        # most visibly on studies whose nodes spread far from the view
+        # centre, e.g. long spans). Re-derive it from the real window size
+        # whenever that size changes, instead of assuming a fixed 16:9 pane.
+        self._window.widthChanged.connect(self._update_aspect_ratio)
+        self._window.heightChanged.connect(self._update_aspect_ratio)
 
         # Python references to every Qt3D object of the current scene — see
         # the ownership note in load_study.
@@ -138,6 +151,8 @@ class GeometryViewer(QWidget):
         node_radius = extent * 0.012
 
         self._add_soil_plane(root, scene, extent)
+        self._add_grid(root, scene, extent)
+        self._add_axes(root, scene, extent)
         for node in study.nodes:
             position = node_positions[node.id]
             entry = self._add_node(root, scene, position, node.id, node_radius)
@@ -149,9 +164,10 @@ class GeometryViewer(QWidget):
             entry = self._add_conductor(root, scene, a, b, element.radius, min_visible_radius, element.id)
             element_entries[element.id] = entry
             element_centers[element.id] = (a + b) * 0.5
+        self._add_injection_arrows(root, scene, study, node_positions, node_radius, extent)
 
         camera = self._camera
-        camera.lens().setPerspectiveProjection(45.0, 16.0 / 9.0, 0.01, extent * 100)
+        camera.lens().setPerspectiveProjection(45.0, self._current_aspect_ratio(), 0.01, extent * 100)
         center = QVector3D(
             sum((p.x() for p in positions), 0.0) / len(positions) if positions else 0.0,
             sum((p.y() for p in positions), 0.0) / len(positions) if positions else 0.0,
@@ -224,6 +240,13 @@ class GeometryViewer(QWidget):
         super().resizeEvent(event)
         self._update_label_positions()
 
+    def _current_aspect_ratio(self) -> float:
+        width, height = self._window.width(), self._window.height()
+        return width / height if height > 0 else 16.0 / 9.0
+
+    def _update_aspect_ratio(self) -> None:
+        self._camera.lens().setAspectRatio(self._current_aspect_ratio())
+
     def _make_label(self, text: str) -> QLabel:
         label = QLabel(text, self)
         label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
@@ -274,17 +297,34 @@ class GeometryViewer(QWidget):
             label.move(int(x - label.width() / 2), int(y - label.height() - 6))
 
     def _add_soil_plane(self, root: Qt3DCore.QEntity, scene: list[object], extent: float) -> None:
-        entity = Qt3DCore.QEntity(root)
-        mesh = Qt3DExtras.QPlaneMesh(entity)
         size = max(extent * 3, 5.0)
-        mesh.setWidth(size)
-        mesh.setHeight(size)
-        material = Qt3DExtras.QPhongAlphaMaterial(entity)
-        material.setDiffuse(SOIL_COLOR)
-        material.setAlpha(SOIL_COLOR.alphaF())
-        entity.addComponent(mesh)
-        entity.addComponent(material)
-        scene += [entity, mesh, material]
+        # QPlaneMesh only has a front face (normal +Y); Qt3D's alpha-blended
+        # materials cull the back face for correct blending order, so a
+        # single plane vanishes once the camera orbits below study z = 0
+        # (looking up at the interface from underground). A second copy
+        # flipped 180 degrees about X gives the plane a visible backface
+        # too, so the soil/air interface stays visible from either side.
+        for flip in (False, True):
+            entity = Qt3DCore.QEntity(root)
+            mesh = Qt3DExtras.QPlaneMesh(entity)
+            mesh.setWidth(size)
+            mesh.setHeight(size)
+            material = Qt3DExtras.QPhongAlphaMaterial(entity)
+            material.setDiffuse(SOIL_COLOR)
+            # Ambient too (see _add_plain_cylinder): the underside faces away
+            # from the single overhead point light, so pure-diffuse shading
+            # goes near-black there and the blend over the dark clear color
+            # reads as "no plane at all" from below.
+            material.setAmbient(SOIL_COLOR)
+            material.setAlpha(SOIL_COLOR.alphaF())
+            entity.addComponent(mesh)
+            entity.addComponent(material)
+            if flip:
+                transform = Qt3DCore.QTransform(entity)
+                transform.setRotation(QQuaternion.fromAxisAndAngle(QVector3D(1, 0, 0), 180.0))
+                entity.addComponent(transform)
+                scene.append(transform)
+            scene += [entity, mesh, material]
 
     def _add_node(
         self,
@@ -332,11 +372,8 @@ class GeometryViewer(QWidget):
         material = Qt3DExtras.QPhongMaterial(entity)
         material.setDiffuse(CONDUCTOR_COLOR)
 
-        # QCylinderMesh runs along +Y; rotate it onto the segment direction.
-        y_axis = QVector3D(0, 1, 0)
-        rotation = QQuaternion.rotationTo(y_axis, direction.normalized())
         transform = Qt3DCore.QTransform(entity)
-        transform.setRotation(rotation)
+        transform.setRotation(self._align_to_direction(direction))
         transform.setTranslation((a + b) * 0.5)
 
         picker = Qt3DRender.QObjectPicker(entity)
@@ -348,6 +385,164 @@ class GeometryViewer(QWidget):
         entity.addComponent(picker)
         scene += [entity, mesh, material, transform, picker]
         return _Highlightable(material, CONDUCTOR_COLOR)
+
+    @staticmethod
+    def _align_to_direction(direction: QVector3D) -> QQuaternion:
+        """Rotation taking a mesh built along +Y onto `direction` (QCylinderMesh/QConeMesh convention)."""
+        return QQuaternion.rotationTo(QVector3D(0, 1, 0), direction.normalized())
+
+    def _add_plain_cylinder(
+        self,
+        root: Qt3DCore.QEntity,
+        scene: list[object],
+        a: QVector3D,
+        b: QVector3D,
+        radius: float,
+        color: QColor,
+    ) -> None:
+        """A non-pickable, unlabelled cylinder segment — used for the grid and axes, which are
+        scene decoration rather than authored geometry."""
+        direction = b - a
+        length = direction.length()
+        if length == 0:
+            return
+        entity = Qt3DCore.QEntity(root)
+        mesh = Qt3DExtras.QCylinderMesh(entity)
+        mesh.setRadius(radius)
+        mesh.setLength(length)
+        if color.alpha() < 255:
+            material = Qt3DExtras.QPhongAlphaMaterial(entity)
+            material.setAlpha(color.alphaF())
+        else:
+            material = Qt3DExtras.QPhongMaterial(entity)
+        material.setDiffuse(color)
+        # These thin markers are viewed edge-on as often as not (e.g. the
+        # "up" axis, seen nearly end-on from the default isometric-ish
+        # camera pose); a purely diffuse material goes near-black at grazing
+        # incidence to the single point light. Ambient is an unconditional
+        # term in Qt3D's phong shader, so setting it too keeps decoration
+        # legible at any angle instead of only when well-lit.
+        material.setAmbient(color)
+        transform = Qt3DCore.QTransform(entity)
+        transform.setRotation(self._align_to_direction(direction))
+        transform.setTranslation((a + b) * 0.5)
+        entity.addComponent(mesh)
+        entity.addComponent(material)
+        entity.addComponent(transform)
+        scene += [entity, mesh, material, transform]
+
+    def _add_cone(
+        self,
+        root: Qt3DCore.QEntity,
+        scene: list[object],
+        apex: QVector3D,
+        base: QVector3D,
+        radius: float,
+        color: QColor,
+    ) -> None:
+        """A cone from `base` (full `radius`) tapering to a point at `apex` — the arrowhead
+        used by the axes and the injection-current marker."""
+        direction = base - apex
+        length = direction.length()
+        if length == 0:
+            return
+        entity = Qt3DCore.QEntity(root)
+        mesh = Qt3DExtras.QConeMesh(entity)
+        mesh.setBottomRadius(0.0)
+        mesh.setTopRadius(radius)
+        mesh.setLength(length)
+        material = Qt3DExtras.QPhongMaterial(entity)
+        material.setDiffuse(color)
+        material.setAmbient(color)  # see _add_plain_cylinder: keeps arrowheads visible edge-on
+        transform = Qt3DCore.QTransform(entity)
+        transform.setRotation(self._align_to_direction(direction))
+        transform.setTranslation((apex + base) * 0.5)
+        entity.addComponent(mesh)
+        entity.addComponent(material)
+        entity.addComponent(transform)
+        scene += [entity, mesh, material, transform]
+
+    @staticmethod
+    def _grid_step(span: float, target_divisions: int = 20) -> float:
+        """Smallest step from the 1-2-5 sequence giving at least `target_divisions` lines
+        across `span` — the usual "nice round number" rule for a scale grid."""
+        raw = span / target_divisions if target_divisions else span
+        if raw <= 0:
+            return 1.0
+        magnitude = 10.0 ** math.floor(math.log10(raw))
+        for mult in (1.0, 2.0, 5.0, 10.0):
+            step = mult * magnitude
+            if step >= raw:
+                return step
+        return 10.0 * magnitude
+
+    def _add_grid(self, root: Qt3DCore.QEntity, scene: list[object], extent: float) -> None:
+        """Reference grid on the soil plane (study z = 0), centred on the coordinate origin
+        rather than the study's centroid, so it reads as an absolute scale/position reference."""
+        half = max(extent * 1.5, 2.5)
+        step = self._grid_step(half * 2)
+        line_radius = extent * MIN_VISIBLE_RADIUS_FRACTION * 0.4
+        count = max(int(half / step), 1)
+        # Lines coplanar with the soil plane z-fight against it (both sit at
+        # y = 0); lift the grid a hair above the surface to draw cleanly.
+        y = extent * 0.001
+        for i in range(-count, count + 1):
+            offset = i * step
+            self._add_plain_cylinder(
+                root, scene, QVector3D(-half, y, offset), QVector3D(half, y, offset), line_radius, GRID_COLOR
+            )
+            self._add_plain_cylinder(
+                root, scene, QVector3D(offset, y, -half), QVector3D(offset, y, half), line_radius, GRID_COLOR
+            )
+
+    def _add_axes(self, root: Qt3DCore.QEntity, scene: list[object], extent: float) -> None:
+        """XYZ axes through the coordinate origin (study convention: x, y, z with z up),
+        coloured by the usual red/green/blue = x/y/z convention regardless of which study
+        axis Qt3D treats as "up" — gives the scene a zero reference independent of geometry."""
+        length = max(extent * 0.6, 1.0)
+        shaft_radius = extent * 0.003
+        head_length = length * 0.12
+        head_radius = shaft_radius * 3.0
+        origin = QVector3D(0.0, 0.0, 0.0)
+        axis_tips = (
+            ((length, 0.0, 0.0), AXIS_COLOR_X),
+            ((0.0, length, 0.0), AXIS_COLOR_Y),
+            ((0.0, 0.0, length), AXIS_COLOR_Z),
+        )
+        for study_tip, color in axis_tips:
+            tip = _to_qt3d(study_tip)
+            shaft_end = tip * ((length - head_length) / length)
+            self._add_plain_cylinder(root, scene, origin, shaft_end, shaft_radius, color)
+            self._add_cone(root, scene, tip, shaft_end, head_radius, color)
+
+    def _add_injection_arrows(
+        self,
+        root: Qt3DCore.QEntity,
+        scene: list[object],
+        study: Study,
+        node_positions: dict[str, QVector3D],
+        node_radius: float,
+        extent: float,
+    ) -> None:
+        """A downward arrow touching each current-injection node (ADR 0010 sources, plus a
+        transient study's signal source node), so the driven node(s) stand out from the rest."""
+        injection_nodes = {source.node for source in study.sources}
+        if study.signal is not None:
+            injection_nodes.add(study.signal.source_node)
+
+        up = QVector3D(0.0, 1.0, 0.0)
+        arrow_length = max(extent * 0.18, node_radius * 6.0)
+        head_length = arrow_length * 0.35
+        shaft_radius = node_radius * 0.35
+        head_radius = node_radius * 0.9
+        for node_id in injection_nodes:
+            tip = node_positions.get(node_id)
+            if tip is None:
+                continue
+            head_base = tip + up * head_length
+            shaft_end = tip + up * arrow_length
+            self._add_plain_cylinder(root, scene, shaft_end, head_base, shaft_radius, INJECTION_COLOR)
+            self._add_cone(root, scene, tip, head_base, head_radius, INJECTION_COLOR)
 
     def _on_node_picked(self, node_id: str) -> None:
         self.highlight_node(node_id)
