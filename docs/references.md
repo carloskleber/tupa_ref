@@ -200,6 +200,53 @@ below) as the sources of its dispersive-soil routines:
     referenced to ω₀ = 2π·1 MHz (with cot(πα/2) on the real parcel); the
     second dispersive-soil routine of the legacy Matlab code.
 
+## Foundations and neighbouring methods
+
+32. **Portela, C.** — *Campos e Ondas — Problemas*, course problem collection
+    (in Portuguese), ed. 02/1997. Works out, as solved problems, the building
+    blocks later applied in [1] and [3]: mean-potential self and mutual
+    resistances of parallel and of orthogonal cylindrical conductors in a
+    homogeneous medium, the buried horizontal conductor with its interface
+    image (including the equivalent-radius construction √(2h·r₀)), and the
+    error analysis of the quasi-static approximation for the elementary
+    dipole. The course-text ancestry of the closed-form geometry factors of
+    theory.md §4.2.
+33. **Li, Z.-X.; Chen, W.-J.; Wang, K.-C.** — "Frequency Domain and Time
+    Domain Analysis of the Transient Behavior of Buried Grounding Grids in
+    Horizontal Multilayered Earth Model", *Electrical Engineering*, vol. 104,
+    pp. 2515–2529, 2022. DOI: 10.1007/s00202-022-01502-x. Hybrid (HEM-class)
+    model of grounding grids in horizontally stratified soil: layered-earth
+    Green's functions made affordable by the quasi-static complex image
+    method (matrix-pencil fitted), frequency- and time-domain drivers, and
+    soil ionisation represented by conductor-radius adjustment. The reference
+    route should stratified soil ever be needed — TUPÃ assumes a uniform
+    half-space (theory.md §5).
+34. **Baba, Y.; Rakov, V. A.** — "Applications of Electromagnetic Models of
+    the Lightning Return Stroke", *IEEE Trans. Power Delivery*, vol. 23,
+    no. 2, pp. 800–811, Apr. 2008. DOI: 10.1109/TPWRD.2007.916169. Review of
+    full-wave return-stroke models (channel representations, excitation
+    methods, MoM/FDTD numerics). Places the HEM between electromagnetic and
+    distributed-circuit models — non-TEM near fields, but electric and
+    magnetic couplings handled as decoupled circuit quantities — and reports
+    HEM channel currents consistent with full electromagnetic solutions.
+35. **Poljak, D.; Doric, V.** — "Wire Antenna Model for Transient Analysis of
+    Simple Grounding Systems, Part I: The Vertical Grounding Electrode",
+    *Progress In Electromagnetics Research*, vol. 64, pp. 149–166, 2006
+    (Part II, the horizontal electrode, pp. 167–189). Antenna-theory route:
+    frequency-domain Pocklington integro-differential equation solved by a
+    Galerkin–Bubnov boundary-element scheme, with the air–soil interface
+    entering the kernel through a Fresnel reflection coefficient — a cheap
+    middle ground between quasi-static images and rigorous Sommerfeld
+    integrals.
+36. **Silva, G. C. P.; Faria, F. A. C.; Moura, R. A. R.; Schroeder,
+    M. A. O.** — "Comparação entre os Métodos PEEC e HEM na Modelagem
+    Eletromagnética de Aterramentos Elétricos", *XVII Simpósio Brasileiro de
+    Automação Inteligente (SBAI)*, 2025 (in Portuguese). Head-to-head PEEC vs
+    HEM on a 60 m buried electrode with dispersive soil [14]: harmonic
+    impedance agrees to MAPE below 0.01 %, GPR within a few percent. HEM's
+    unified segment discretisation plus geometric-symmetry reuse cut matrix
+    assembly by ~400× relative to both plain HEM and PEEC.
+
 ## Related open-source implementations
 
 Companion codes of the same model family, useful as executable cross-checks

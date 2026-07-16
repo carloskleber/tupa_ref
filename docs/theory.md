@@ -200,7 +200,10 @@ $\lambda/10$; the project default stays $\lambda/10$, with coarsening per
   segments touch. Kept as the test oracle for the single-integral form.
 - **Parallel segments** and **orthogonal segments**: closed-form expressions
   exist (logarithms and arctangents of the corner distances); see [3, annex]
-  for the derivation. Used both as fast paths and as quadrature test oracles.
+  for the derivation. Portela's *Campos e Ondas* problem collection [32]
+  works the same parallel and orthogonal configurations (and the buried
+  conductor with its image) from first principles — the course-text ancestry
+  of these formulas. Used both as fast paths and as quadrature test oracles.
 
   ![2-D quadrature convergence to the closed-form parallel-segment factor, swept over requested tolerance and pair separation](figures/quadrature-tolerance-sweep.svg)
 
@@ -358,7 +361,16 @@ rarely require this, so it is noted as the refinement step *after*
 $\Gamma(\omega)$, not planned work.
 
 For the **self** terms the "mutual with the own image" appears with distance
-$\bar{R}_i = 2h$ (twice the depth/height of the segment centre).
+$\bar{R}_i = 2h$ (twice the depth/height of the segment centre) — at DC,
+combining this image parcel with the own term at $r_0$ reproduces the classic
+"equivalent radius" $\sqrt{2hr_0}$ construction of [32].
+
+A separate limitation is the *single* interface: this section models one
+air–soil boundary with uniform soil below. Horizontally stratified soils
+replace the single image by layered-earth Green's functions, made affordable
+by quasi-static complex images (matrix-pencil fitted), as in the multilayer
+hybrid of Li, Chen & Wang [33]. TUPÃ assumes a uniform half-space by design;
+stratification is out of scope (§10.1).
 
 ---
 
@@ -599,6 +611,15 @@ sample, linearity (no soil ionisation). Harrington's MoM is the general
 umbrella: the HEM family fixes basis, testing and kernel choices and adds the
 circuit-level closure (§6) that pure MoM does not have.
 
+That closure is also what places the family among model classes at large:
+Baba & Rakov's review of electromagnetic return-stroke models [34] situates
+the HEM between full electromagnetic models and distributed-circuit models —
+it produces non-TEM near fields like the former, but couples electric and
+magnetic effects through separate circuit quantities like the latter — and
+reports HEM channel-current distributions consistent with full
+electromagnetic solutions, an independent endorsement of the family's
+physics from outside the grounding literature.
+
 ### 10.1 Neighbouring model families
 
 The same problem is attacked in the literature by methods that trade accuracy
@@ -611,6 +632,9 @@ relative to each:
 | HEM-TD | Time | HEM physics solved directly in time; dispersive soil via rational (pole–residue) models; time delays computed in time domain | Same physics, other domain; needed only for nonlinear phenomena (soil ionisation, arresters, corona) that TUPÃ excludes by design; benchmarked against frequency-domain HEM | [21] |
 | HEM + complex images | Frequency | Earth replaced by perfect conductor at complex depth instead of quasi-static images | Extends the §5 image treatment beyond the few-MHz ceiling; the refinement step after $\Gamma_t(\omega)$ | [20] |
 | HF circuit models | Frequency / EMT | Lumped RLC (with or without mutual coupling) derived from the MoM equations by successive approximations | Degenerate limit of §4–§6; [23] maps their error vs. a full-wave reference over length, resistivity and frequency — mutual coupling is the decisive HF ingredient (which HEM keeps in full) | [23] |
+| PEEC | Frequency / time | Partial-element equivalent circuits from the volume EFIE: separate current and potential cells (R, L, P matrices, MNA solve), no thin-wire restriction | Same MoM roots, more general discretisation; on grounding electrodes agrees with HEM to negligible differences (harmonic-impedance MAPE < 0.01 %), while HEM's unified segments + symmetry reuse are far cheaper for wire-like geometries | [36] |
+| Antenna theory (Pocklington) | Frequency | Thin-wire Pocklington EFIE, sub-segment current expansion, boundary-element solve; interface via a Fresnel reflection coefficient in the kernel | The reflection-coefficient kernel is the antenna-theory analogue of §5's $\Gamma(\omega)$ images — accuracy between quasi-static images and full Sommerfeld treatment at a fraction of the Sommerfeld cost | [35] |
+| Multilayer-soil hybrid | Frequency + time | Layered-earth Green's functions via quasi-static complex images (matrix pencil); soil ionisation via conductor-radius adjustment | Lifts §5's single-interface premise; TUPÃ assumes a uniform soil half-space by design — the reference route if stratified soil is ever required | [33] |
 | TL-model + FDTD | Time | Per-unit-length parameters (frequency-dependent Z, Y) for counterpoise wires, solved by FDTD | Cheaper special-purpose model for parallel counterpoises; ≤5 % deviation from a full EM model; found effective length independent of wire separation | [24] |
 | FDTD–PEEC hybrid | Time | 1-D FDTD for the line + PEEC for tower and lightning channel | Models the lightning-channel↔tower coupling that HEM-class tools (TUPÃ included) neglect; relevant for tower-surge, not grounding, accuracy | [25] |
 | Full-wave MoM (NEC-4 class) | Frequency | Sommerfeld-integral treatment of the interface, sub-segment current expansion | The accuracy oracle above HEM: [20] and [23] use it as reference; no geometry-factor shortcut, so far costlier | [20,23] |
