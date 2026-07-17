@@ -51,7 +51,7 @@ harmonic sweep are unrelated solves over the same structure):
   parameter set is fixed).
 - `terms` (**amendment 2026-07-17**, ROADMAP Phase 7): optional array for
   `"heidler"` only — the standard parametrised Heidler function (Heidler
-  1985 [37]; IEC 62305-1 [38] tabulates single-term parameter sets), one
+  1985 [37]; IEC 62305-1 [39] tabulates single-term parameter sets), one
   `{ "i0": <A>, "n": <->, "tau1": <s>, "tau2": <s> }` object per term,
   mapped to `mSignal::newHeidlerSignalTerms`. With `terms` present, `imax`
   becomes optional: absent, the terms are used at their physical

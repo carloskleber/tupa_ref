@@ -256,9 +256,21 @@ below) as the sources of its dispersive-soil routines:
     peak-correction factor η — the standard analytical lightning-current
     waveform (zero initial slope, independently adjustable front and tail).
     Implemented as `mSignal`'s parametrised `tHeidlerSignal` construction
-    (ROADMAP Phase 7); the legacy 6-term set of Phase 6 is a sum of these
-    terms with uncited parameters.
-38. **IEC 62305-1** — *Protection against lightning — Part 1: General
+    (ROADMAP Phase 7).
+38. **De Conti, A.; Visacro, S.** — "Analytical Representation of Single- and
+    Double-Peaked Lightning Current Waveforms", *IEEE Trans. Electromagnetic
+    Compatibility*, vol. 49, no. 2, pp. 448–451, May 2007.
+    DOI: 10.1109/TEMC.2007.897153. Sums of Heidler functions [37] (same η
+    correction) fitted to median first- and subsequent-stroke parameters
+    measured at Morro do Cachimbo and Mount San Salvatore, single- and
+    double-peaked. Identifies the source of `newHeidlerSignal`'s legacy
+    6-term set: its `i0`/`n`/`tau1`/`tau2` values are this paper's Table I,
+    column MCS_FST#1 (the single-peaked Morro do Cachimbo first-stroke fit)
+    exactly — previously ported without a recorded source. The paper's other tables (the
+    double-peaked 7-term MCS/MSS first-stroke variants and the 2-term
+    MCS/MSS subsequent-stroke fits) are further citable presets not yet
+    exposed via `newHeidlerSignalTerms`.
+39. **IEC 62305-1** — *Protection against lightning — Part 1: General
     principles*, IEC, ed. 2, 2010. Annex B expresses the standardised first
     (10/350 µs) and subsequent (0.25/100 µs) stroke currents as single-term
     Heidler functions [37] with tabulated I₀, k (= η), τ₁, τ₂ and n = 10 per
@@ -267,14 +279,14 @@ below) as the sources of its dispersive-soil routines:
 
 ## Conductor, cable and safety references (Phase 7 elements)
 
-39. **Schelkunoff, S. A.** — "The Electromagnetic Theory of Coaxial
+40. **Schelkunoff, S. A.** — "The Electromagnetic Theory of Coaxial
     Transmission Lines and Cylindrical Shields", *Bell System Technical
     Journal*, vol. 13, no. 4, pp. 532–579, 1934. Canonical surface-impedance
     formulas for solid and tubular cylindrical conductors (modified Bessel
     I/K forms) — the tubular internal impedance the legacy `zinterna.m`
     implements and theory.md §4.3 states (ROADMAP Phase 7 tubular
     conductor / metallic pipes).
-40. **Sunde, E. D.** — *Earth Conduction Effects in Transmission Systems*,
+41. **Sunde, E. D.** — *Earth Conduction Effects in Transmission Systems*,
     Van Nostrand, New York, 1949 (Dover reprint 1968). The classical
     treatise on buried-conductor impedance and admittance: grounding
     resistance formulas (theory.md §9.1), leakage admittance of **insulated
@@ -282,18 +294,18 @@ below) as the sources of its dispersive-soil routines:
     leakage — the missing theory for the Phase 7 insulated conductor, left
     as a TODO placeholder in the legacy code), and layered-earth effects
     (background for the multi-layer soil item).
-41. **IEEE Std 80-2013** — *IEEE Guide for Safety in AC Substation
+42. **IEEE Std 80-2013** — *IEEE Guide for Safety in AC Substation
     Grounding*. Normative definitions of touch, step and mesh voltages
     (1 m reach / 1 m step conventions, body-current limits, surface-layer
     derating). Reference for the Phase 7 GPR/touch/step outputs — the
     legacy computes a geometric variant (max surface-to-node potential
     difference on a 1 m circle) without the body-circuit factors.
-42. **Ametani, A.** — "A General Formulation of Impedance and Admittance of
+43. **Ametani, A.** — "A General Formulation of Impedance and Admittance of
     Cables", *IEEE Trans. Power Apparatus and Systems*, vol. PAS-99, no. 3,
     pp. 902–910, 1980. Per-unit-length series-impedance/shunt-admittance
     matrices of multiconductor cables (the EMTP "Cable Constants" route) —
     the natural internal representation for the Phase 7 multipolar-cable
-    element; complements Wedepohl & Wilcox and Schelkunoff [39] layer
+    element; complements Wedepohl & Wilcox and Schelkunoff [40] layer
     formulas.
 
 ## Related open-source implementations

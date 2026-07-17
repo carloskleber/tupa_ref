@@ -138,9 +138,9 @@ exposes as potential/field/step-and-touch post-processing (ROADMAP §7 P7):
 - **touch voltage** (legacy definition): $\max_P |\psi(P) - u_k|$ over a
   1 m-radius circle of points around a designated node $k$ (36 points in
   the legacy default) — a purely geometric definition, without IEEE Std 80's
-  body-circuit and surface-layer derating factors [41];
+  body-circuit and surface-layer derating factors [42];
 - **step voltage**: difference of $\psi$ between surface points 1 m apart
-  along a profile [41].
+  along a profile [42].
 
 The observation-point geometry factor reuses the §4.2 machinery (closed
 form for the collinear/parallel cases, quadrature otherwise), so the P1
@@ -315,7 +315,7 @@ $$Z_t(a,a) = Z_{t,\text{ext}} + Z_{t,\text{interface}}$$
 
   with $I_0, I_1$ modified Bessel functions. For **tubular conductors**
   (inner radius $r_i$, current returning outside the tube) the Schelkunoff
-  surface-impedance expression applies [39], with
+  surface-impedance expression applies [40], with
   $\rho_0 = r_0\sqrt{j\omega\mu_c\sigma_c}$, $\rho_i = r_i\sqrt{j\omega\mu_c\sigma_c}$:
 
   $$z_{\text{int}} = \frac{\sqrt{j\omega\mu_c/\sigma_c}}{2\pi r_0} \cdot
@@ -341,7 +341,7 @@ i.e. it drops the soil *conduction* path entirely and leaks through the
 soil permittivity (an earlier commented variant used a tiny fictitious
 $\sigma = 10^{-8}$ S/m instead); the coating's own geometry and
 permittivity never enter, and $Z_\ell$ is untouched. The proper treatment
-is Sunde's insulated buried wire [40]: the coating admittance per unit
+is Sunde's insulated buried wire [41]: the coating admittance per unit
 length, $y_c = 2\pi(\sigma_c + j\omega\varepsilon_c)/\ln(r_c/r_0)$ for a
 coating of outer radius $r_c$, in **series** with the bare-conductor soil
 leakage — reducing to the bare case as $r_c \to r_0$. A reference
@@ -613,9 +613,10 @@ zero-conductivity medium's transverse admittance is singular at exactly
 $\omega = 0$, ADR 0019). The FFT itself is a small in-repo
 double-precision transform, not SLATEC's `CFFTF`/`CFFTB` (single precision
 only) or stdlib (no FFT module in the pinned version) — see
-[ADR 0014](adr/0014-fft-implementation.md). Heidler and double-exponential
-(plain and Jones-corrected) excitation waveforms are implemented; the
-Matlab reference's remaining waveforms (single exponential, impulse/step,
+[ADR 0014](adr/0014-fft-implementation.md). Heidler [37,38,39] and
+double-exponential (plain and Jones-corrected) excitation waveforms are
+implemented; the Matlab reference's remaining waveforms (single exponential,
+impulse/step,
 Portela's concave model, sine) are ported on demand, not spawned in advance.
 
 Practical notes from [1] and [3]: 512–8192 frequencies in $[0, 1\, \text{MHz}]$ suffice

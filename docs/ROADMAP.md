@@ -32,7 +32,7 @@ implementation**; usability as an engineering tool is secondary.
 | Sources | Current injections at named nodes (ADR 0010); ideal voltage sources via unit-injection superposition, mixable with current sources (ADR 0016) |
 | Materials | `tLinear`, `tPortelaSoil` (ADR 0007), `tVisacroAlipioSoil` (mean set, theory.md §7); air hardcoded to vacuum (ADR 0019) |
 | Sweep & results | `runSweep` + `tResult` storage, `inputImpedance`/`maxVoltageMagnitude`; CSV/JSON writers (ADR 0012) with `outputs` filtering |
-| Time domain | `mSignal` (Heidler — legacy 6-term and standard parametrised form [37, 38]; double-exp ± Jones), tail taper, in-repo FFT (ADR 0014), transfer-function transient driver (`mTransient`) |
+| Time domain | `mSignal` (Heidler — legacy 6-term [38] and standard parametrised form [37, 39]; double-exp ± Jones), tail taper, in-repo FFT (ADR 0014), transfer-function transient driver (`mTransient`) |
 | JSON I/O | Minimal parser (ADR 0006); schema v1: structure + `sources`/`frequencies`/`outputs` (ADR 0013) + `signal` (ADR 0015) + voltage sources/Heidler terms (ADR 0016/0015 amendment) |
 | Cases & tests | `common/` regression fixtures (golden, not an oracle — §7 P3), 12 test programs, all green under `fpm test --profile release` |
 | GUI | Python/PySide6 view-only module (`gui/`, ADR 0011): study tree, 3-D view, results/transient plots |
@@ -154,7 +154,7 @@ item 4").
 Done (2026-07-17):
 
 - **Heidler function** — standard parametrised form (Heidler 1985 [37];
-  IEC 62305-1 [38] parameter sets): `newHeidlerSignalTerms` (arbitrary
+  IEC 62305-1 [39] parameter sets): `newHeidlerSignalTerms` (arbitrary
   terms, analytic η peak correction, optional legacy-style `imax`
   rescale); JSON `signal.terms` (ADR 0015 amendment).
 - **Voltage source** — ideal voltage sources converted to equivalent
@@ -190,7 +190,7 @@ legacy survey (registered findings in theory.md §3.1, §4.3, §5, §6):
   registered in theory.md §3.1; needs an ADR 0012 results-schema
   extension. *Decided (2026-07-17 Q&A): legacy-geometric definitions
   (touch = max |ψ − u_node| on a 1 m circle, step = ψ difference at 1 m
-  spacing), citing IEEE Std 80 [41] as normative context; body-circuit /
+  spacing), citing IEEE Std 80 [42] as normative context; body-circuit /
   surface-layer derating factors stay out of the solver.*
 - Series RLC element — **M**. *Series form only first (R + jωL + 1/(jωC)
   two-terminal, Matlab-style non-coupling lumped element); parallel later
@@ -198,7 +198,7 @@ legacy survey (registered findings in theory.md §3.1, §4.3, §5, §6):
   Z(ω) on the Z_ℓ diagonal, zeroed Z_t row) registered in theory.md §6,
   including the nonsingularity check and DC pin a port must add.
 - Tubular conductor (extrapolation: simulation of metallic pipes) — **S**.
-  Schelkunoff I/K formula now stated explicitly in theory.md §4.3 [39];
+  Schelkunoff I/K formula now stated explicitly in theory.md §4.3 [40];
   element = `tLine` + wall thickness (legacy `Tubo.m`); extends
   `mImpedance` with SLATEC `ZBESK` alongside `ZBESI` (scaled variants for
   large arguments).
@@ -206,7 +206,7 @@ legacy survey (registered findings in theory.md §3.1, §4.3, §5, §6):
   legacy branch is an acknowledged placeholder (drops soil conduction,
   ignores the coating entirely; flagged TODO in the legacy code) — do
   **not** port it; implement Sunde's coating admittance in series with the
-  bare-conductor soil leakage [40].
+  bare-conductor soil leakage [41].
 - Generic internal impedance models (e.g. OPGW), specified in a JSON
   database; alternative use from the material property in elements —
   **M**. *Decided (2026-07-17 Q&A): database entries carry
@@ -240,7 +240,7 @@ legacy survey (registered findings in theory.md §3.1, §4.3, §5, §6):
   unfinished); practical only after §7 P1 (quadrature cost, §5).
 - Multipolar cables (internal representation by impedance/admittance
   matrix) — **L**. Object-model change (multi-conductor element); refs:
-  Ametani cable constants [42], Schelkunoff [39]; PRTL-mHEM's tubular
+  Ametani cable constants [43], Schelkunoff [40]; PRTL-mHEM's tubular
   bundles are a partial analogue.
 - Option of multiple injections (e.g. three-phase sine emulating line
   voltage, plus impulse injection) — **S–M**. The harmonic side already
@@ -250,7 +250,7 @@ legacy survey (registered findings in theory.md §3.1, §4.3, §5, §6):
   a *differential* (±1 two-node) injection pattern worth carrying along.
 - Multi-layer soil and reflection-coefficient images — **L**. Lifts the
   §5 single-interface premise; route: layered-earth Green's functions via
-  quasi-static complex images (Li, Chen & Wang [33]; Sunde [40]
+  quasi-static complex images (Li, Chen & Wang [33]; Sunde [41]
   background). Explicitly out of MVP scope (theory.md §5, §10.1) — keep
   last.
 

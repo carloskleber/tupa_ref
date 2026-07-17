@@ -19,6 +19,7 @@ when it reproduces every case within the stated tolerance.
 | `grid.json` | Small buried grounding grid, one square mesh (4 nodes/edges), 1∠0° A at `Node_A`, 100 Hz-100 kHz | `grid_expected.csv` |
 | `portela1997_transient.json` | Same geometry/soil as `portela1997.json`, but a `signal` block (ADR 0015) instead of `sources`/`frequencies`: transient GPR under a 1.2/50 µs, 30 kA double-exponential surge | none (internal-consistency check only, theory.md §9.2 data gap — see `test_transient.f90`) |
 | `silva2025_rho{100,300,1000,2400}.json` | Silva et al. 2025 (SBAI, references.md [36]) PEEC-vs-HEM base case: buried horizontal electrode, 60 m, 7 mm radius, 0.5 m depth, `alipio-visacro` dispersive soil (theory.md §7) at ρ0 = 100/300/1000/2400 Ω·m, 1∠0° A at `Node_1`, 128 log-spaced points 100 Hz–4 MHz (`pointsPerDecade: 27.6`, ADR 0013's `round(ppd·log10(fmax/fmin))+1` formula) — matches the paper's 2⁷ frequency samples. For comparison against the paper's Fig. 3 (\|Z(ω)\|); no tabulated digitised curve exists yet, so there is no `_expected.csv` (internal passivity/plausibility check only) | none yet |
+| `silva2025_rho{100,300,1000,2400}_transient.json` | Same geometry/soil as the files above, but a `signal` block (ADR 0015): GPR at `Node_1` under De Conti & Visacro [38]'s **MCS_FST#2** double-peaked first-stroke current (7 `terms`, physical amplitudes, no `imax` rescale), `nyquistHz: 4e6`, `fftPoints: 4096`. For comparison against the paper's Fig. 4 (GPR(t)) — see [`docs/validation/silva2025-fig4.md`](../docs/validation/silva2025-fig4.md), including why MCS_FST#2 rather than the legacy 6-term MCS_FST#1 | none yet (plausibility check only, same caveat as the frequency-domain files above) |
 
 `buried_conductor_short.json`/`buried_conductor_long.json` stay εr = 1 soil smoke tests with no
 `sources`/`frequencies` block. The other four carry `sources`/
@@ -131,11 +132,11 @@ Semantics:
   `waveform` is `"doubleExp"` or `"heidler"` (`fortran/src/Signal.f90`);
   `front`/`jones` apply only to `"doubleExp"`. For `"heidler"`, an optional
   `terms` array (ADR 0015 amendment, 2026-07-17) gives the standard
-  parametrised Heidler function (Heidler 1985 [37] / IEC 62305-1 [38]) —
+  parametrised Heidler function (Heidler 1985 [37] / IEC 62305-1 [39]) —
   one `{"i0", "n", "tau1", "tau2"}` object per term; `imax` is then
   optional (absent = physical amplitudes, present = peak rescale). Without
-  `terms`, `"heidler"` keeps the legacy fixed 6-term set and `imax` is
-  required. `observeNodes` is an array
+  `terms`, `"heidler"` keeps the legacy fixed 6-term set (De Conti &
+  Visacro [38], MCS_FST#1) and `imax` is required. `observeNodes` is an array
   (v(t) is computed for every entry at no extra solve cost — the transient
   pipeline's single unit-current sweep already covers every node);
   `observeElectrodes` is an optional array of *discretised* electrode IDs

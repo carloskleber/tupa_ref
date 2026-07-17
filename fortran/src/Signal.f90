@@ -51,9 +51,11 @@ module mSignal
     !! Two construction paths (ROADMAP Phase 6/7):
     !! `newHeidlerSignalTerms` — user-supplied terms (the standard, citable
     !! form; `rescale` optional); `newHeidlerSignal` — the legacy Matlab
-    !! `sinais.Heidler` 6-term set ("Baseada na implementacao do Tony" — no
-    !! published source is recorded for that parameter set; ported verbatim,
-    !! not independently validated), always peak-rescaled to `imax`.
+    !! `sinais.Heidler` 6-term set (originally ported as "Baseada na
+    !! implementacao do Tony", with no source recorded — its parameters are
+    !! in fact De Conti & Visacro's [38] MCS_FST#1 column: the single-peaked
+    !! fit to Morro do Cachimbo median first-stroke parameters), always
+    !! peak-rescaled to `imax`.
     real(dp), allocatable :: i0(:), n(:), tau1(:), tau2(:)
     logical :: rescale = .true.
     !! When true, the summed waveform is numerically rescaled so its peak

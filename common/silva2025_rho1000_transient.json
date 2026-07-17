@@ -1,0 +1,43 @@
+{
+  "title": "Silva et al. 2025 (PEEC vs HEM, SBAI) base case, rho0=1000 ohm.m -- Fig. 4 (GPR transient)",
+  "soil": {
+    "type": "alipio-visacro",
+    "permeability": 1.0,
+    "sigma0": 1.0e-3
+  },
+  "nodes": [
+    { "id": "Node_1", "position": [ 0.0, 0.0, -0.5] },
+    { "id": "Node_2", "position": [60.0, 0.0, -0.5] }
+  ],
+  "materials": [
+    { "id": "copper", "epsilonr": 1.0, "mur": 1.0, "sigma": 5.96e7 }
+  ],
+  "elements": [
+    {
+      "type": "line",
+      "id": "Line_1",
+      "from": "Node_1",
+      "to": "Node_2",
+      "radius": 0.007,
+      "segments": 60,
+      "material": "copper"
+    }
+  ],
+
+  "signal": {
+    "waveform": "heidler",
+    "terms": [
+      { "i0": 6000.0,  "n": 2.0,  "tau1": 3.0e-6,  "tau2": 76.0e-6 },
+      { "i0": 5000.0,  "n": 3.0,  "tau1": 3.5e-6,  "tau2": 10.0e-6 },
+      { "i0": 5000.0,  "n": 5.0,  "tau1": 4.8e-6,  "tau2": 30.0e-6 },
+      { "i0": 8000.0,  "n": 9.0,  "tau1": 6.0e-6,  "tau2": 26.0e-6 },
+      { "i0": 16500.0, "n": 30.0, "tau1": 7.0e-6,  "tau2": 23.2e-6 },
+      { "i0": 17000.0, "n": 2.0,  "tau1": 70.0e-6, "tau2": 200.0e-6 },
+      { "i0": 12000.0, "n": 14.0, "tau1": 12.0e-6, "tau2": 26.0e-6 }
+    ],
+    "sourceNode": "Node_1",
+    "observeNodes": ["Node_1"],
+    "nyquistHz": 4.0e6,
+    "fftPoints": 4096
+  }
+}
