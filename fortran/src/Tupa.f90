@@ -12,7 +12,12 @@ module tupa
   !! **JSON Input Format:**
   !! The JSON file must contain:
   !! - `"title"` (string) — study name
-  !! - `"soil"` (object) — soil properties: `permittivity`, `permeability`, `conductivity`
+  !! - `"soil"` (object) — soil properties. Optional `"type"` selects the
+  !!   dispersion model (default `"linear"`): `"linear"` takes `permittivity`,
+  !!   `permeability`, `conductivity`; `"portela"` (Lima-Portela, ADR 0007)
+  !!   takes `permeability`, `sigma0`, `alpha0`, `kr`; `"alipio-visacro"`
+  !!   (theory.md §7, references.md [14], mean parameter set) takes
+  !!   `permeability`, `sigma0`.
   !! - `"nodes"` (array of objects) — boundary nodes with `id` and `position` (3D)
   !! - `"materials"` (array of objects, optional) — conductor materials with `id`, `epsilonr`, `mur`, `sigma`
   !! - `"elements"` (array of objects) — geometric elements with type-specific parameters
@@ -127,10 +132,32 @@ contains
     study%title = json_str(root, "title")
 
     soil_obj => json_child(root, "soil")
-    study%structure%soil = newMaterialLinear("soil", &
-      json_real(soil_obj, "permittivity"), &
-      json_real(soil_obj, "permeability"), &
-      json_real(soil_obj, "conductivity"))
+    if (json_has(soil_obj, "type")) then
+      elem_type = json_str(soil_obj, "type")
+    else
+      elem_type = "linear"
+    end if
+    select case (trim(elem_type))
+    case ("linear")
+      study%structure%soil = newMaterialLinear("soil", &
+        json_real(soil_obj, "permittivity"), &
+        json_real(soil_obj, "permeability"), &
+        json_real(soil_obj, "conductivity"))
+    case ("portela")
+      study%structure%soil = newMaterialPortela("soil", &
+        json_real(soil_obj, "permeability"), &
+        json_real(soil_obj, "sigma0"), &
+        json_real(soil_obj, "alpha0"), &
+        json_real(soil_obj, "kr"))
+    case ("alipio-visacro")
+      study%structure%soil = newMaterialVisacroAlipio("soil", &
+        json_real(soil_obj, "permeability"), &
+        json_real(soil_obj, "sigma0"))
+    case default
+      call raiseError("mTupa: unknown soil.type '" // trim(elem_type) // &
+                       "' (expected linear, portela or alipio-visacro)")
+      return
+    end select
 
     nodes_arr => json_child(root, "nodes")
     n = json_size(nodes_arr)

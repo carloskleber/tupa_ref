@@ -13,11 +13,14 @@ module mMaterial
   !!   dispersive-soil subtypes; further models (e.g. `tLongmireSmithSoil`)
   !!   are added as siblings, each named after its original reference —
   !!   never folded into this one under a generic name.
+  !! - `tVisacroAlipioSoil`: frequency-dependent soil using the causal
+  !!   (minimum-phase) model of Alipio & Visacro (theory.md §7, references.md
+  !!   [14]), *mean* parameter set.
   use mCtes, only: PI, MU0, EPSILON0, newl
   implicit none
   private
 
-  public :: newMaterialLinear, newMaterialPortela
+  public :: newMaterialLinear, newMaterialPortela, newMaterialVisacroAlipio
 
   ! ------------------------------------------------------------------
   ! Abstract base type
@@ -102,6 +105,20 @@ module mMaterial
     procedure :: report     => report_freq
   end type tPortelaSoil
 
+  type, extends(tMaterial), public :: tVisacroAlipioSoil
+    !! Frequency-dependent soil model — causal (minimum-phase) model of
+    !! Alipio & Visacro (theory.md §7, references.md [14]), *mean*
+    !! parameter set. The only free parameter is `sigma0`; the dispersion
+    !! exponent, high-frequency permittivity and the h(sigma0) fit are the
+    !! fixed constants of the mean curve (the *relatively conservative* /
+    !! *conservative* bounding curves of [14] are not implemented).
+    real(8) :: sigma0
+    !! Low-frequency (100 Hz) conductivity σ₀ (S/m)
+  contains
+    procedure :: admittance => admittance_alipio
+    procedure :: report     => report_alipio
+  end type tVisacroAlipioSoil
+
 contains
 
   ! ------------------------------------------------------------------
@@ -149,6 +166,23 @@ contains
     this%kr                  = kr
     this%propagationConstant = cmplx(0.0d0, 0.0d0, kind=8)
   end function newMaterialPortela
+
+  function newMaterialVisacroAlipio(id, mur, sigma0) result(this)
+    !! Construct a `tVisacroAlipioSoil` material (Alipio & Visacro *mean*
+    !! parameter set, theory.md §7) from the 100 Hz conductivity alone.
+    character(len=*), intent(in) :: id
+    !! Material identifier
+    real(8), intent(in) :: mur
+    !! Relative permeability μr
+    real(8), intent(in) :: sigma0
+    !! Low-frequency (100 Hz) conductivity σ₀ (S/m)
+    type(tVisacroAlipioSoil) :: this
+
+    this%id                  = id
+    this%mur                 = mur
+    this%sigma0              = sigma0
+    this%propagationConstant = cmplx(0.0d0, 0.0d0, kind=8)
+  end function newMaterialVisacroAlipio
 
   ! ------------------------------------------------------------------
   ! calcPropagationConstant: shared by every tMaterial subtype
@@ -201,6 +235,43 @@ contains
         * (omega / OMEGA0) ** this%alpha0
   end function admittance_freq
 
+  function admittance_alipio(this, omega) result(w)
+    !! W(ω) for the Alipio-Visacro causal dispersive soil model (theory.md
+    !! §7, references.md [14]), *mean* parameter set, reference frequency
+    !! f0 = 1 MHz:
+    !!
+    !!     Delta_sigma(f) = sigma0 * h * (f/f0)^xi,  f = omega/(2*pi)
+    !!     W(omega) = sigma0 + Delta_sigma(f)*[1 + j*tan(pi*xi/2)]
+    !!                + j*omega*epsilon0*epsr_inf
+    !!
+    !! Written this way (rather than computing epsilon_r(f) as a standalone
+    !! quantity and multiplying by omega afterwards) to avoid the spurious
+    !! f -> 0 singularity of epsilon_r(f) alone: the reactive term
+    !! omega*epsilon0*epsilon_r(f) is finite in this limit (Delta_sigma(f)
+    !! -> 0 as f -> 0 since xi > 0), even though epsilon_r(f) itself diverges
+    !! there. As omega -> 0, W -> sigma0, i.e. this converges to a purely
+    !! resistive `tLinear(epsilonr=0, sigma=sigma0)` medium (ADR 0007's
+    !! required regression, pinned in test_material.f90).
+    class(tVisacroAlipioSoil), intent(in) :: this
+    real(8), intent(in) :: omega
+    !! Angular frequency ω (rad/s)
+    complex(8) :: w
+    real(8), parameter :: F0 = 1.0d6
+    !! Reference frequency (Hz)
+    real(8), parameter :: XI = 0.54d0
+    !! Dispersion exponent (mean parameter set, [14])
+    real(8), parameter :: EPSR_INF = 12.0d0
+    !! High-frequency relative permittivity (mean parameter set, [14])
+    real(8) :: f, h, dsigma
+
+    f = omega / (2.0d0 * PI)
+    h = 1.26d0 * (1.0d3 * this%sigma0) ** (-0.73d0)
+    dsigma = this%sigma0 * h * (f / F0) ** XI
+
+    w = cmplx(this%sigma0 + dsigma, &
+              omega * EPSILON0 * EPSR_INF + dsigma * tan(0.5d0 * PI * XI), kind=8)
+  end function admittance_alipio
+
   ! ------------------------------------------------------------------
   ! report implementations
   ! ------------------------------------------------------------------
@@ -226,5 +297,18 @@ contains
       trim(this%id), this%sigma0, this%alpha0, this%kr, this%mur
     str = str // trim(line) // newl
   end subroutine report_freq
+
+  subroutine report_alipio(this, str)
+    !! Append a one-line description of the Alipio-Visacro dispersive soil to `str`.
+    class(tVisacroAlipioSoil), intent(in) :: this
+    character(:), allocatable, intent(inout) :: str
+    !! Accumulator string — text is appended
+    character(len=256) :: line
+
+    write(line, '("Alipio-Visacro dispersive soil ",A,": sigma0=",ES10.3, &
+      &" S/m (mean parameter set), mur=",F0.3)') &
+      trim(this%id), this%sigma0, this%mur
+    str = str // trim(line) // newl
+  end subroutine report_alipio
 
 end module mMaterial

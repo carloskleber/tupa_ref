@@ -74,9 +74,9 @@ Gaps in this repository, in dependency order (1–4, 7, 8 resolved by Phases
 6. ~~**`tPortelaSoil` is a placeholder** (returns zero)~~ **Resolved
    (Phase 4)** — implements the Lima–Portela form per ADR 0007, wired into
    `tStudy%run` via the new `tMaterial%admittance` deferred function; see
-   `test_material.f90`. It remains the first of several planned
-   dispersive-soil `tMaterial` subtypes (`tLongmireSmithSoil`,
-   `tVisacroAlipioSoil`, ...), not the only one.
+   `test_material.f90`. `tVisacroAlipioSoil` (mean parameter set, theory.md
+   §7) is now implemented alongside it (§P5); `tLongmireSmithSoil` remains
+   the next planned dispersive-soil `tMaterial` subtype.
 7. ~~**Leftover C-interop artifacts**~~ **Resolved (Phase 0)** — indices
    naturalised, `alocaMalha` replaced by `initMesh` (no pointer), `calcFreqF`
    and `Solver.f90` (`solMalha`) deleted.
@@ -600,6 +600,22 @@ codes), `tLongmireSmithSoil` per Longmire & Smith [15] as parametrised by
 Cavka et al. [16]. Keep `tPortelaSoil` first (matches the project validation
 curves); implement `tVisacroAlipioSoil` second since it enables direct
 comparison with TAGS/PRTL-mHEM outputs.
+
+**Exercised (2026-07-16)**: `tVisacroAlipioSoil` is implemented in
+`fortran/src/Material.f90`, *mean* parameter set only (`sigma0` is the sole
+free parameter; `h(sigma0)`, `xi=0.54`, `epsr_inf=12` are the fixed mean-curve
+constants). `admittance` is written directly in terms of `W(omega)` rather
+than a standalone `epsilon_r(f)` (theory.md §7) to sidestep the `f -> 0`
+singularity `epsilon_r(f)` has on its own. `fortran/test/test_material.f90`
+pins the formula at f = f0 = 1 MHz, DC-limit convergence to `tLinear`,
+passivity across the model's 100 Hz–4 MHz valid range, the qualitative
+higher-resistivity-disperses-more trend, and repeats the Phase 2
+buried-conductor passivity/DC-limit checks with this soil in place of
+`tLinear`. The JSON case format (`fortran/src/Tupa.f90`) gained a `soil.type`
+selector (`linear` default, `portela`, `alipio-visacro`) — previously *no*
+dispersive soil model was reachable from a case file at all, only `tLinear`.
+The *relatively conservative* / *conservative* parameter sets and
+`tLongmireSmithSoil` remain open.
 
 ### P6 — Parallelise over frequencies, not the matrix fill (Phase 3, decision)
 

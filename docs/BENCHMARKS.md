@@ -20,6 +20,7 @@ hand-solved 4×4 system) are green — see `fortran/test/`.
 | 4 | Internal consistency: full Zeq vs reduced Z_g; reciprocity; passivity; quadrature vs closed forms | theory.md §9.4 | solver/quadrature precision | partially green (reciprocity, closed forms — unit tests); rest pending |
 | 5 | Square grounding grids, harmonic impedance | Grcev & Heimbach 1997 [18] | qualitative curve match; requires Γ(ω) (ROADMAP P2) for the MHz range | pending Phase 7 geometry (grids) |
 | 6 | Cross-code: identical cases through TAGS (and PRTL-mHEM) | references.md, companion codes | input impedance over the sweep; compare **physical outputs only** | pending submodule setup (below) |
+| 7 | `tVisacroAlipioSoil` harmonic impedance, 60 m buried electrode, ρ0 = 100/300/1000/2400 Ω·m | Silva et al. 2025 [36], Fig. 3 | qualitative (digitized plot, no tabulated data — see [validation/](validation/)) | **executed** — [validation/silva2025-fig3.md](validation/silva2025-fig3.md): endpoints within ~1-4%, resonance dips/peaks match in location and depth for ρ0 = 1000/2400; mid-band knee off by up to ~29% for ρ0 = 100/300 (unconfirmed cause — see writeup) |
 
 Additional validation references will be supplied by the author as they are
 processed; anchor 2's original data does not exist in tabulated form (only

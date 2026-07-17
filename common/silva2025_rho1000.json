@@ -1,0 +1,32 @@
+{
+  "title": "Silva et al. 2025 (PEEC vs HEM, SBAI) base case, rho0=1000 ohm.m -- Fig. 3",
+  "soil": {
+    "type": "alipio-visacro",
+    "permeability": 1.0,
+    "sigma0": 1.0e-3
+  },
+  "nodes": [
+    { "id": "Node_1", "position": [ 0.0, 0.0, -0.5] },
+    { "id": "Node_2", "position": [60.0, 0.0, -0.5] }
+  ],
+  "materials": [
+    { "id": "copper", "epsilonr": 1.0, "mur": 1.0, "sigma": 5.96e7 }
+  ],
+  "elements": [
+    {
+      "type": "line",
+      "id": "Line_1",
+      "from": "Node_1",
+      "to": "Node_2",
+      "radius": 0.007,
+      "segments": 60,
+      "material": "copper"
+    }
+  ],
+
+  "sources": [ { "node": "Node_1", "current": { "re": 1.0, "im": 0.0 } } ],
+  "frequencies": { "min": 100.0, "max": 4.0e6, "pointsPerDecade": 27.6 },
+  "outputs": {
+    "quantities": ["inputImpedance"]
+  }
+}

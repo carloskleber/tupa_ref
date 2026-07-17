@@ -56,8 +56,8 @@ entries.
   the conductor itself, from the $I_0/I_1$ Bessel ratio (theory.md §4.3).
 - **Dispersive soil** — soil whose σ and ε vary with frequency; modelled by
   `tMaterial` subtypes named after their references: `tPortelaSoil` [1, 30,
-  31], `tLongmireSmithSoil` [15, 16], `tVisacroAlipioSoil` [13, 14] (ADR
-  0007).
+  31], `tLongmireSmithSoil` [15, 16] (not yet implemented),
+  `tVisacroAlipioSoil` [14], mean parameter set (ADR 0007).
 - **GPR (Ground Potential Rise)** — potential of the grounding structure vs
   remote earth under injected current; a primary engineering output.
 - **NLT (Numerical Laplace Transform)** — time-domain route solving at
@@ -122,10 +122,11 @@ identifier(s) that hold them. Types live in `fortran/src/`: `tMesh`
 
 | Symbol | Meaning | theory.md | Code |
 | --- | --- | --- | --- |
-| $W(\omega)$ | Soil immittance, $\sigma(\omega) + j\omega\varepsilon(\omega)$ | §7 | `tPortelaSoil%calcPropagationConstant` (currently a placeholder — see code `TODO`) |
-| $\sigma_0$ | DC (low-frequency) conductivity | §7 | `tLinear%sigma`; base term of `tPortelaSoil` |
+| $W(\omega)$ | Soil immittance, $\sigma(\omega) + j\omega\varepsilon(\omega)$ | §7 | `tMaterial%admittance` (deferred; `tPortelaSoil%admittance`/`tVisacroAlipioSoil%admittance`) |
+| $\sigma_0$ | DC (low-frequency) conductivity | §7 | `tLinear%sigma`; base term of `tPortelaSoil`/`tVisacroAlipioSoil` |
 | $\alpha$ | Dispersion exponent | §7 | `tPortelaSoil%alpha0` |
 | $\Delta\sigma$ / $k_r$ | Dispersion magnitude at $\omega_0$ | §7 | `tPortelaSoil%kr` |
+| $h(\sigma_0)$, $\xi$, $\varepsilon_{r\infty}$ | Alipio-Visacro mean-curve constants | §7 | fixed parameters inside `tVisacroAlipioSoil%admittance` |
 
 ### Validation (§9) and constants
 

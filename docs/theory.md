@@ -471,12 +471,36 @@ several dispersive-soil subtypes side by side, each named after its original
 reference — `tPortelaSoil` (implemented first, matches the validation curves),
 `tLongmireSmithSoil` (the 13-term Debye expansion of Longmire & Smith [15], as
 parametrised by Cavka et al. [16], an alternative targeted by lightning
-studies), `tVisacroAlipioSoil` (the measurement-based causal model of Visacro
-& Alipio [13], condensed in [14] with recommended *mean* / *relatively
+studies), `tVisacroAlipioSoil` (implemented; the measurement-based causal
+model of Alipio & Visacro [14], with recommended *mean* / *relatively
 conservative* / *conservative* parameter sets — the default soil of the TAGS
 and PRTL-mHEM codes), etc. All must reduce to the constant-parameter
 (`tLinear`) medium as $\omega \to 0$. Cavka et al. [16] compare these models
 side by side and are the reference for cross-checking any implementation.
+
+**`tVisacroAlipioSoil`** (ROADMAP §P5) implements the *mean* curve of the
+causal model in [14], parametrised by a single free quantity, the 100 Hz
+conductivity $\sigma_0$. The model gives $\rho(f) = \sigma_0^{-1}[1 +
+h(f/f_0)^\xi]^{-1}$ and, via the same Hilbert-transform (minimum-phase)
+consistency argument used for `tPortelaSoil` above, a matching
+$\varepsilon_r(f)$. Folded into $W(\omega) = \sigma(\omega) + j\omega\varepsilon(\omega)$
+directly (avoiding the spurious $f\to0$ singularity that $\varepsilon_r(f)$
+alone has, since the reactive term $\omega\varepsilon_0\varepsilon_r(f)$ stays
+finite as $f\to0$ even though $\varepsilon_r(f)$ itself diverges there):
+
+$$W(\omega) = \sigma_0 + \Delta\sigma(f)\left[1 + j\tan\left(\frac{\pi\xi}{2}\right)\right]
++ j\omega\varepsilon_0\varepsilon_{r\infty}, \qquad
+\Delta\sigma(f) = \sigma_0\, h \left(\frac{f}{f_0}\right)^{\xi}, \quad f = \frac{\omega}{2\pi}$$
+
+with $f_0 = 1\,\text{MHz}$, $\xi = 0.54$, $\varepsilon_{r\infty} = 12$, and
+$h(\sigma_0) = 1.26\,(1000\,\sigma_0)^{-0.73}$ ($\sigma_0$ in S/m; the factor
+1000 restates it in mS/m, the unit the empirical fit in [14] uses) — valid
+for $100\,\text{Hz} \le f \le 4\,\text{MHz}$, reducing to a purely resistive
+`tLinear(epsilonr=0, sigma=sigma0)` medium as $\omega \to 0$ (same regression
+required of every dispersive-soil subtype, ADR 0007). Only the *mean*
+parameter set is implemented — the *relatively conservative* / *conservative*
+bounding curves of [14] are not exposed, matching how TAGS/PRTL-mHEM default
+to the mean curve.
 The effect is not confined to grounding: Alipio, Duarte & De Conti [28] show
 it materially changes underground-cable transients for $\rho > 1000$ Ω m
 — dispersive soil should be the default, not the exception, in any transient

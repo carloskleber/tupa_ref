@@ -18,6 +18,7 @@ when it reproduces every case within the stated tolerance.
 | `rod_air.json` | Two collinear rods sharing `Node_2` at the air-soil interface (z=0): 10 m above ground down to a 5 m buried rod, same soil/material, 1∠0° A at `Node_1` (top), 10 Hz-1 MHz | none yet — runs NaN-free since the ROADMAP §1 item 9 fix; fixture still to be generated (see below) |
 | `grid.json` | Small buried grounding grid, one square mesh (4 nodes/edges), 1∠0° A at `Node_A`, 100 Hz-100 kHz | `grid_expected.csv` |
 | `portela1997_transient.json` | Same geometry/soil as `portela1997.json`, but a `signal` block (ADR 0015) instead of `sources`/`frequencies`: transient GPR under a 1.2/50 µs, 30 kA double-exponential surge | none (internal-consistency check only, theory.md §9.2 data gap — see `test_transient.f90`) |
+| `silva2025_rho{100,300,1000,2400}.json` | Silva et al. 2025 (SBAI, references.md [36]) PEEC-vs-HEM base case: buried horizontal electrode, 60 m, 7 mm radius, 0.5 m depth, `alipio-visacro` dispersive soil (theory.md §7) at ρ0 = 100/300/1000/2400 Ω·m, 1∠0° A at `Node_1`, 128 log-spaced points 100 Hz–4 MHz (`pointsPerDecade: 27.6`, ADR 0013's `round(ppd·log10(fmax/fmin))+1` formula) — matches the paper's 2⁷ frequency samples. For comparison against the paper's Fig. 3 (\|Z(ω)\|); no tabulated digitised curve exists yet, so there is no `_expected.csv` (internal passivity/plausibility check only) | none yet |
 
 `buried_conductor_short.json`/`buried_conductor_long.json` stay εr = 1 soil smoke tests with no
 `sources`/`frequencies` block. The other four carry `sources`/
@@ -83,6 +84,13 @@ Semantics:
   is `z = 0` (soil below) — theory.md §2.
 - `soil.permittivity`/`permeability` are **relative** (εr, μr);
   `conductivity` in S/m. Same for material `epsilonr`/`mur`/`sigma`.
+- `soil.type` (optional, default `"linear"`) selects the dispersion model
+  (`fortran/src/Material.f90`, theory.md §7): `"linear"` (shown above) takes
+  `permittivity`/`permeability`/`conductivity`; `"portela"` (Lima–Portela,
+  ADR 0007) takes `permeability`/`sigma0`/`alpha0`/`kr`; `"alipio-visacro"`
+  (Alipio & Visacro [14], mean parameter set) takes `permeability`/`sigma0`
+  only — e.g. `{ "type": "alipio-visacro", "permeability": 1.0, "sigma0": 0.01 }`.
+  See `silva2025_rho100.json` for a worked example.
 - `elements[].type`: only `"line"` exists today; unknown types are skipped
   with a warning.
 - `segments` is the discretisation count of the element; segment length

@@ -7,6 +7,7 @@
 | [CONVENTIONS.md](CONVENTIONS.md) | Coding and project conventions (absorbs the retired CLAUDE.md) |
 | [ROADMAP.md](ROADMAP.md) | Current-state gap analysis, phased plan, proposals from the open-source comparison, author-interview decisions (formerly `implementation-plan.md`) |
 | [BENCHMARKS.md](BENCHMARKS.md) | Validation anchors, execution status, cross-code benchmark setup, comparison policy |
+| [validation/](validation/) | Case-by-case comparisons against published papers' own figures (digitized plots, not tabulated data) |
 | [DISTRIBUTION.md](DISTRIBUTION.md) | Build chain, dependency inventory, packaging/release, licensing, security surface |
 | [GLOSSARY.md](GLOSSARY.md) | Main model and software terms |
 | [references.md](references.md) | Bibliography, numbered as cited in the theory doc |

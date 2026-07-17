@@ -79,3 +79,15 @@ passivity across a decade sweep, and repeats the Phase 2 buried-conductor
 passivity/DC-limit checks with `tPortelaSoil` in place of `tLinear` soil
 (illustrative `alpha0`/`kr`, since no tabulated Lima–Portela parameter set
 is available — ROADMAP §9 "Validation data").
+
+**Exercised (ROADMAP §P5, 2026-07-16)**: `tVisacroAlipioSoil` is implemented
+alongside it, same `tMaterial%admittance` interface, *mean* parameter set of
+Alipio & Visacro [14] with `sigma0` (100 Hz conductivity) as the sole free
+parameter (theory.md §7). Pinned by the same regression shape in
+`test_material.f90` (formula value, DC-limit, passivity, plus the
+higher-resistivity-disperses-more trend from [14]). The JSON case format
+(`fortran/src/Tupa.f90`) gained a `soil.type` selector (`linear` default,
+`portela`, `alipio-visacro`) so a case file can actually reach either
+dispersive model — previously the loader always constructed `tLinear`
+regardless of what `tMaterial` subtypes existed. The *relatively
+conservative* / *conservative* parameter sets of [14] are not exposed.
