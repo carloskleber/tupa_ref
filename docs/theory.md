@@ -116,6 +116,36 @@ with the transversal current per unit length $i_t = I_t/l$ and the longitudinal
 current $I_\ell$ both assumed **uniform** over the segment. Field points are taken
 on the conductor surface (radius `r₀`), which regularises the self terms.
 
+### 3.1 Observation-point potentials (GPR, touch and step voltages)
+
+The same segment-source potential, evaluated at an arbitrary observation
+point $P$ *off* the conductors, is pure post-processing of a solved study
+(no new unknowns): with the solved transversal currents $I_{t,b}$,
+
+$$\psi(P) = \sum_b \frac{I_{t,b}}{4\pi l_b (\sigma + j\omega\varepsilon)}
+\left( g_b(P)\, e^{-\gamma R_b} + \Gamma_t\, g_{b,i}(P)\, e^{-\gamma R_{b,i}} \right)$$
+
+where $g_b(P) = \int_b d\ell/R$ is the §4.1 geometry factor with the field
+point at $P$ (no self-regularisation needed off the wire), $R_b$/$R_{b,i}$
+are midpoint distances to the segment and its image, and the image parcel
+follows §5 (the legacy applies ideal images; the medium constants are those
+of the medium containing $P$). This is exactly what the legacy Matlab
+computes in its soil-potential and touch-potential outputs, and what TAGS
+exposes as potential/field/step-and-touch post-processing (ROADMAP §7 P7):
+
+- **GPR profile / surface potential**: $\psi$ evaluated on a line or grid of
+  points at $z = 0$;
+- **touch voltage** (legacy definition): $\max_P |\psi(P) - u_k|$ over a
+  1 m-radius circle of points around a designated node $k$ (36 points in
+  the legacy default) — a purely geometric definition, without IEEE Std 80's
+  body-circuit and surface-layer derating factors [41];
+- **step voltage**: difference of $\psi$ between surface points 1 m apart
+  along a profile [41].
+
+The observation-point geometry factor reuses the §4.2 machinery (closed
+form for the collinear/parallel cases, quadrature otherwise), so the P1
+mHEM kernel benefits this output as well.
+
 ---
 
 ## 4. Mutual impedances
@@ -283,11 +313,39 @@ $$Z_t(a,a) = Z_{t,\text{ext}} + Z_{t,\text{interface}}$$
   $$z_{\text{int}} = \frac{\sqrt{j\omega\mu_c/\sigma_c}}{2\pi r_0} \cdot \frac{I_0(\rho)}{I_1(\rho)}, \quad \rho = r_0 \sqrt{j\omega\mu_c \sigma_c}$$
   $$Z_{\text{int}} = z_{\text{int}} \cdot l$$
 
-  with $I_0, I_1$ modified Bessel functions. For tubular conductors (inner
-  radius $r_i$) the standard Schelkunoff expression with $I$ and $K$ Bessel
-  functions applies; see [3]. The legacy Matlab reference implements both
-  cases in a single routine (solid when the inner radius is zero), including
-  the large-argument limit of the Bessel ratio for numerical stability.
+  with $I_0, I_1$ modified Bessel functions. For **tubular conductors**
+  (inner radius $r_i$, current returning outside the tube) the Schelkunoff
+  surface-impedance expression applies [39], with
+  $\rho_0 = r_0\sqrt{j\omega\mu_c\sigma_c}$, $\rho_i = r_i\sqrt{j\omega\mu_c\sigma_c}$:
+
+  $$z_{\text{int}} = \frac{\sqrt{j\omega\mu_c/\sigma_c}}{2\pi r_0} \cdot
+  \frac{I_0(\rho_0)K_1(\rho_i) + K_0(\rho_0)I_1(\rho_i)}
+       {I_1(\rho_0)K_1(\rho_i) - K_1(\rho_0)I_1(\rho_i)}$$
+
+  which reduces to the solid formula as $r_i \to 0$. The legacy Matlab
+  reference implements both cases in a single routine (solid when the inner
+  radius is zero), and clamps the solid-case Bessel ratio
+  $I_0/I_1 \to 1$ for large $|\rho|$ (legacy threshold $|\rho| > 700$) where
+  the unscaled Bessel evaluations overflow — an implementation note that
+  carries over to the SLATEC `ZBESI`/`ZBESK` port (scaled variants exist).
+  Its tube *element* is just the straight-line element plus a wall
+  thickness: $r_i = r_0 - t$ feeds this formula, everything else (external
+  and interface terms) is unchanged — which is also why the same element
+  extrapolates to buried metallic pipes.
+
+**Insulated (coated) conductors** — registered finding from the legacy
+re-inspection: the Matlab's insulated-cable branch is an acknowledged
+placeholder (flagged TODO in the code). It only swaps the transversal
+constant $c_E$ of the leakage term to $1/(4\pi \cdot j\omega\varepsilon_s)$ —
+i.e. it drops the soil *conduction* path entirely and leaks through the
+soil permittivity (an earlier commented variant used a tiny fictitious
+$\sigma = 10^{-8}$ S/m instead); the coating's own geometry and
+permittivity never enter, and $Z_\ell$ is untouched. The proper treatment
+is Sunde's insulated buried wire [40]: the coating admittance per unit
+length, $y_c = 2\pi(\sigma_c + j\omega\varepsilon_c)/\ln(r_c/r_0)$ for a
+coating of outer radius $r_c$, in **series** with the bare-conductor soil
+leakage — reducing to the bare case as $r_c \to r_0$. A reference
+implementation should do this rather than port the placeholder.
 
 ---
 
@@ -349,7 +407,15 @@ in the Fortran code is a planned refinement (ROADMAP §7 P2) that
 *restores* reference behaviour rather than adding to it; the cross-media
 coupling (air segment ↔ buried segment) is second-order and is neglected, as
 in both legacy codes (the Matlab returns zero for its "transmission"
-condition pairs).
+condition pairs). Should ROADMAP Phase 7's "mutual impedance between
+segments in different media" ever be implemented, there is **no legacy
+implementation to port** (the Matlab's cross-media routine was left
+syntactically unfinished — ADR 0017): the theory must be derived fresh.
+The natural quasi-static candidate is a Fresnel-type *transmission*
+coefficient $\tau = 2W_1/(W_1 + W_2)$ applied to the direct term (the
+antenna-theory reflection/transmission kernel of Poljak & Doric [35] is
+the closest published analogue), validated against a `rod_air`-class case;
+anything beyond that is Sommerfeld territory (§10.1).
 
 Even with $\Gamma(\omega)$, the image treatment is quasi-static and the HEM
 family is regarded as accurate from DC up to a few MHz [19,20]. Kuhar,
@@ -410,8 +476,9 @@ $$\begin{bmatrix}
 \begin{bmatrix} \mathbf{0} \\ \mathbf{0} \\ \mathbf{i}_e \end{bmatrix}$$
 
 solved by dense LU (LAPACK `ZGESV`) once per frequency. Voltage sources are
-converted to equivalent current injections (or handled by constraint rows) —
-see the ROADMAP.
+converted to equivalent current injections by unit-injection superposition
+in the study layer (ADR 0010/0016) — the kernel only ever sees the
+$\mathbf{i}_e$ right-hand side above.
 
 **Reduced form.** Eliminating $\mathbf{i}_1, \mathbf{i}_2$ yields the nodal admittance relation used
 when only $\mathbf{u}$ is needed and $n_n \ll n_s$:
@@ -427,6 +494,25 @@ switchable solver methods: the reduced form (backslash and explicit-inverse
 variants), the augmented form (with LU and GMRES-fallback variants), and
 additionally a TAGS-style symmetric block system in the unknowns
 $(\mathbf{u}, I_\ell, I_t)$ (its "método 5").
+
+**Lumped circuit branches** (registered finding, feeds ROADMAP Phase 7's
+series-RLC element): the legacy Matlab appends its `Impedancia` elements
+*after* the $n_s$ electromagnetic segments as extra branches of the same
+$(\mathbf{i}_1, \mathbf{i}_2)$ system. A lumped branch between two existing
+nodes carries $Z(\omega) = R + j\omega L + 1/(j\omega C)$ (the capacitor
+term dropped when $C = \infty$; a directly-specified complex $Z$ is also
+accepted) placed on the $Z_\ell$ **diagonal** in place of the internal
+impedance; it has **no geometry factors** — its rows and columns of $Z_t$
+and $Z_\ell$ are zero off-diagonal (no electromagnetic coupling to any
+segment), and its own $Z_t$ diagonal is zeroed, so the branch's transversal
+(leakage) current is forced to vanish and only the longitudinal circuit
+current survives. The incidence matrices treat it as an ordinary branch.
+An implementation must check that the zeroed $Z_t$ row leaves the assembled
+system nonsingular under its own topology conventions (the legacy zeroes
+the diagonal *after* filling, relying on its incidence rows to keep the
+system determined) — a port should pin this with a DC test: a lumped $R$
+from an energised node to a grounded electrode must reproduce the series
+resistance in the driving-point impedance.
 
 > **Sign caveat.** The literature differs in the direction assumed for $\mathbf{i}_2$
 > (Portela [1] takes it *out* of the segment at node $n_2$, flipping signs in B,
@@ -642,7 +728,16 @@ it produces non-TEM near fields like the former, but couples electric and
 magnetic effects through separate circuit quantities like the latter — and
 reports HEM channel-current distributions consistent with full
 electromagnetic solutions, an independent endorsement of the family's
-physics from outside the grounding literature.
+physics from outside the grounding literature. The planned TUPÃ
+lightning-channel element (ROADMAP Phase 7) sits exactly in this class:
+the channel is represented as ordinary HEM segments in air (the legacy
+provides only the geometry generator — log-spaced segments along the
+incidence direction), with **added distributed series impedance
+calibrated so the computed propagation matches a prescribed return-stroke
+speed** — the wire-loading technique catalogued in [34] for slowing an
+antenna-model channel from c to a realistic v (typically c/3 to 2c/3);
+the target speed becomes a user input rather than an emergent artefact
+of the unloaded wire.
 
 ### 10.1 Neighbouring model families
 

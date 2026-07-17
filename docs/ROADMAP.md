@@ -163,35 +163,96 @@ Done (2026-07-17):
   supported; JSON `sources[].voltage`; `inputImpedance` uses per-frequency
   effective currents.
 
-Remaining, in order of preference (scoping decisions from the 2026-07-17
-author Q&A in *italics*):
+Remaining, in order of preference. Scoping decisions from the 2026-07-17
+author Q&A in *italics*; effort rated S/M/L (S ≈ days, M ≈ a focused
+week-scale task, L = new theory/object-model work) from the 2026-07-17
+legacy survey (registered findings in theory.md §3.1, §4.3, §5, §6):
 
-- `tCatenary` — *Matlab-faithful port of the reference catenary element
-  (same parametrisation/sag formulation), discretised into straight
-  segments like `tLine`*,
-- Numerical Laplace Transform (NLT) option (§7 P4) — *opt-in first:
+- `tCatenary` — **S**. *Matlab-faithful port, discretised into straight
+  segments like `tLine`*. Survey finding: the legacy "catenary"
+  (`Catenaria.m`) is actually a **parabolic** sag profile (z ∝ x², sag
+  parameter at midspan, uniform plan spacing), plus a 3-node variant — so
+  Matlab-faithful and parabolic approximation coincide. Pure
+  element-assembly work, no new physics.
+- Numerical Laplace Transform (NLT) option (§7 P4) — **M**. *Opt-in first:
   `signal.transform: "fft"` (default) `| "nlt"`; flip the default only
-  after P3 cross-validation, keeping golden fixtures stable*,
-- Hanning (and other) windowing,
+  after P3 cross-validation, keeping golden fixtures stable*. Driver-only
+  change (theory.md §8); refs: Gómez & Uribe [17], TAGS as executable
+  reference.
+- Hanning (and other) windowing — **S**, rides on NLT (the window filter
+  before the inverse transform, theory.md §8); the plain-FFT path keeps
+  the existing erfc tail taper (different role: record truncation).
 - Ground potential rise (GPR), touch and step voltage — single-frequency
-  study (§7 P7) — *both input forms from the start: explicit
+  study (§7 P7) — **M**. *Both input forms from the start: explicit
   observation-points array plus an optional auto surface-grid block,
-  mirroring the Matlab output-class inventory (ADR 0017 finding 6)*,
-- Series RLC element — *series form only first
-  (R + jωL + 1/(jωC) two-terminal, Matlab-style non-coupling lumped
-  element); parallel later if a case needs it*,
-- Tubular conductor (extrapolation: simulation of metallic pipes),
-- insulated conductor,
-- Generic internal impedance models (e.g. OPGW), specified in a JSON database. Alternative use from the material property in elements.
-- Lightning discharge channel,
-- Mutual impedance between segments in different media,
-- `tCircumference` (grounding rings),
-- Grid/mesh generator element,
+  mirroring the Matlab output-class inventory (ADR 0017 finding 6)*.
+  Post-processing of the solved I_t — formula and legacy/TAGS correlation
+  registered in theory.md §3.1; needs an ADR 0012 results-schema
+  extension. *Decided (2026-07-17 Q&A): legacy-geometric definitions
+  (touch = max |ψ − u_node| on a 1 m circle, step = ψ difference at 1 m
+  spacing), citing IEEE Std 80 [41] as normative context; body-circuit /
+  surface-layer derating factors stay out of the solver.*
+- Series RLC element — **M**. *Series form only first (R + jωL + 1/(jωC)
+  two-terminal, Matlab-style non-coupling lumped element); parallel later
+  if a case needs it*. Legacy mechanism (extra non-electromagnetic branch,
+  Z(ω) on the Z_ℓ diagonal, zeroed Z_t row) registered in theory.md §6,
+  including the nonsingularity check and DC pin a port must add.
+- Tubular conductor (extrapolation: simulation of metallic pipes) — **S**.
+  Schelkunoff I/K formula now stated explicitly in theory.md §4.3 [39];
+  element = `tLine` + wall thickness (legacy `Tubo.m`); extends
+  `mImpedance` with SLATEC `ZBESK` alongside `ZBESI` (scaled variants for
+  large arguments).
+- Insulated conductor — **M–L**. Survey finding (theory.md §4.3): the
+  legacy branch is an acknowledged placeholder (drops soil conduction,
+  ignores the coating entirely; flagged TODO in the legacy code) — do
+  **not** port it; implement Sunde's coating admittance in series with the
+  bare-conductor soil leakage [40].
+- Generic internal impedance models (e.g. OPGW), specified in a JSON
+  database; alternative use from the material property in elements —
+  **M**. *Decided (2026-07-17 Q&A): database entries carry
+  frequency-tabulated R(f), X(f) (measured/datasheet data), interpolated
+  at solve time* — captures stranding/steel-core effects the equivalent
+  tube misses; extrapolation limits must be validated and flagged. (The
+  legacy repo's ACSR spreadsheet is candidate seed data; the C++
+  bundle/L-profile models remain a possible catalog kind later.)
+- Lightning discharge channel — **M–L**. Survey finding: the legacy
+  element class is an **empty placeholder**; a helper (`canal.m`) only
+  generates channel geometry (log-spaced segments from cloud height down
+  to the strike point, incidence/azimuth angles) — the channel is then
+  ordinary HEM segments in air, i.e. an "electromagnetic return-stroke
+  model" in Baba & Rakov's classification [34]. *Decided (2026-07-17
+  Q&A): antenna-model route, with added distributed series impedance
+  calibrated so the channel propagation matches an intended return-stroke
+  speed prescribed in the JSON* — the loading technique surveyed in [34].
+- Mutual impedance between segments in different media — **L**. No legacy
+  implementation exists to port (unfinished body, ADR 0017); the
+  candidate quasi-static transmission-coefficient route is registered in
+  theory.md §5 [35]; validate on `rod_air`-class cases. *Decided
+  (2026-07-17 Q&A): sequenced strictly after §7 P2 (Γ(ω) images) — both
+  touch the same interface machinery and P2 restores reference behaviour
+  first.*
+- `tCircumference` (grounding rings) — **S**. Legacy `Anel.m`: circle in
+  an arbitrary plane (centre + normal vector + rotation), ≥ 3 straight
+  segments, closed loop (exercises loop topology); single-medium
+  constraint enforced.
+- Grid/mesh generator element — **S**. Composite element emitting `tLine`s
+  on a rectangular pattern (legacy `Malha.m` is exactly this, though
+  unfinished); practical only after §7 P1 (quadrature cost, §5).
 - Multipolar cables (internal representation by impedance/admittance
-  matrix),
+  matrix) — **L**. Object-model change (multi-conductor element); refs:
+  Ametani cable constants [42], Schelkunoff [39]; PRTL-mHEM's tubular
+  bundles are a partial analogue.
 - Option of multiple injections (e.g. three-phase sine emulating line
-  voltage, plus impulse injection),
-- Multi-layer soil and reflection-coefficient images.
+  voltage, plus impulse injection) — **S–M**. The harmonic side already
+  handles simultaneous mixed sources (ADR 0016); remaining work is the
+  transient pipeline (per-source spectra × per-source transfer functions,
+  superposed — linear) and schema. Survey note: the legacy also supports
+  a *differential* (±1 two-node) injection pattern worth carrying along.
+- Multi-layer soil and reflection-coefficient images — **L**. Lifts the
+  §5 single-interface premise; route: layered-earth Green's functions via
+  quasi-static complex images (Li, Chen & Wang [33]; Sunde [40]
+  background). Explicitly out of MVP scope (theory.md §5, §10.1) — keep
+  last.
 
 The Matlab reference's full element inventory, for the record: straight
 lines (three variants), ring, grid, cable, catenary, lightning-channel

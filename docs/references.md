@@ -265,6 +265,37 @@ below) as the sources of its dispersive-soil routines:
     lightning protection level — the citable parameter sets for
     `newHeidlerSignalTerms`.
 
+## Conductor, cable and safety references (Phase 7 elements)
+
+39. **Schelkunoff, S. A.** — "The Electromagnetic Theory of Coaxial
+    Transmission Lines and Cylindrical Shields", *Bell System Technical
+    Journal*, vol. 13, no. 4, pp. 532–579, 1934. Canonical surface-impedance
+    formulas for solid and tubular cylindrical conductors (modified Bessel
+    I/K forms) — the tubular internal impedance the legacy `zinterna.m`
+    implements and theory.md §4.3 states (ROADMAP Phase 7 tubular
+    conductor / metallic pipes).
+40. **Sunde, E. D.** — *Earth Conduction Effects in Transmission Systems*,
+    Van Nostrand, New York, 1949 (Dover reprint 1968). The classical
+    treatise on buried-conductor impedance and admittance: grounding
+    resistance formulas (theory.md §9.1), leakage admittance of **insulated
+    (coated) buried wires** (coating admittance in series with soil
+    leakage — the missing theory for the Phase 7 insulated conductor, left
+    as a TODO placeholder in the legacy code), and layered-earth effects
+    (background for the multi-layer soil item).
+41. **IEEE Std 80-2013** — *IEEE Guide for Safety in AC Substation
+    Grounding*. Normative definitions of touch, step and mesh voltages
+    (1 m reach / 1 m step conventions, body-current limits, surface-layer
+    derating). Reference for the Phase 7 GPR/touch/step outputs — the
+    legacy computes a geometric variant (max surface-to-node potential
+    difference on a 1 m circle) without the body-circuit factors.
+42. **Ametani, A.** — "A General Formulation of Impedance and Admittance of
+    Cables", *IEEE Trans. Power Apparatus and Systems*, vol. PAS-99, no. 3,
+    pp. 902–910, 1980. Per-unit-length series-impedance/shunt-admittance
+    matrices of multiconductor cables (the EMTP "Cable Constants" route) —
+    the natural internal representation for the Phase 7 multipolar-cable
+    element; complements Wedepohl & Wilcox and Schelkunoff [39] layer
+    formulas.
+
 ## Related open-source implementations
 
 Companion codes of the same model family, useful as executable cross-checks
