@@ -524,7 +524,7 @@ full spectrum by conjugate symmetry and inverse-transformed — the DC bin is
 solved at a small nonzero substitute frequency rather than exactly $\omega=0$
 (same convention as the legacy Matlab's `FREQ_ZERO`, needed since a
 zero-conductivity medium's transverse admittance is singular at exactly
-$\omega = 0$, ROADMAP.md §3 finding 9). The FFT itself is a small in-repo
+$\omega = 0$, ADR 0019). The FFT itself is a small in-repo
 double-precision transform, not SLATEC's `CFFTF`/`CFFTB` (single precision
 only) or stdlib (no FFT module in the pinned version) — see
 [ADR 0014](adr/0014-fft-implementation.md). Heidler and double-exponential

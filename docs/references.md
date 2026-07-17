@@ -247,6 +247,24 @@ below) as the sources of its dispersive-soil routines:
     unified segment discretisation plus geometric-symmetry reuse cut matrix
     assembly by ~400× relative to both plain HEM and PEEC.
 
+## Excitation waveforms
+
+37. **Heidler, F.** — "Traveling Current Source Model for LEMP Calculation",
+    *Proc. 6th Int. Symp. on Electromagnetic Compatibility*, Zurich, 1985,
+    pp. 157–162. Origin of the Heidler function
+    i(t) = (I₀/η)·(t/τ₁)ⁿ/(1 + (t/τ₁)ⁿ)·e^(−t/τ₂) with the analytic
+    peak-correction factor η — the standard analytical lightning-current
+    waveform (zero initial slope, independently adjustable front and tail).
+    Implemented as `mSignal`'s parametrised `tHeidlerSignal` construction
+    (ROADMAP Phase 7); the legacy 6-term set of Phase 6 is a sum of these
+    terms with uncited parameters.
+38. **IEC 62305-1** — *Protection against lightning — Part 1: General
+    principles*, IEC, ed. 2, 2010. Annex B expresses the standardised first
+    (10/350 µs) and subsequent (0.25/100 µs) stroke currents as single-term
+    Heidler functions [37] with tabulated I₀, k (= η), τ₁, τ₂ and n = 10 per
+    lightning protection level — the citable parameter sets for
+    `newHeidlerSignalTerms`.
+
 ## Related open-source implementations
 
 Companion codes of the same model family, useful as executable cross-checks

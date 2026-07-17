@@ -32,6 +32,15 @@ ARCHITECTURE → theory.md; contributors add CONVENTIONS and ROADMAP.
 | [0008](adr/0008-sign-conventions-and-validation.md) | Single sign-convention set, enforced by validation tests | Accepted |
 | [0009](adr/0009-impedance-fill-interface.md) | Impedance-fill routines consume raw geometry factors | Accepted |
 | [0010](adr/0010-sources-as-current-injections.md) | Excitation sources as nodal current injections | Accepted |
+| [0011](adr/0011-gui-module-technology-and-scope.md) | GUI module: Python/PySide6/Qt3D, view-only v1 | Accepted |
+| [0012](adr/0012-results-json-schema.md) | Results JSON schema v0 (harmonic sweep) | Accepted |
+| [0013](adr/0013-input-schema-sources-frequencies-outputs.md) | Input schema: `sources`/`frequencies`/`outputs` blocks | Accepted |
+| [0014](adr/0014-fft-implementation.md) | In-repo double-precision radix-2 FFT | Accepted |
+| [0015](adr/0015-time-domain-signal-schema.md) | Input schema: `signal`; transient results schema v0 (amended: Heidler `terms`) | Accepted |
+| [0016](adr/0016-voltage-sources-by-superposition.md) | Voltage sources by unit-injection superposition; `voltage` in sources | Accepted |
+| [0017](adr/0017-legacy-reinspection-findings.md) | Legacy re-inspection findings (July 2026) | Recorded |
+| [0018](adr/0018-author-interview-decisions-2026-07.md) | Author-interview decisions (2026-07-05) | Accepted |
+| [0019](adr/0019-air-medium-hardcoded-vacuum.md) | Air medium hardcoded as vacuum (no JSON `air` block) | Accepted |
 
 Language-specific build documentation stays with each implementation
 (e.g. [../fortran/README.md](../fortran/README.md)); FORD API docs are

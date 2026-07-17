@@ -62,7 +62,8 @@ def build_study_model(study: Study) -> tuple[QStandardItemModel, dict[tuple[str,
 
     sources = _row("Sources", f"({len(study.sources)})")
     for s in study.sources:
-        sources.appendRow(_row(s.node, f"{s.current.real:g}{s.current.imag:+g}j A"))
+        unit = "V" if s.is_voltage else "A"
+        sources.appendRow(_row(s.node, f"{s.current.real:g}{s.current.imag:+g}j {unit}"))
     root.appendRow(sources)
 
     frequencies = _row("Frequencies")

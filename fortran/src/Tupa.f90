@@ -31,7 +31,7 @@ module tupa
   use mMaterial
   use mElementLine
   use mJsonParser
-  use mSignal, only: tSignal, newHeidlerSignal, newDoubleExpSignal
+  use mSignal, only: tSignal, newHeidlerSignal, newHeidlerSignalTerms, newDoubleExpSignal
   use mTransient, only: transientResponse
   use mResultsWriter, only: writeResultsCsv, writeResultsJson, &
                              writeTransientResultsCsv, writeTransientResultsJson
@@ -48,7 +48,7 @@ contains
   ! JSON parsing and study loading
   ! =====================================================================
 
-  subroutine loadStudy(filename, study, sourceNodeIds, sourceCurrents, freqHz, &
+  subroutine loadStudy(filename, study, sourceNodeIds, sourceCurrents, sourceIsVoltage, freqHz, &
                         outputNodeIds, outputElectrodeIds, outputQuantities, &
                         signal, signalSourceNode, signalObserveNodeIds, signalObserveElectrodeIds, &
                         signalNyquistHz, signalFftPoints, signalFreqZeroHz)
@@ -76,9 +76,13 @@ contains
     type(tStudy),     intent(out) :: study
     !! Output study object (all fields populated)
     character(len=256), allocatable, intent(out), optional :: sourceNodeIds(:)
-    !! Node IDs from the "sources" block (ADR 0013), one per current injection
+    !! Node IDs from the "sources" block (ADR 0013), one per injection
     complex(8), allocatable, intent(out), optional :: sourceCurrents(:)
-    !! Complex currents corresponding to `sourceNodeIds` (A)
+    !! Source values corresponding to `sourceNodeIds`: injected current (A),
+    !! or source voltage (V) where `sourceIsVoltage` is true (ADR 0016)
+    logical, allocatable, intent(out), optional :: sourceIsVoltage(:)
+    !! True where the source object carries a "voltage" field instead of
+    !! "current" (ADR 0016); allocated together with `sourceNodeIds`
     real(8), allocatable, intent(out), optional :: freqHz(:)
     !! Log-spaced frequency axis (Hz) built from the "frequencies" block
     !! (`min`/`max`/`pointsPerDecade`, ADR 0013)
@@ -217,14 +221,27 @@ contains
       sources_arr => json_child(root, "sources")
       n = json_size(sources_arr)
       allocate(sourceNodeIds(n), sourceCurrents(n))
+      if (present(sourceIsVoltage)) then
+        allocate(sourceIsVoltage(n))
+        sourceIsVoltage = .false.
+      end if
       do i = 1, n
         src_obj     => json_item(sources_arr, i)
         sourceNodeIds(i) = json_str(src_obj, "node")
-        current_obj => json_child(src_obj, "current")
+        ! A source carries either "current" (A) or "voltage" (V) — ADR
+        ! 0013/0016. "voltage" wins if both are present (a malformed case);
+        ! neither present defaults to a zero current injection.
+        current_obj => json_child(src_obj, "voltage")
         if (associated(current_obj)) then
           sourceCurrents(i) = cmplx(json_real(current_obj, "re"), json_real(current_obj, "im"), kind=8)
+          if (present(sourceIsVoltage)) sourceIsVoltage(i) = .true.
         else
-          sourceCurrents(i) = cmplx(0.0d0, 0.0d0, kind=8)
+          current_obj => json_child(src_obj, "current")
+          if (associated(current_obj)) then
+            sourceCurrents(i) = cmplx(json_real(current_obj, "re"), json_real(current_obj, "im"), kind=8)
+          else
+            sourceCurrents(i) = cmplx(0.0d0, 0.0d0, kind=8)
+          end if
         end if
       end do
     end if
@@ -269,12 +286,38 @@ contains
       block
         character(len=256) :: waveformType, front
         real(8) :: imax
+        type(tJsonValue), pointer :: terms_arr, term_obj
+        real(8), allocatable :: hI0(:), hN(:), hTau1(:), hTau2(:)
+        integer :: nTerms, iTerm
 
         waveformType = json_str(signal_obj, "waveform")
         imax = json_real(signal_obj, "imax")
         select case (trim(waveformType))
         case ("heidler")
-          allocate(signal, source=newHeidlerSignal(imax))
+          if (json_has(signal_obj, "terms")) then
+            ! Standard parametrised Heidler (Heidler 1985 / IEC 62305-1,
+            ! ADR 0015 amendment): one {i0, n, tau1, tau2} object per term.
+            ! "imax" is optional here — absent means physical amplitudes
+            ! (no peak rescale).
+            terms_arr => json_child(signal_obj, "terms")
+            nTerms = json_size(terms_arr)
+            allocate(hI0(nTerms), hN(nTerms), hTau1(nTerms), hTau2(nTerms))
+            do iTerm = 1, nTerms
+              term_obj => json_item(terms_arr, iTerm)
+              hI0(iTerm)   = json_real(term_obj, "i0")
+              hN(iTerm)    = json_real(term_obj, "n")
+              hTau1(iTerm) = json_real(term_obj, "tau1")
+              hTau2(iTerm) = json_real(term_obj, "tau2")
+            end do
+            if (json_has(signal_obj, "imax")) then
+              allocate(signal, source=newHeidlerSignalTerms(hI0, hN, hTau1, hTau2, imax=imax))
+            else
+              allocate(signal, source=newHeidlerSignalTerms(hI0, hN, hTau1, hTau2))
+            end if
+          else
+            ! Legacy fixed 6-term set, peak-rescaled to the required imax.
+            allocate(signal, source=newHeidlerSignal(imax))
+          end if
         case ("doubleExp")
           front = json_str(signal_obj, "front")
           allocate(signal, source=newDoubleExpSignal(imax, trim(front), jones=json_getbool(signal_obj, "jones")))
@@ -359,6 +402,7 @@ contains
     character(len=256), allocatable :: sourceNodeIds(:)
     character(len=256), allocatable :: outputNodeIds(:), outputElectrodeIds(:), outputQuantities(:)
     complex(8), allocatable :: sourceCurrents(:)
+    logical, allocatable :: sourceIsVoltage(:)
     real(8), allocatable :: freqHz(:)
     class(tSignal), allocatable :: signal
     character(len=256) :: signalSourceNode
@@ -377,7 +421,7 @@ contains
       print *, "Loading study ", trim(filename)
     end if
     call loadStudy(filename, study, sourceNodeIds=sourceNodeIds, &
-                   sourceCurrents=sourceCurrents, freqHz=freqHz, &
+                   sourceCurrents=sourceCurrents, sourceIsVoltage=sourceIsVoltage, freqHz=freqHz, &
                    outputNodeIds=outputNodeIds, outputElectrodeIds=outputElectrodeIds, &
                    outputQuantities=outputQuantities, &
                    signal=signal, signalSourceNode=signalSourceNode, &
@@ -391,7 +435,7 @@ contains
     base = basenameNoExt(filename)
 
     if (ranSweep) then
-      call study%runSweep(freqHz, sourceNodeIds, sourceCurrents)
+      call study%runSweep(freqHz, sourceNodeIds, sourceCurrents, sourceIsVoltage=sourceIsVoltage)
       call study%report()
 
       csvFile  = trim(base) // "_results.csv"
@@ -521,10 +565,11 @@ contains
     !! Output study object, with sweep results populated
     character(len=256), allocatable :: sourceNodeIds(:)
     complex(8), allocatable :: sourceCurrents(:)
+    logical, allocatable :: sourceIsVoltage(:)
     real(8), allocatable :: freqHz(:)
 
     call loadStudy(filename, study, sourceNodeIds=sourceNodeIds, &
-                   sourceCurrents=sourceCurrents, freqHz=freqHz)
+                   sourceCurrents=sourceCurrents, sourceIsVoltage=sourceIsVoltage, freqHz=freqHz)
 
     if (.not. (allocated(sourceNodeIds) .and. allocated(freqHz))) then
       call raiseError("runStudyFromFile: '" // trim(filename) // &
@@ -532,7 +577,7 @@ contains
       return
     end if
 
-    call study%runSweep(freqHz, sourceNodeIds, sourceCurrents)
+    call study%runSweep(freqHz, sourceNodeIds, sourceCurrents, sourceIsVoltage=sourceIsVoltage)
   end subroutine runStudyFromFile
 
 end module tupa

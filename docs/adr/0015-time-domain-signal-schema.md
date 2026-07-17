@@ -42,11 +42,24 @@ harmonic sweep are unrelated solves over the same structure):
 
 - `waveform`: `"doubleExp"` or `"heidler"`, selecting `mSignal`'s
   `tDoubleExpSignal`/`tHeidlerSignal`.
-- `imax`: peak current (A), both waveform families.
+- `imax`: peak current (A), both waveform families. (Optional for
+  `"heidler"` with `terms` — see the amendment below.)
 - `front`/`jones`: `tDoubleExpSignal` only — `front` is one of the four
   named forms `mSignal::newDoubleExpSignal` already accepts
   (`f1_2_5`/`f1_2_50`/`f1_2_200`/`f250_2500`); `jones` is optional, default
-  `false`. Ignored for `"heidler"` (the 6-term parameter set is fixed).
+  `false`. Ignored for `"heidler"` (without `terms`, the legacy 6-term
+  parameter set is fixed).
+- `terms` (**amendment 2026-07-17**, ROADMAP Phase 7): optional array for
+  `"heidler"` only — the standard parametrised Heidler function (Heidler
+  1985 [37]; IEC 62305-1 [38] tabulates single-term parameter sets), one
+  `{ "i0": <A>, "n": <->, "tau1": <s>, "tau2": <s> }` object per term,
+  mapped to `mSignal::newHeidlerSignalTerms`. With `terms` present, `imax`
+  becomes optional: absent, the terms are used at their physical
+  amplitudes (each term's peak ≈ `i0` via the analytic η correction — the
+  citable usage); present, the summed waveform is numerically peak-rescaled
+  to `imax` (legacy convention). Without `terms`, behaviour is unchanged
+  (legacy 6-term set, `imax` required). Additive field — existing case
+  files are unaffected.
 - `sourceNode`: the node receiving the unit-current sweep injection
   (`mTransient::transientResponse`'s `sourceNodeId`).
 - `observeNodes`: **array**, at least one node ID whose v(t) is computed

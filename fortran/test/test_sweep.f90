@@ -172,6 +172,69 @@ program test_sweep
     end block
   end if
 
+  ! ----------------------------------------------------------------
+  ! Voltage sources (ADR 0010/0016): an ideal voltage source must pin the
+  ! node voltage exactly, and the derived input impedance must match the
+  ! current-injection sweep (same linear structure).
+  ! ----------------------------------------------------------------
+  call test_init("voltage source: pinned node voltage, Zin matches current injection")
+
+  block
+    complex(8), parameter :: uSrc = cmplx(10.0d0, 0.0d0, kind=8)
+    complex(8), allocatable :: zinV(:)
+    complex(8) :: vNode
+    call study%runSweep(freqHz, ["Node_1"], [uSrc], sourceIsVoltage=[.true.])
+
+    idx = study%structure%findNodeIndex("Node_1")
+    do k = 1, size(freqHz)
+      vNode = study%voltageResults%get(idx, k)
+      call test_ok("V(Node_1) == U at " // trim(freqStr(freqHz(k))), &
+                   abs(vNode - uSrc) < 1.0d-8 * abs(uSrc), &
+                   "voltage source did not pin the node voltage")
+    end do
+
+    zinV = study%inputImpedance("Node_1")
+    do k = 1, size(freqHz)
+      call test_ok("Zin from voltage sweep matches current sweep at " // trim(freqStr(freqHz(k))), &
+                   abs(zinV(k) - zin(k)) < 1.0d-8 * abs(zin(k)), &
+                   "voltage-source effective current inconsistent with Zin")
+    end do
+  end block
+
+  ! ----------------------------------------------------------------
+  ! Mixed voltage + current sources: solving with the reported effective
+  ! currents as plain current injections must reproduce the same fields.
+  ! ----------------------------------------------------------------
+  call test_init("mixed voltage + current sources: superposition consistency")
+
+  block
+    complex(8), allocatable :: vMixed(:), ieff(:)
+    real(8) :: omega
+    integer :: i
+    omega = 2.0d0 * PI * freqHz(3)
+
+    call study%run(omega, ["Node_1", "Node_2"], &
+                   [cmplx(10.0d0, 0.0d0, kind=8), cmplx(1.0d0, 0.0d0, kind=8)], &
+                   sourceIsVoltage=[.true., .false.])
+    vMixed = study%mesh%voltage
+    ieff   = study%lastSourceCurrents
+
+    idx = study%structure%findNodeIndex("Node_1")
+    call test_ok("V at the voltage-source node is exactly U", &
+                 abs(vMixed(idx) - cmplx(10.0d0, 0.0d0, kind=8)) < 1.0d-8 * 10.0d0, &
+                 "mixed-source solve did not pin the voltage-source node")
+    call test_ok("current source keeps its given value in lastSourceCurrents", &
+                 abs(ieff(2) - cmplx(1.0d0, 0.0d0, kind=8)) < 1.0d-12, &
+                 "fixed current source value was altered")
+
+    call study%run(omega, ["Node_1", "Node_2"], ieff)
+    do i = 1, size(vMixed)
+      call test_ok("node voltages match a plain current injection of the effective currents", &
+                   abs(study%mesh%voltage(i) - vMixed(i)) <= 1.0d-8 * max(1.0d0, abs(vMixed(i))), &
+                   "superposition solution diverges from the direct solve")
+    end do
+  end block
+
   call test_summary()
 
 contains

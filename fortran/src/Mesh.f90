@@ -403,6 +403,59 @@ contains
     injectSignal = 0
   end function injectSignal
 
+  integer(4) function injectSignals(mesh, nsig, pos, sigs, voltages, currents1, currents2)
+    !! Solve Zeq·x = b for several independent injection patterns at once
+    !! (one ZGESV call with NRHS = size(sigs, 2) columns; the LU
+    !! factorisation is shared across all patterns, ADR 0003). Column p of
+    !! `sigs` holds the currents injected at nodes `pos` for pattern p; the
+    !! solutions are returned per pattern in `voltages`/`currents1`/
+    !! `currents2` instead of the single-solution `mesh%voltage`/`current1`/
+    !! `current2` fields (which are left untouched). Used by the study layer
+    !! to build voltage-source equivalents by superposition (ADR 0016).
+    !!
+    !! Like `injectSignal`, this overwrites `mesh%Zeq` with its LU factors —
+    !! re-run `calcFreq2` before any further solve at the same frequency.
+    !!
+    !! Returns ZGESV INFO code (0 = success).
+    type(tMesh), intent(inout) :: mesh
+    !! Mesh element
+    integer(4), intent(in), value :: nsig
+    !! Number of injection nodes
+    integer(4), intent(in) :: pos(nsig)
+    !! 1-based node indices where currents are injected
+    complex(8), intent(in) :: sigs(:, :)
+    !! Injected currents (A), shape (nsig, nPatterns)
+    complex(8), intent(out), allocatable :: voltages(:, :)
+    !! Node voltages per pattern, shape (nno, nPatterns)
+    complex(8), intent(out), allocatable :: currents1(:, :), currents2(:, :)
+    !! End currents i1/i2 per pattern, shape (nseg, nPatterns)
+    complex(8), allocatable :: y(:, :)
+    integer :: INFO, nn, ns, n, nrhs, p
+    integer, allocatable :: IPIV(:)
+
+    nn   = mesh%nno
+    ns   = mesh%nseg
+    n    = 2*ns + nn
+    nrhs = size(sigs, 2)
+    allocate(IPIV(n))
+    allocate(y(n, nrhs))
+    y = cmplx(0.0d0, 0.0d0, kind=8)
+    do p = 1, nrhs
+      y(2*ns + pos, p) = sigs(:, p)
+    end do
+
+    call zgesv(n, nrhs, mesh%Zeq, n, IPIV, y, n, INFO)
+    if (INFO /= 0) then
+      injectSignals = INFO
+      return
+    end if
+
+    voltages  = y(1:nn, :)
+    currents1 = y((nn+1):(nn+ns), :)
+    currents2 = y((nn+ns+1):n, :)
+    injectSignals = 0
+  end function injectSignals
+
   ! =====================================================================
   ! Output retrieval
   ! =====================================================================

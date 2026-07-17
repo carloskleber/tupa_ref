@@ -2,142 +2,51 @@
 
 Reference electromagnetic transient solver (HEM / Method of Moments).
 Fortran implementation first; object model and test cases shared with future
-Python/Rust implementations (see [ADR 0002](adr/0002-language-agnostic-object-model.md)).
+Rust/Python implementations (see [ADR 0002](adr/0002-language-agnostic-object-model.md)).
 
-This roadmap (formerly `implementation-plan.md`, which it supersedes together
-with the earlier `IMPLEMENTATION_PLAN.md`) is based on a side-by-side analysis
-of this repository against the legacy (private) implementations and the theory
-consolidated in [theory.md](theory.md). Originally the comparison target was
-the C++/Fortran hybrid; since July 2026 the **original Matlab code** (the
-dissertation implementation) is available alongside it and is the **model
-reference of record** — see §8 for what its re-inspection changed, and
-"Related implementation notes" in [references.md](references.md) for the two
-codes' contents. §9 records the author-interview decisions of 2026-07-05.
+This roadmap supersedes the earlier `implementation-plan.md` /
+`IMPLEMENTATION_PLAN.md`. It is based on a side-by-side analysis of this
+repository against the legacy (private) implementations and the theory
+consolidated in [theory.md](theory.md). Since July 2026 the **original
+Matlab code** (the dissertation implementation) is the **model reference of
+record** — the re-inspection findings live in
+[ADR 0017](adr/0017-legacy-reinspection-findings.md) (§8 below is a stub),
+and the author-interview decisions of 2026-07-05 in
+[ADR 0018](adr/0018-author-interview-decisions-2026-07.md) (§9 stub).
 
 **MVP scope**: tower-footing grounding under lightning. Full transmission
-lines and substation grids are the follow-on application tier (§9). The
-project's primary role is a **scientifically citable reference
+lines and substation grids are the follow-on application tier (ADR 0018).
+The project's primary role is a **scientifically citable reference
 implementation**; usability as an engineering tool is secondary.
 
 ---
 
 ## 1. Current state
 
-### Works today
-
 | Area | State |
 | --- | --- |
-| Object model skeleton | `tStudy → tStructure → tElement/tMaterial → tNode/tElectrode`, `tMesh` — compiles, FORD-documented |
-| Impedance quadrature | `Impedance.f90`: adaptive Gauss–Kronrod 7/15 double integration of `1/R`, tested (`test_impedance.f90`) |
-| Mesh matrix code | `Mesh.f90`: allocation, topology A/B/C/D, medium constants, `Zeq` assembly, `ZGESV` solve, injection — ported from the original Fortran module |
-| Materials | `tLinear` and `tPortelaSoil` (Lima–Portela dispersive soil, ADR 0007) propagation constants, both via `tMaterial%admittance` |
-| JSON parser | Minimal hand-rolled parser (`JsonParser.f90`); `loadStudy`/`runStudyFromFile` (`Tupa.f90`) read structure plus `sources`/`frequencies`/`outputs` (ADR 0013) |
-| Build/test | FPM + `build.sh` (LAPACK/BLAS/SLATEC, OpenMP flags), basic test framework |
+| Object model | `tStudy → tStructure → tElement/tMaterial → tNode/tElectrode`, `tMesh`; FORD-documented |
+| Geometry layer | `Geometry.f90`: mean/image distances, direct+image geometry factors (`g`, closed-form `g_self`), direction cosines; quadrature cache |
+| Impedance fill | ADR 0009 interface: `calcZSelf`/`calcZMutual` apply all theory factors internally; solid-conductor Bessel internal impedance (SLATEC `ZBESI`) |
+| Solver | Augmented `Zeq` assembly + `ZGESV` (ADR 0003); multi-RHS variant for superposition (ADR 0016) |
+| Sources | Current injections at named nodes (ADR 0010); ideal voltage sources via unit-injection superposition, mixable with current sources (ADR 0016) |
+| Materials | `tLinear`, `tPortelaSoil` (ADR 0007), `tVisacroAlipioSoil` (mean set, theory.md §7); air hardcoded to vacuum (ADR 0019) |
+| Sweep & results | `runSweep` + `tResult` storage, `inputImpedance`/`maxVoltageMagnitude`; CSV/JSON writers (ADR 0012) with `outputs` filtering |
+| Time domain | `mSignal` (Heidler — legacy 6-term and standard parametrised form [37, 38]; double-exp ± Jones), tail taper, in-repo FFT (ADR 0014), transfer-function transient driver (`mTransient`) |
+| JSON I/O | Minimal parser (ADR 0006); schema v1: structure + `sources`/`frequencies`/`outputs` (ADR 0013) + `signal` (ADR 0015) + voltage sources/Heidler terms (ADR 0016/0015 amendment) |
+| Cases & tests | `common/` regression fixtures (golden, not an oracle — §7 P3), 12 test programs, all green under `fpm test --profile release` |
+| GUI | Python/PySide6 view-only module (`gui/`, ADR 0011): study tree, 3-D view, results/transient plots |
 
-### Missing or wrong — gap analysis vs. the original
+The original gap analysis (nine numbered gaps between this repository and
+the legacy pipeline) is fully resolved as of Phases 0–6; the historically
+notable items are recorded where they now belong:
 
-The original implementation's pipeline is:
-
-```text
-Elements → Structure (nodes+segments) → geometry factors (G, Gi, R̄, R̄i, cosθ)
-        → per frequency: medium constants → Zlong/Ztrans fill → Zeq → inject → solve
-        → Collector/outputs → (FFT ↔ time domain)
-```
-
-Gaps in this repository, in dependency order (1–4, 7, 8 resolved by Phases
-0–1; see §3 for what changed):
-
-1. ~~**Geometry-factor layer is absent.**~~ **Resolved (Phase 1)** —
-   `Geometry.f90` (`mGeometry`) computes mean/image distances, `g`/`g_self`
-   (direct + image), and direction cosines; see `test/test_geometry.f90`.
-2. ~~**Sign-convention divergences.**~~ **Resolved (Phase 0)** — `calcParam`,
-   the propagation factor, and the air-image longitudinal sign now match
-   theory.md exactly (see `test/test_mesh.f90`). The C/D topology entries
-   already matched theory.md; no change was needed there.
-3. ~~**`tLine%assemble` is a stub**~~ **Resolved (Phase 1)** — discretises,
-   resolves node/material IDs, and populates `tStructure%electrodes`.
-   `tStudy%run` still doesn't call `assembleStructure` (Phase 2).
-4. ~~**Internal impedance missing**~~ **Resolved (Phase 1)**, solid conductor
-   only (`mImpedance%internalImpedance`, SLATEC `ZBESI`); tubular is Phase 7.
-5. ~~**No frequency sweep, no sources, no outputs**~~ **Fill loop and
-   single-frequency solve resolved (Phase 2)** — `tStudy%run` wires
-   assemble → topology → geometry (cached once) → per-frequency
-   `calcParam`/fill/`calcFreq2`/`injectSignal`; current-source injection at
-   named nodes works (ADR 0010). `tResult` types are still declared but
-   never filled, and there is still no CSV/JSON writer or formal sweep
-   storage — that remains Phase 3. The impedance-fill interface itself was
-   fixed by [ADR 0009](adr/0009-impedance-fill-interface.md) —
-   `calcZSelf`/`calcZMutual` take raw `mGeometry` outputs and apply every
-   theory factor (propagation, direction cosines, length normalisation,
-   including the direct-term `e^{−γr₀}` of theory.md §4.3) internally,
-   pinned by hand-evaluated values in `test_mesh.f90`.
-6. ~~**`tPortelaSoil` is a placeholder** (returns zero)~~ **Resolved
-   (Phase 4)** — implements the Lima–Portela form per ADR 0007, wired into
-   `tStudy%run` via the new `tMaterial%admittance` deferred function; see
-   `test_material.f90`. `tVisacroAlipioSoil` (mean parameter set, theory.md
-   §7) is now implemented alongside it (§P5); `tLongmireSmithSoil` remains
-   the next planned dispersive-soil `tMaterial` subtype.
-7. ~~**Leftover C-interop artifacts**~~ **Resolved (Phase 0)** — indices
-   naturalised, `alocaMalha` replaced by `initMesh` (no pointer), `calcFreqF`
-   and `Solver.f90` (`solMalha`) deleted.
-8. ~~**Suspicious self geometry factor in the original**~~ **Resolved
-   (Phase 1)** — confirmed wrong (missing factor of 2) by re-deriving the
-   defining integral from scratch; theory.md's formula matches and is
-   implemented as `mGeometry%selfGeometryFactor`, tested against quadrature.
-   The July 2026 legacy re-inspection (§8) traced the bug to the Matlab
-   original and found a second defect in the same expression: a literal `1`
-   where `l` belongs in the log argument, carried verbatim into the C++.
-9. ~~**`tStructure%air` is never populated — any electrode actually in air
-   (z>0) produces NaN.**~~ **Resolved (2026-07-10)** — `tStructure%air`
-   now default-initialises to vacuum (εr=1, μr=1, σ=0), the same
-   hardcoded air both legacies use (the Matlab reference constructs it
-   unconditionally at startup; the C++ defaults its `Meio` to vacuum).
-   Decision: Matlab-faithful hardcode, **no** JSON `"air"` block — air is
-   not configurable from case files. `common/rod_air.json` now runs
-   NaN-free with a physically sensible low-frequency Zin ≈ 20.9 Ω
-   (analytical rod ground resistance ≈ 21.0 Ω). Original finding
-   (2026-07-10, while adding
-   `common/rod_air.json`, the first committed case with an element above
-   the interface): `loadStudy` (`Tupa.f90`) only reads the JSON `"soil"`
-   block; `tStructure%air` (`Structure.f90`, then a bare `type(tLinear)`
-   field with no default component values) was never assigned anywhere in
-   the production load path — only `test_mesh.f90` constructs an air
-   material by hand for its own unit test. `tStudy%run` (`Study.f90:189-196`) always
-   passes `structure%air%mur`/`structure%air%admittance(omega)` into
-   `calcParamW` regardless of geometry, so `muAir`/`Wair` ended up zero;
-   that only stayed harmless while every electrode's `geomPos` was 2
-   (soil) — true of `portela1997.json`/`rod.json`/`grid.json`, which is
-   why this was never caught. With an electrode's `geomPos` at 1 (air),
-   the γ-dependent self/mutual impedance formula divided by the zeroed air
-   admittance (`cEAir = 1/(4π·0)`), and the resulting NaN poisoned the
-   whole `Zeq` solve (every node, not just the air ones, once `ZGESV`
-   mixed a NaN row in). A legacy re-inspection during the fix also
-   confirmed the surrounding model: mixed air↔soil coupling is zeroed in
-   the Matlab too (its cross-media routine was left unfinished, with a
-   syntactically incomplete body), matching theory.md §5 / ADR 0005.
-
-Housekeeping: stray `*.mod` files at `fortran/` root and the `.history/`
-folder are gitignored (no longer an issue in practice — stray `.mod` files
-from old builds can still shadow fresh ones in gfortran's search path if not
-removed before a rebuild). `test_impedance.f90`'s pending diff was already
-resolved before Phase 0; found instead: `test_twodq_simple` passed a bogus
-extra argument to `TWODQ`, and a test-runner bug (`check.f90`'s per-section
-counters were never accumulated into the whole-program total, so `fpm test`
-could report "ALL TESTS PASSED" / exit 0 even with failing assertions
-earlier in the same file) — both fixed.
-
-**Phase 0 status: done.** Items 1–3, 7 above are fixed in `Mesh.f90` (propagation
-constant, propagation-factor exponent, air-image longitudinal sign, C-interop
-index/pointer/dead-code cleanup), pinned by `fortran/test/test_mesh.f90`. Item 8
-(self geometry factor) is unaffected — no self-factor code exists yet — and
-still applies to Phase 1. Two pre-existing, unrelated issues were found while
-getting `fpm test` green and are left for whoever picks up Phase 1/geometry
-work: `test_impedance.f90`'s `check` module resets its pass/fail counters on
-every `test_init`, so only the last block's failures affect the exit code —
-earlier `[FAIL]` lines don't fail the build; and two of its assertions
-currently fail (`inverseDistanceIntegrand` decreasing-with-distance, using a degenerate
-all-zero direction vector in the test setup; and `geometryFactor2D` on coincident
-segments, consistent with gap 8 — no self-term regularisation exists yet).
+- self-geometry-factor bug in *both* legacies (was item 8) —
+  [ADR 0017](adr/0017-legacy-reinspection-findings.md) finding 2;
+- `tStructure%air` never populated → NaN for any electrode in air (was
+  item 9) — [ADR 0019](adr/0019-air-medium-hardcoded-vacuum.md);
+- C-interop leftovers, sign conventions, stub `assemble`, missing
+  sweep/sources/outputs — closed by Phases 0–3 below.
 
 ---
 
@@ -156,329 +65,161 @@ segments, consistent with gap 8 — no self-term regularisation exists yet).
 
 ## 3. Phases
 
-### Phase 0 — Convention audit and cleanup (prerequisite) — **done**
+Item numbers are stable — code comments cite them ("ROADMAP Phase 3
+item 4").
 
-1. ~~Audit `Mesh.f90` sign conventions against theory.md §2/§5/§6; fix toward
-   the doc. Unit-test: propagation factor decays; `Zlong`/`Ztrans` symmetric.~~
-   Fixed: propagation constant now `sqrt(j*omega*mu*(sigma+j*omega*eps))`,
-   propagation factor `exp(-gamma*R)`, air-image longitudinal sign corrected
-   to "−". C/D topology signs already matched theory.md (no change needed).
-   Pinned by `test/test_mesh.f90`.
-2. ~~Naturalise the mesh module: 1-based indices, no pointer-returning
-   allocator, delete `calcFreqF`/`solMalha` dead code, replace `error stop`
-   with feh errors.~~ Done: `alocaMalha` → `initMesh` (intent(inout), no
-   pointer), all `+1` C-interop index shifts removed, `calcFreqF` and
-   `Solver.f90` (`solMalha`) deleted (no callers).
-3. ~~Gitignore `.history/` and stray `.mod`; resolve the pending
-   `test_impedance.f90` diff.~~ `.gitignore` already covered these; the
-   pending diff had already been resolved before this pass. Found instead:
-   `test_twodq_simple` passed a bogus extra argument to `TWODQ` (compile
-   error) — fixed.
+### Phase 0 — Convention audit and cleanup — **done**
 
-**Exit criterion met**: `fpm test` green; mesh module has no C-legacy artifacts.
+1. Sign conventions audited against theory.md §2/§5/§6: propagation constant
+   `√(jωμ(σ+jωε))`, decaying `e^{−γR}`, air-image longitudinal sign "−";
+   pinned by `test_mesh.f90` (ADR 0008).
+2. Mesh module naturalised: 1-based indices, `initMesh` (no pointer), dead
+   C-interop code deleted.
+3. Test-runner bugs fixed along the way (`check.f90` counter accumulation,
+   bogus `TWODQ` argument).
 
-### Phase 1 — Geometry layer (structure → matrices) — **done**
+### Phase 1 — Geometry layer — **done**
 
-1. ~~`tLine%assemble`: resolve node/material IDs, create internal nodes and
-   `nElectrodes` segments, register with `tStructure` (flat arrays + `n1`/`n2`
-   connectivity).~~ Done, including new `tStructure%findNodeIndex` /
-   `%findMaterial` lookups and the previously-unpopulated `tStructure%electrodes`
-   array (`%addElectrode`). Tested in `test/test_assemble.f90`.
-2. Geometry-factor computation (new module `Geometry.f90`, `mGeometry`):
-   - ~~mean distances `R̄`, image distances `R̄ᵢ` (mirror through z = 0);~~ done.
-   - ~~`g(a,b)` by Gauss–Kronrod quadrature; `g_self` closed formula (derived,
-     tested against quadrature with axis-to-surface offset — item 8 above);~~
-     done — **the original C++ formula was confirmed wrong** (missing a
-     factor of 2; see gap 8 below). theory.md's formula was independently
-     re-derived from the defining integral and verified against quadrature.
-   - ~~direction cosines, incl. image direction (z-component flipped);~~ done.
-   - same-medium test; mixed pairs skipped (ADR 0005): the *decision* to zero
-     mixed-media coupling is medium/position information, not a geometric
-     property (theory.md §5), so it still lives in `Mesh.f90`'s
-     `calcZSelf`/`calcZMutual` (`pos1`/`pos2` args), not the geometry layer.
-     `buildGeometryMatrices` does take an optional `pos(n)` array, but only
-     as a perf hint: since `calcZMutual` discards direct and image terms
-     alike for a mixed pair, computing them is pure waste, so
-     `buildGeometryMatrices` skips both `mutualGeometryFactor` calls (and
-     stores 0) whenever `pos(i) /= pos(j)`, instead of paying for the
-     quadrature. Geometry-only callers (e.g. tests) can omit `pos` and get
-     the old unconditional behaviour.
-3. ~~Internal impedance `Z_int`: solid conductor Bessel formula (SLATEC or
-   stdlib Bessel); tubular later.~~ Done for the solid conductor
-   (`mImpedance%internalImpedance`, SLATEC `ZBESI`); tubular deferred (Phase 7).
-   `fpm.toml`/`build.sh` updated to link SLATEC and export `LIBRARY_PATH` —
-   `fpm build`/`fpm test` need `LIBRARY_PATH=$HOME/.local/lib:$LIBRARY_PATH`
-   if not run via `build.sh` (fpm's `link` list alone doesn't add `-L`).
-4. ~~Tests: closed-form parallel-segments factor vs quadrature; self factor vs
-   quadrature; image distances for a buried horizontal wire.~~ Done in
-   `test/test_geometry.f90`, plus internal-impedance DC/high-frequency limit
-   checks.
-
-**Exit criterion met**: for a 10 m line in 10 segments, geometry matrices
-match independent (scripted) numerical integration to 1e−6 relative.
+1. `tLine%assemble`: node/material resolution, internal nodes, electrode
+   registration (`test_assemble.f90`).
+2. `Geometry.f90`: mean/image distances, `g(a,b)` by Gauss–Kronrod
+   quadrature, closed-form `g_self` (legacy formula confirmed wrong —
+   ADR 0017 finding 2), direction cosines; mixed-media pairs skipped as a
+   perf hint only (the zeroing decision stays in `Mesh.f90`, ADR 0005).
+3. Solid-conductor internal impedance (SLATEC `ZBESI`); tubular deferred to
+   Phase 7.
+4. Exit criterion met: geometry matrices match independent numerical
+   integration to 1e−6 relative (`test_geometry.f90`).
 
 ### Phase 2 — End-to-end single-frequency solve — **done (DC-limit scope)**
 
-1. ~~Wire `tStudy%run`: assemble → topology → per-frequency
-   (`calcParam` from `tMaterial`s → `Zlong`/`Ztrans` fill from geometry
-   matrices → `calcFreq2` → inject → extract).~~ Done: `run(this, omega,
-   sourceNodeIds, sourceCurrents)` assembles and computes the geometry-factor
-   matrices once (cached on `tStudy`, guarded by a `prepared` flag), then
-   repeats only the per-frequency block (medium constants, fill loop over
-   `calcZSelf`/`calcZMutual`, `calcFreq2`, `injectSignal`) on every call —
-   so a caller sweeping frequency does not redo the O(n²) quadrature
-   (theory.md §4.1). The legacy trap here — the C++ self-term call passed
-   its *longitudinal* image geometry factor in the *transversal*-image
-   argument slot — motivated [ADR 0009](adr/0009-impedance-fill-interface.md):
-   `calcZSelf`/`calcZMutual` consume the raw `mGeometry` matrices directly
-   (no caller-side pre-scaling), removing that class of bug. Cross-checking
-   the assembled fill against the Matlab reference on moduli is still open
-   (no cross-code harness exists yet — see P3 below).
-2. ~~Current-source injection at named nodes~~ Done (ADR 0010; voltage
-   sources remain deferred) — `run`'s `sourceNodeIds`/`sourceCurrents`
-   arguments, resolved via `tStructure%findNodeIndex`.
-3. **Validation test — DC-limit scope done, curve-match deferred**: the
-   Portela-1997-parameter buried horizontal conductor (10 m, r₀ = 7 mm,
-   0.5 m depth, σ = 0.01 S/m, εr = 10) is pinned in
-   `fortran/test/test_solve.f90`:
-   - ~~DC limit vs Sunde/Dwight resistance formula (theory.md §9.1)~~ done,
-     within 15 % at 10 Hz (loose because the formula itself drops
-     higher-order terms and 10 Hz isn't literally DC);
-   - ~~low-frequency input impedance ≈ DC resistance~~ done (10 Hz vs 100 Hz
-     agree within 5 %, confirming the plateau) and passivity
-     (`Re(Zin) ≥ 0`) holds across the whole 10 Hz–1 MHz sweep;
-   - **full curve within 5 % of Portela 1997 [2] — not attempted**: no
-     tabulated data exists for that curve (theory.md §9.2), so there is
-     nothing to compare against yet. Left for ROADMAP §7 P3 (TAGS
-     cross-validation), a separate, larger task that would supply an
-     executable oracle.
+1. `tStudy%run` wired: assemble → topology → geometry (cached once) →
+   per-frequency fill → `calcFreq2` → inject → solve. Fill interface per
+   ADR 0009 (motivated by the C++ call-site bug, ADR 0017 finding 3).
+2. Current-source injection at named nodes (ADR 0010).
+3. Validation: DC limit vs Sunde/Dwight (15 %), low-frequency plateau,
+   passivity across 10 Hz–1 MHz (`test_solve.f90`). **Full Portela-1997
+   curve match not attempted** — no tabulated data exists (theory.md §9.2);
+   needs §7 P3 as an executable oracle.
 
-**Exit criterion met (DC-limit scope)**: `fpm run --example example3`
-prints the impedance-vs-frequency table for the Portela-1997-parameter
-conductor over 100 Hz–1 MHz (the smoke cases `example1`/`example2` use
-εr = 1 soil and are not the validation case, per `common/README.md`).
+### Phase 3 — Frequency sweep, results, output — **done (items 1–3)**
 
-### Phase 3 — Frequency sweep, results, output — **done (items 1-3); item 4 deferred**
-
-1. ~~Log-spaced frequency axis (default) with user override.~~ Done:
-   `logFrequencyAxis(fMin, fMax, nPoints)` (Study.f90); pass any other array
-   to `runSweep` directly to override.
-2. ~~Fill `tVoltages`/`tLongCurrents`/`tTransCurrents` across the sweep;
-   convenience queries (`inputImpedance`, `maxVoltage`).~~ Done:
-   `tStudy%runSweep` calls `run` once per frequency and stores every node
-   voltage / electrode current in `this%voltageResults`/
-   `longCurrentResults`/`transCurrentResults`; `tStudy%inputImpedance(nodeId)`
-   and `tStudy%maxVoltageMagnitude()` are the convenience queries. `tResult`
-   itself was simplified along the way (Result.f90): concrete types now own
-   a plain copy of entity IDs and the frequency axis instead of pointers
-   into `tStructure`, with `get`/`set`/`entityId`/`entityCount`/
-   `frequencyCount` accessors — the original pointer-based `alloc_interface`
-   (with an unused `tElement` array parameter `tStructure` never populated)
-   was dead scaffolding with zero callers, so this is a like-for-like
-   simplification, not a behaviour change.
-3. ~~CSV writer (primary) and JSON results writer, against the schema frozen
-   in [ADR 0012](adr/0012-results-json-schema.md).~~ Done:
-   `mResultsWriter` (`writeResultsCsv`/`writeResultsJson`). CSV is tidy/long
-   form (`frequency_hz,quantity,id,re,im`, one row per frequency x entity x
-   quantity) since ADR 0012 only froze the JSON shape; JSON matches the ADR
-   exactly, with `derived.inputImpedance` computed from the sweep's first
-   source node (single-port assumption — the ADR doesn't define a
-   multi-port derived quantity). `example4.f90` demonstrates the full
-   sweep -> query -> write pipeline end to end.
-4. **Deferred, not just unattempted**: OpenMP on the geometry-factor fill
-   loop. The fill loop's own write pattern is already race-free (each
-   matrix entry is written by exactly one outer iteration — see the
-   comment above `buildGeometryMatrices`'s loop, Geometry.f90) and a
-   determinism test pins it (`test_geometry.f90`), but `mutualGeometryFactor`
-   falls back to `geometryFactor2D`/`TWODQ` (Impedance.f90) for any
-   non-parallel segment pair, and that quadrature keeps its integration
-   state in module-level procedure pointers (`pF`/`pG`/`pH`) and a
-   `COMMON /params/` block — non-reentrant (ARCHITECTURE.md §7). Annotating
-   the fill loop with `!$omp parallel do` today would only be safe for
-   geometries where every pair happens to be parallel (which is why the
-   existing 10-segment collinear test wouldn't have caught it); any real
-   grid with non-parallel elements would silently corrupt results under
-   concurrent threads. Needs the mImpedance reentrancy fix first (its own
-   task — likely nesting `inverseDistanceIntegrand`/`lowerLimit`/
-   `upperLimit` and `outer_fcn` as internal procedures closing over their
-   host's local variables instead of module/COMMON state — but
-   `test_impedance.f90` currently unit-tests those three functions directly
-   via a test-side `common /params/` alias, so the fix also touches that
-   test's public-API assumptions), tracked as open work, not folded into
-   this pass.
+1. `logFrequencyAxis` default log-spaced axis.
+2. `runSweep` result storage + `inputImpedance`/`maxVoltageMagnitude`
+   queries; `tResult` simplified to plain-copy accessors.
+3. CSV (tidy/long) and JSON (ADR 0012) writers; `example4.f90` end to end.
+4. **Deferred**: OpenMP on the geometry fill loop — blocked on `mImpedance`
+   reentrancy (module-level procedure pointers + `COMMON /params/`,
+   ARCHITECTURE.md §7); a determinism test pins the write pattern
+   (`test_geometry.f90`). Expected to be superseded by frequency-level
+   parallelism (§7 P6).
 
 ### Phase 4 — Dispersive soil — **done**
 
-1. ~~Implement `tPortelaSoil` per ADR 0007 (**accepted 2026-07-05**): the
-   Lima–Portela parametrisation of references.md [31], reference frequency
-   ω₀ = 2π·1 MHz. Requires adding a `sigma0` field to the type (it currently
-   carries only `alpha0`/`kr`). Do **not** reuse legacy Matlab `kr` values
-   unconverted — they are referenced to ω₀ = 1 rad/s (theory.md §7).~~ Done
-   in `fortran/src/Material.f90`: `sigma0` field added, `admittance(ω)`
-   (`W(ω) = σ(ω) + jωε(ω)`) is now the one deferred function every
-   `tMaterial` subtype implements, with `calcPropagationConstant` factored
-   onto the abstract base as a single `γ = √(jωμW(ω))` procedure shared by
-   `tLinear` and `tPortelaSoil` — removing the duplicated gamma formula the
-   two concrete types previously each carried. `tStudy%run`
-   (`fortran/src/Study.f90`) calls `soil%admittance(omega)` polymorphically
-   instead of the `select type`/reject-dispersive-soil branch this phase
-   inherited from Phase 2; `mMesh` gained a `calcParamW` sibling to
-   `calcParam` taking the complex immittance directly (`calcParam` is now a
-   thin real-valued wrapper over it, unchanged for existing callers).
-2. ~~DC-limit convergence test against `tLinear`; repeat Phase 2 validation
-   with dispersion on (Portela 1997 dispersive curves).~~ Done in
-   `fortran/test/test_material.f90`: the Lima–Portela formula pinned at
-   ω₀ = 2π·1 MHz, DC-limit convergence to a resistive
-   `tLinear(epsilonr=0, sigma=σ₀)` medium as ω→0, passivity across a decade
-   sweep, and the Phase 2 buried-conductor passivity/DC-limit checks
-   repeated with `tPortelaSoil` soil. **Curve match still not attempted**:
-   no tabulated Portela dispersive curve exists (theory.md §9.2, unchanged
-   from Phase 2) — illustrative `alpha0`/`kr` values are used instead (no
-   real Lima–Portela parameter set is available yet, §9 "Validation data").
-
-**Exit criterion met**: `tPortelaSoil` is a working, tested dispersive-soil
-model, exercised end to end through `tStudy%run`, with zero behaviour
-change to the `tLinear` path it was factored alongside.
+1. `tPortelaSoil` per ADR 0007 (ω₀ = 2π·1 MHz); `tMaterial%admittance`
+   deferred function, shared `calcPropagationConstant`; `calcParamW`.
+2. DC-limit convergence to `tLinear`, passivity, formula pinned at ω₀
+   (`test_material.f90`). Curve match: same data gap as Phase 2.
 
 ### Phase 5 — JSON I/O and common cases — **done**
 
-1. ~~Freeze the input schema v1 (title, media, materials, elements, sources,
-   frequencies, outputs) — documented next to the cases.~~ Shape frozen:
-   [ADR 0013](adr/0013-input-schema-sources-frequencies-outputs.md) adds
-   `sources` (node + complex current, ADR 0010 shape), `frequencies`
-   (min/max/`pointsPerDecade`, log-spaced only), and `outputs` (opt-in
-   node/electrode/quantity selection against the ADR 0012 result shape;
-   omitting it keeps today's dump-everything behaviour). Documented in
-   `common/README.md`. ~~**Still open**: no Fortran/Python/Rust JSON reader
-   consumes these three blocks yet~~ **Resolved**: `fortran/src/Tupa.f90`'s
-   `loadStudy` now reads all three (optional, allocatable arguments — every
-   existing single-argument call site compiles unchanged), plus a
-   `runStudyFromFile` convenience wrapper; `outputs` filtering happens at
-   write time in `mResultsWriter` (new optional `nodeIds`/`electrodeIds`/
-   `quantities` arguments on both writers). See ADR 0013's "Exercised" note
-   for the write-time-only scope decision and an ID-naming gotcha found
-   along the way (`outputs.electrodes`/`nodes` need the *discretised*
-   segment/internal-node IDs, not the input element/boundary-node ID).
-2. ~~`common/` folder: JSON inputs + expected CSV outputs for (at least) the
-   Phase 2 conductor, a vertical rod, and a small grid; run locally as
-   integration tests via `fpm test` (no hosted CI — decision §9).~~ Done:
-   `common/portela1997.json` (the Phase 2 conductor), `rod.json` (single
-   vertical buried rod), `grid.json` (small buried grid, one square mesh),
-   each with `sources`/`frequencies`/`outputs` and a checked-in
-   `*_expected.csv`. These are **regression (golden) fixtures**, not an
-   independent physics oracle — no tabulated Portela curve data or
-   cross-code harness exists yet (§7 P3) — generated once by this
-   implementation and diffed against on every `fpm test`
-   (`fortran/test/test_common_cases.f90`, 1e-6 relative tolerance, plus an
-   independent passivity check). `grid.json` is deliberately a single
-   4-electrode mesh, not a larger grid: every non-parallel segment pair
-   costs roughly 1-2 s in `geometryFactor2D`'s 2-D adaptive quadrature
-   regardless of touching/singularity at today's tolerances — confirmed by
-   direct measurement while sizing this case (a naive 9-node/12-edge grid
-   took several minutes) — so a bigger grid case waits on the §7 P1 mHEM
-   kernel, not on this phase.
-3. ~~Parser: stay within the minimal-parser subset; escape hatch per
-   ADR 0006.~~ Unchanged — no parser growth was needed; the new blocks fit
-   the existing object/array/string/number subset. (Results stay JSON per
-   ADR 0012; see the "Binary results format" open decision in §6 for the
-   deferred HDF5 question.)
+1. Input schema v1 frozen (ADR 0013: `sources`/`frequencies`/`outputs`);
+   Fortran reader (`loadStudy` optional arguments, `runStudyFromFile`);
+   write-time output filtering. Discretised-ID gotcha documented in
+   `common/README.md`.
+2. `common/` cases: `portela1997`, `rod`, `grid` (+ later `rod_air`,
+   `silva2025_rho*`) with golden `_expected.csv` fixtures diffed by
+   `test_common_cases.f90` (1e-6 relative; independent passivity check).
+   Grid kept to one mesh — non-parallel pairs cost ~1–2 s each in 2-D
+   quadrature until §7 P1.
+3. Parser stayed within the ADR 0006 minimal subset.
 
-**Exit criterion met**: a JSON case file with `sources`/`frequencies`/
-`outputs` runs end to end (`runStudyFromFile` → `mResultsWriter`) with no
-hand-wired Fortran, and three such cases are pinned as regression fixtures.
+### Phase 6 — Sources and time domain — **done**
 
-### Phase 6 — Sources and time domain — **done (items 1-2); item 3 internal-consistency scope**
+1. `mSignal`: Heidler (legacy 6-term set) and double exponential
+   (`f1_2_5`/`f1_2_50`/`f1_2_200`/`f250_2500`, optional Jones front).
+   Remaining legacy waveforms (single exp, impulse/step, Portela concave,
+   sine) ported as needed.
+2. FFT transient driver (`mTransient`): tail taper, one-sided spectrum,
+   unit-current transfer function, conjugate-symmetric IFFT; DC bin
+   replaced by `freqZeroHz` (ADR 0019 singularity). In-repo
+   double-precision radix-2 FFT (ADR 0014). Schema + transient results
+   shape in ADR 0015; `portela1997_transient.json`.
+3. Validation is internal-consistency only (slow-surge GPR tracks the
+   validated low-frequency `|Zin|` within 25 %, `test_transient.f90`) —
+   same data gap as Phases 2/4.
 
-1. ~~Signal waveforms: Heidler, double exponential (the Matlab reference
-   ships Heidler, double exponential plus a Jones-parametrised variant,
-   single exponential, impulse/step, Portela's concave model and sine —
-   port as needed).~~ Done in `fortran/src/Signal.f90` (`mSignal`):
-   `tHeidlerSignal` (the legacy 6-term parameter set, "Baseada na
-   implementacao do Tony" — no independently citable source, ported
-   verbatim and flagged as such) and `tDoubleExpSignal` (the four named
-   front/tail forms, `f1_2_5`/`f1_2_50`/`f1_2_200`/`f250_2500`, plus the
-   Jones-corrected zero-initial-slope front, `jones=.true.`). The
-   remaining legacy waveforms (single exponential, impulse/step, Portela's
-   concave model, sine) are not ported — no case has needed them yet.
-2. ~~FFT driver: excitation spectrum → transfer function → IFFT (stdlib FFT
-   or FFTW); Hanning taper / analytic-continuation notes in theory.md
-   §8.~~ Done: `fortran/src/Transient.f90` (`mTransient`)'s
-   `transientResponse` samples the waveform, applies the legacy sigmoid
-   tail taper (`mSignal%tailTaper`), forward-transforms, solves a unit-current
-   `tStudy%runSweep` across a linear one-sided frequency axis (the DC bin
-   replaced by a small nonzero `freqZeroHz`, matching the legacy
-   `FREQ_ZERO` convention — §3 finding 9's zero-admittance singularity
-   otherwise bites at exactly ω=0), multiplies spectra, rebuilds the full
-   spectrum by conjugate symmetry, and inverse-transforms — mirroring
-   `sinais.Sinal.fourier`/`ifourier.m`/`lesinais.m` bin-for-bin, quirks
-   included. Neither stdlib (no FFT module in the pinned 0.8.1 dependency)
-   nor SLATEC's `CFFTF`/`CFFTB` (single precision only — would downcast the
-   double-precision physics) fit; **decision**: a small in-repo
-   double-precision radix-2 FFT (`fortran/src/Fft.f90`, `mFft`), see
-   [ADR 0014](adr/0014-fft-implementation.md) — resolves the §6 "FFT
-   dependency" open decision.
-3. **Internal-consistency scope, not curve validation**: no tabulated
-   time-domain reference waveform exists for the Phase 2 conductor (same
-   data gap as the harmonic curve, theory.md §9.2), so
-   `fortran/test/test_transient.f90` checks that the transient GPR at the
-   injection node tracks the already-validated low-frequency input
-   impedance (test_solve.f90/test_sweep.f90) instead: for a slow
-   (250/2500 µs) double-exponential surge, whose spectral energy sits
-   almost entirely inside the resistive low-frequency plateau, the
-   response-to-current ratio at the excitation peak matches `|Zin|` at the
-   lowest nonzero frequency bin within 25%. `fortran/example/example5.f90`
-   demonstrates the full pipeline on a standard 1.2/50 µs surge and prints
-   the GPR waveform for inspection; matching a published curve is deferred
-   the same way Phase 2/4's harmonic validation was, pending real reference
-   data or a cross-code oracle (§7 P3).
+### Phase 7 — More elements, input functions and outputs — **in progress**
 
-### Phase 7 — More elements and media (as needed)
+Done (2026-07-17):
 
-From the original's inventory, in order of preference:
+- **Heidler function** — standard parametrised form (Heidler 1985 [37];
+  IEC 62305-1 [38] parameter sets): `newHeidlerSignalTerms` (arbitrary
+  terms, analytic η peak correction, optional legacy-style `imax`
+  rescale); JSON `signal.terms` (ADR 0015 amendment).
+- **Voltage source** — ideal voltage sources converted to equivalent
+  current injections by unit-injection superposition in the study layer
+  (ADR 0016, implementing ADR 0010); mixed voltage+current source sets
+  supported; JSON `sources[].voltage`; `inputImpedance` uses per-frequency
+  effective currents.
 
-- `tCatenary`,
-- series RLC element;
-- tubular conductor,
+Remaining, in order of preference (scoping decisions from the 2026-07-17
+author Q&A in *italics*):
+
+- `tCatenary` — *Matlab-faithful port of the reference catenary element
+  (same parametrisation/sag formulation), discretised into straight
+  segments like `tLine`*,
+- Numerical Laplace Transform (NLT) option (§7 P4) — *opt-in first:
+  `signal.transform: "fft"` (default) `| "nlt"`; flip the default only
+  after P3 cross-validation, keeping golden fixtures stable*,
+- Hanning (and other) windowing,
+- Ground potential rise (GPR), touch and step voltage — single-frequency
+  study (§7 P7) — *both input forms from the start: explicit
+  observation-points array plus an optional auto surface-grid block,
+  mirroring the Matlab output-class inventory (ADR 0017 finding 6)*,
+- Series RLC element — *series form only first
+  (R + jωL + 1/(jωC) two-terminal, Matlab-style non-coupling lumped
+  element); parallel later if a case needs it*,
+- Tubular conductor (extrapolation: simulation of metallic pipes),
 - insulated conductor,
+- Generic internal impedance models (e.g. OPGW), specified in a JSON database. Alternative use from the material property in elements.
+- Lightning discharge channel,
+- Mutual impedance between segments in different media,
 - `tCircumference` (grounding rings),
-- grid/mesh generator element,
-- reflection-coefficient images,
-- multi-layer soil.
+- Grid/mesh generator element,
+- Multipolar cables (internal representation by impedance/admittance
+  matrix),
+- Option of multiple injections (e.g. three-phase sine emulating line
+  voltage, plus impulse injection),
+- Multi-layer soil and reflection-coefficient images.
 
-The Matlab reference's full element inventory, for the
-record: straight lines (three variants), ring, grid, cable, catenary,
-lightning-channel element, helicoidal rod, tube, conduit, solid shapes
+The Matlab reference's full element inventory, for the record: straight
+lines (three variants), ring, grid, cable, catenary, lightning-channel
+element, helicoidal rod, tube, conduit, lattice and crossarm placeholders
 (block/cube/pyramid/tetrahedron), lumped series-RLC "impedance" elements
 (extra unknowns that do not couple electromagnetically — their `Zt` row is
-zeroed), and insulated buried cables (leakage through $j\omega\varepsilon$
-only; placeholder theory, flagged TODO in the legacy code itself). The C++
-adds bundle and L-profile (lattice-member) internal impedances and a
+zeroed), and insulated buried cables (leakage through jωε only;
+placeholder theory, flagged TODO in the legacy code itself). The C++ adds
+bundle and L-profile (lattice-member) internal impedances and a
 shielded-wire segment.
 
 ### Phase 8 — Second implementation (Rust)
 
 Rust port following the object model; must pass every `common/` case.
-Originally Python was proposed, but at the moment is negleted for the GUI side.
+Originally Python was proposed, but for now Python is dedicated to the GUI
+side (ADR 0011).
 
 ---
 
-## 4. Near-term milestone
+## 4. Milestones
 
-**Phases 0–2**: validated single-frequency solve for the Portela 1997 buried
-conductor, with the convention audit done first. Priority order:
-
-1. [x] Phase 0 audit + cleanup
-2. [x] `tLine%assemble` + structure arrays
-3. [x] Geometry-factor module (direct + image) + tests
-4. [x] `Z_int` Bessel internal impedance
-5. [x] `Zlong`/`Ztrans` fill *interface* (ADR 0009, theory factors internal)
-       and fill loop over the geometry matrices (`tStudy%run`)
-6. [x] `tStudy%run` wiring + current injection (ADR 0010)
-7. [x] DC-limit test (`test_solve.f90`); Portela curve test deferred —
-       no tabulated data exists (theory.md §9.2), needs P3 (TAGS
-       cross-validation) as an executable oracle
-8. [x] `example3` prints the result table (`example1`/`example2` stay as
-       the εr = 1 smoke cases per `common/README.md`)
+- **Phases 0–6**: met (see §3) — end-to-end harmonic sweep and FFT
+  transient from a JSON case file, dispersive soils, regression fixtures.
+- **0.1.0 release bar** (ADR 0018): the Portela-curve case within
+  tolerance. Blocked on an executable oracle — §7 P3 (TAGS
+  cross-validation) or real tabulated data.
+- **Next engineering steps**: §7 P1 (mHEM 1-D kernel — unblocks larger
+  `common/` grids) and §7 P2 (Γ(ω) images — restores reference behaviour).
 
 ---
 
@@ -486,31 +227,23 @@ conductor, with the convention audit done first. Priority order:
 
 | Layer | Where | What |
 | --- | --- | --- |
-| Unit | `fortran/test/` | quadrature vs closed forms; sign/decay pins; Bessel `Z_int` vs tables; dispersion DC limit |
-| Integration | `fortran/test/` | end-to-end DC resistance; full vs reduced solve (when both exist); reciprocity, passivity |
-| Reference | `common/` | JSON in → CSV out, compared with tolerance; shared across languages |
+| Unit | `fortran/test/` | quadrature vs closed forms; sign/decay pins; Bessel `Z_int` vs tables; dispersion DC limit; waveforms |
+| Integration | `fortran/test/` | end-to-end DC resistance; sweep/transient consistency; reciprocity, passivity; voltage-source superposition |
+| Reference | `common/` | JSON in → CSV out, golden diff at 1e-6; shared across languages |
 | Benchmarks | `benchmarks/` (proposed) | TAGS and PRTL-mHEM as git submodules; cross-code runs per [BENCHMARKS.md](BENCHMARKS.md) |
 
-There is **no hosted CI** (decision §9): the gate is a local
-`fpm build && fpm test` before merging. Practical caveats, measured 2026-07-05:
+There is **no hosted CI** (ADR 0018): the gate is a local
+`fpm build && fpm test` before merging. Practical caveats:
 
-- In the default (debug) profile the quadrature-heavy suites are effectively
-  un-runnable — `test_geometry`'s 10×10 fill exceeded 9 minutes without
-  completing, dominated by the adaptive 2-D Gauss–Kronrod calls plus
-  `-fcheck` array-temporary copies. **Run the slow suites under
-  `--profile release`** (as `build.sh` builds), or split tests into fast
-  (mesh/assemble: seconds) and slow (geometry/impedance) tiers and run the
-  slow tier before merges only.
-- A cold `fpm test` also pays several minutes of stdlib compilation; keep the
+- **Run the slow suites under `--profile release`** (as `build.sh` builds):
+  in the debug profile the quadrature-heavy suites are effectively
+  un-runnable (`test_geometry`'s 10×10 fill exceeded 9 minutes, measured
+  2026-07-05).
+- A cold `fpm test` pays several minutes of stdlib compilation; keep the
   build cache.
-- Measured 2026-07-10 (Phase 5): every non-parallel segment pair costs
-  roughly 1-2 s in `geometryFactor2D`'s 2-D adaptive quadrature at today's
-  tolerances, touching or not — confirmed directly while sizing
-  `common/grid.json` (a naive 9-node/12-edge grid took several minutes;
-  the checked-in 4-electrode version keeps `test_common_cases.f90` in the
-  full suite's ~45 s `--profile release` run). Keep any new `common/`
-  case's electrode count small until §7 P1 (mHEM single-integral kernel)
-  lands.
+- Every non-parallel segment pair costs ~1–2 s in `geometryFactor2D`'s 2-D
+  adaptive quadrature at today's tolerances (measured 2026-07-10) — keep
+  new `common/` cases' electrode counts small until §7 P1 lands.
 
 ---
 
@@ -518,16 +251,16 @@ There is **no hosted CI** (decision §9): the gate is a local
 
 | Decision | Status |
 | --- | --- |
-| Soil dispersion model | **Decided and implemented** — ADR 0007 accepted 2026-07-05: `tPortelaSoil` first, Lima–Portela [31] parametrisation, ω₀ = 2π·1 MHz; implemented Phase 4 |
-| Voltage-source handling | **Decided** — current-injection equivalent ([ADR 0010](adr/0010-sources-as-current-injections.md)) |
-| Impedance-fill interface | **Decided** — theory factors inside `calcZ*` ([ADR 0009](adr/0009-impedance-fill-interface.md)) |
-| FFT dependency | **Decided and implemented** — neither stdlib (no FFT module in the pinned 0.8.1) nor SLATEC's `CFFTF`/`CFFTB` (single precision) fit; a small in-repo double-precision radix-2 FFT instead ([ADR 0014](adr/0014-fft-implementation.md), Phase 6); NLT proposed on top (P4 in §7) |
-| JSON schema v1 | **Decided and implemented (Fortran, GUI)** — shape frozen ([ADR 0013](adr/0013-input-schema-sources-frequencies-outputs.md): `sources`/`frequencies`/`outputs`); Fortran reader done (Phase 5 item 1, `Tupa.f90`); GUI study loader/tree view done (`gui/src/tupa_gui/data/`, display-only); Python/Rust readers pending those ports (Phase 8) |
-| Reduced `Z_g` solver | deferred optimisation (ADR 0003) |
-| GUI module | **Decided** — Python/PySide6/Qt3D, view-only v1, own `gui/` folder ([ADR 0011](adr/0011-gui-module-technology-and-scope.md)) |
-| Results JSON schema (output) | **Decided** — v0 frozen ahead of any writer ([ADR 0012](adr/0012-results-json-schema.md)); consumed by Phase 3 item 3 and GUI phase G2 |
-| Quadrature tolerances | `errrel = min(la,lb)·10⁻⁶`, `maxint = 500` are dissertation-era values, open to revision (interview §9) — revisit with the P1 mHEM kernel |
-| Binary results format | Deferred — stay on JSON/CSV (ADR 0012) for now. Large real cases (long sweeps × many nodes/electrodes) will eventually want a portable binary format; **HDF5 is the leading candidate** (self-describing, chunked/partial reads, native Fortran/Python/Rust bindings — fits ADR 0002), traded off against ADR 0006's zero-dependency parser philosophy (HDF5 needs the C library at build time on every implementation/OS). Revisit once a real case is actually too large for JSON, not speculatively. |
+| Soil dispersion model | **Implemented** — ADR 0007 (`tPortelaSoil`, ω₀ = 2π·1 MHz), Phase 4; `tVisacroAlipioSoil` mean set (§7 P5) |
+| Voltage-source handling | **Implemented** — current-injection equivalents (ADR 0010) by unit-injection superposition (ADR 0016), Phase 7 |
+| Impedance-fill interface | **Implemented** — theory factors inside `calcZ*` (ADR 0009) |
+| FFT dependency | **Implemented** — in-repo double-precision radix-2 FFT (ADR 0014); NLT proposed on top (§7 P4) |
+| JSON schema v1 | **Implemented (Fortran, GUI)** — ADR 0013 + 0015 (+ 0016 additions); Rust reader pending Phase 8 |
+| Reduced `Z_g` solver | Deferred optimisation (ADR 0003) |
+| GUI module | **Decided** — Python/PySide6/Qt3D, view-only v1 (ADR 0011) |
+| Results JSON schema | **Frozen** — ADR 0012 (harmonic) and ADR 0015 (transient) |
+| Quadrature tolerances | Dissertation-era values (`errrel = min(la,lb)·10⁻⁶`, `maxint = 500`), open to revision — revisit with the §7 P1 mHEM kernel (ADR 0018) |
+| Binary results format | Deferred — stay on JSON/CSV (ADR 0012); HDF5 is the leading candidate vs ADR 0006's zero-dependency philosophy. Revisit once a real case is actually too large for JSON. |
 
 ---
 
@@ -535,215 +268,106 @@ There is **no hosted CI** (decision §9): the gate is a local
 
 Three companion open-source codes were inspected side by side with this
 repository (see "Related open-source implementations" in
-[references.md](references.md)):
+[references.md](references.md)): **TAGS** (pedrohnv, C99), **PRTL-mHEM**
+(VitorLima1990, Python), **PRTL** (acslima, Wolfram/CDF).
 
-- **TAGS** (pedrohnv, C99) — HEM/mHEM grounding solver, NLT time domain,
-  field/potential post-processing;
-- **PRTL-mHEM** (VitorLima1990, Python) — mHEM grounding inside a full line
-  lightning-performance chain;
-- **PRTL** (acslima, Wolfram/CDF) — the original open framework the Python
-  port derives from.
-
-Headline finding: TUPÃ's geometry-factor separation (theory.md §4.1, from the
-2003 dissertation) is the same optimisation published as **mHEM** by Lima et
-al. (references.md [11]) and used by TAGS/PRTL-mHEM — so the core design is
+Headline finding: TUPÃ's geometry-factor separation (theory.md §4.1, from
+the 2003 dissertation) is the same optimisation published as **mHEM** by
+Lima et al. [11] and used by TAGS/PRTL-mHEM — the core design is
 independently validated in the literature. TAGS's closed-form self integral
-is identical to theory.md's `g_self`, confirming the gap-8 fix. The concrete
-proposals, in priority order:
+is identical to theory.md's `g_self`, confirming the Phase 1 fix.
 
-### P1 — mHEM single-integral kernel for `g(a,b)` (Phase 2, low effort)
+### P1 — mHEM single-integral kernel for `g(a,b)` (low effort)
 
-Replace the default 2-D Gauss–Kronrod evaluation of the geometry factor with
-the 1-D form now stated in theory.md §4.2: the inner integral over the sender
-segment is the closed-form log term, leaving one adaptive quadrature. Same
-quantity, cheaper and better conditioned for close segments. Keep the 2-D
-path as the test oracle (already exists in `Impedance.f90`/`Geometry.f90`).
+Replace the default 2-D Gauss–Kronrod evaluation with the 1-D form of
+theory.md §4.2 (inner integral in closed form). Same quantity, cheaper and
+better conditioned for close segments; keep the 2-D path as the test
+oracle. Unblocks larger `common/` grid cases (§5).
 
-### P2 — Frequency-dependent image reflection coefficient (Phase 2/4, low effort)
+### P2 — Frequency-dependent image reflection coefficient (low effort)
 
-Promote Γ(ω) from "planned refinement" to the default for buried conductors:
-`Γ_t(ω) = (W_soil − jωε₀)/(W_soil + jωε₀)`, `Γ_ℓ = 1` (theory.md §5). Both
-open-source companion codes use it even with constant soil parameters; it
-needs only the medium constants already computed in `calcParam` and
-multiplies the image parcel. **Strengthened by the July 2026 re-inspection
-(§8): the original Matlab already implements this coefficient as its default
-mode** (ideal images are its `SOLO_IDEAL` switch; the C++ port dropped it) —
-so this proposal restores reference behaviour, it does not extend it. The
-ideal ±1 table remains as its low-frequency limit and as a test pin.
-Validation impact: Portela 1997 curves should still match; Grcev-grid
-MHz-range behaviour will not without it.
+`Γ_t(ω) = (W_soil − jωε₀)/(W_soil + jωε₀)`, `Γ_ℓ = 1` (theory.md §5) as
+the default for buried conductors. **The original Matlab already does this
+as its default mode** (ADR 0017 finding 1) — this restores reference
+behaviour, it does not extend it. The ideal ±1 table remains as the
+low-frequency limit and test pin. Grcev-grid MHz-range behaviour needs it.
 
-### P3 — Cross-code validation against TAGS (Phase 2 milestone, medium effort)
+### P3 — Cross-code validation against TAGS (medium effort)
 
-TAGS builds locally (C99 + Cubature + LAPACK) and takes arbitrary electrode
-lists. Add a validation step that runs the Phase 2 buried conductor (and later
-the Grcev grid) through both codes and compares input impedance over the
-sweep. This gives an executable oracle *now*, independent of digitised paper
-curves. Caveats in theory.md §9.6: compare physical outputs only — TAGS uses
-`|cosθ|` and different incidence/system conventions internally.
+Run the Phase 2 buried conductor (later the Grcev grid) through both codes
+and compare input impedance over the sweep — the executable oracle the
+0.1.0 bar needs (§4). Compare physical outputs only (conventions differ
+internally — theory.md §9.6, ADR 0017 finding 5).
 
-### P4 — Numerical Laplace Transform for the time domain (Phase 6, medium effort)
+### P4 — Numerical Laplace Transform for the time domain (medium effort)
 
-Adopt the NLT (complex frequency `s = c + jω`, damping `c ≈ ln(N²)/T`, window
-filter before the inverse transform — Gómez & Uribe, references.md [17])
-instead of the plain FFT drive, as TAGS and PRTL do. The physics kernels are
-untouched (they already take complex medium constants); only the sweep driver
-and the inverse-transform step change. Plain FFT is the `c = 0` special case
-and remains for tests.
+NLT (`s = c + jω`, damping `c ≈ ln(N²)/T`, window filter — Gómez & Uribe
+[17]) as TAGS and PRTL use. Physics kernels untouched (already complex);
+only the sweep driver and inverse transform change. Plain FFT is the
+`c = 0` special case and remains for tests. Listed in Phase 7.
 
-### P5 — Concretise the dispersive-soil subtypes (Phase 4, feeds ADR 0007)
+### P5 — Concretise the dispersive-soil subtypes
 
-The comparison supplies exact, citable formulas and parameter tables:
-`tVisacroAlipioSoil` per Alipio & Visacro 2014 [14] (with the mean /
-relatively conservative / conservative sets — the default in both reference
-codes), `tLongmireSmithSoil` per Longmire & Smith [15] as parametrised by
-Cavka et al. [16]. Keep `tPortelaSoil` first (matches the project validation
-curves); implement `tVisacroAlipioSoil` second since it enables direct
-comparison with TAGS/PRTL-mHEM outputs.
+`tVisacroAlipioSoil` per Alipio & Visacro 2014 [14]: **done (2026-07-16,
+mean parameter set)** — see ADR 0007's "Exercised" note and
+`test_material.f90`; the JSON `soil.type` selector reaches all three soil
+models. Open: *relatively conservative*/*conservative* parameter sets and
+`tLongmireSmithSoil` (Longmire & Smith [15] per Cavka et al. [16]).
 
-**Exercised (2026-07-16)**: `tVisacroAlipioSoil` is implemented in
-`fortran/src/Material.f90`, *mean* parameter set only (`sigma0` is the sole
-free parameter; `h(sigma0)`, `xi=0.54`, `epsr_inf=12` are the fixed mean-curve
-constants). `admittance` is written directly in terms of `W(omega)` rather
-than a standalone `epsilon_r(f)` (theory.md §7) to sidestep the `f -> 0`
-singularity `epsilon_r(f)` has on its own. `fortran/test/test_material.f90`
-pins the formula at f = f0 = 1 MHz, DC-limit convergence to `tLinear`,
-passivity across the model's 100 Hz–4 MHz valid range, the qualitative
-higher-resistivity-disperses-more trend, and repeats the Phase 2
-buried-conductor passivity/DC-limit checks with this soil in place of
-`tLinear`. The JSON case format (`fortran/src/Tupa.f90`) gained a `soil.type`
-selector (`linear` default, `portela`, `alipio-visacro`) — previously *no*
-dispersive soil model was reachable from a case file at all, only `tLinear`.
-The *relatively conservative* / *conservative* parameter sets and
-`tLongmireSmithSoil` remain open.
+### P6 — Parallelise over frequencies, not the matrix fill
 
-### P6 — Parallelise over frequencies, not the matrix fill (Phase 3, decision)
+TAGS multithreads the frequency loop and pins BLAS to one thread;
+frequencies are embarrassingly parallel and TUPÃ's loop has the same shape
+once geometry factors are cached. Measure both, but expect this to
+supersede the fill-loop OpenMP pencilled in Phase 3 item 4
+([CONVENTIONS.md](CONVENTIONS.md) records the current default).
 
-TAGS deliberately multithreads the frequency loop and pins BLAS to one thread
-("this is important"), since frequencies are embarrassingly parallel and the
-per-frequency work (fill + `ZGESV`) shares nothing. With geometry factors
-precomputed once, TUPÃ's frequency loop has the same shape. Proposal: measure
-both, but expect frequency-level OpenMP to supersede the fill-loop OpenMP
-currently pencilled in ([CONVENTIONS.md](CONVENTIONS.md) records the current
-default; update it if confirmed).
+### P7 — Field/potential post-processing (new feature)
 
-### P7 — Field/potential post-processing (Phase 7+, new feature)
+Scalar potential, electric field and path voltages at arbitrary points
+from the solved `I_t`/`I_ℓ` (touch and step voltages, GPR profiles), as
+TAGS and the Matlab reference both provide — use the Matlab output-class
+inventory (ADR 0017 finding 6) to prioritise `tResult` subtypes. Overlaps
+the Phase 7 "GPR, touch and step voltage" item.
 
-TAGS computes scalar potential, electric field and path voltages at arbitrary
-points from the solved `I_t`/`I_ℓ` (touch and step voltages, GPR profiles).
-The Matlab reference has the same family of outputs (electric fields, 2-D/3-D
-soil-surface potentials, touch potential, mesh potentials, transfer
-functions) — use its output-class inventory to prioritise the `tResult`
-subtypes. Not needed for the near-term milestone.
+### P8 — Criteria-based segmentation defaults (low effort)
 
-### P8 — Criteria-based segmentation defaults (Phase 2/3, low effort)
-
-From the July 2026 literature batch rather than the code comparison:
-Schroeder, Moura & Machado (references.md [19]) show tower-footing responses
-stay within engineering accuracy (GPR peak +10 %, overvoltage peaks +5 %)
-with segments up to ~1000·r₀ — vastly coarser than the traditional 10·r₀,
-over 30× faster. Proposal: keep λ/10 as the default `Structure.assemble()`
-bound (theory.md §4.1), but expose the segment-length target as a per-study
-input validated by a coarse-vs-fine convergence test, so large grids don't
-pay fine-mesh cost by default. Feeds the same meshing code Phase 2 already
-touches.
+Schroeder, Moura & Machado [19]: segments up to ~1000·r₀ stay within
+engineering accuracy — far coarser than 10·r₀, >30× faster. Keep λ/10 as
+the default `assemble` bound (theory.md §4.1) but expose the
+segment-length target per study, validated by a coarse-vs-fine convergence
+test.
 
 ### Explicitly *not* proposed
 
-- Adopting TAGS's symmetric `(u, I_ℓ, I_t)` immittance block system — TUPÃ's
-  `(u, i₁, i₂)` form is equivalent, already ported, and pinned by theory.md
-  §6; noted in §9.6 as a consistency-check option only. (The Matlab original
-  already carries this layout as its solver "método 5" — evidence it is a
-  useful cross-check, still not the primary path.)
-- The transmission-line performance chain of PRTL/PRTL-mHEM (towers, spans,
-  flashover, outage rate) — out of scope for the grounding-solver milestone;
-  revisit after Phase 8 (it is the dissertation's original application).
-- Complex images (Kuhar et al., references.md [20]) — extends HEM validity
-  above a few MHz; lightning studies don't need it, and it only makes sense
-  after P2's Γ(ω) is in and validated. Documented in theory.md §5/§10.1.
-- Time-domain HEM (HEM-TD, references.md [21]) — only pays off for nonlinear
-  phenomena (soil ionisation, arresters, corona), which TUPÃ excludes by
-  design (theory.md §8).
-- Rational-model / FDNE export for EMT programs (references.md [26, 27]) — a
-  natural future *output format* (fit `Z_g(ω)`, enforce passivity, emit an
-  ATP/EMTP/PSCAD equivalent), not solver work; revisit when there are users
-  asking for EMT integration.
+- TAGS's symmetric `(u, I_ℓ, I_t)` block system — equivalent to the ported
+  `(u, i₁, i₂)` form; consistency-check option only (the Matlab carries it
+  as "método 5", ADR 0017 finding 4).
+- The PRTL transmission-line performance chain — out of scope for the
+  grounding-solver milestone; revisit after Phase 8.
+- Complex images (Kuhar et al. [20]) — only relevant above a few MHz and
+  only after P2 is in and validated (theory.md §5/§10.1).
+- Time-domain HEM (HEM-TD [21]) — pays off only for nonlinear phenomena,
+  which TUPÃ excludes by design (theory.md §8).
+- Rational-model/FDNE export for EMT programs [26, 27] — a future *output
+  format*, not solver work; revisit when users ask for EMT integration.
 
 ---
 
 ## 8. Findings from re-inspecting the legacy implementations (July 2026)
 
-The original repository was re-cloned with **both** legacy MoM
-implementations side by side: the original Matlab code (the dissertation
-implementation) and the C++/Fortran hybrid ported from it. The Matlab
-version is now the **model reference of record**. What the re-inspection
-established, beyond what is already folded into the sections above:
-
-1. **Γ(ω) images are original behaviour.** The Matlab's default mode
-   computes the frequency-dependent image reflection coefficient
-   (equal-permeability Fresnel form, applied to both `Z_t` and `Z_ℓ` image
-   parcels) and keeps ideal images behind a `SOLO_IDEAL` switch; the C++
-   port kept only the ideal limits. Feeds P2 (theory.md §5 updated).
-2. **Self geometry factor bug lineage.** The legacy expression
-   `r − h + l·log((1 + h)/r)`, `h = hypot(l, r)`, originates in the Matlab
-   and was ported verbatim to the C++: it is half the correct `g_self` *and*
-   has a literal `1` where `l` belongs (dimensionally inconsistent; the two
-   coincide only for 1 m segments). Gap 8's fix stands (theory.md §4.2
-   updated).
-3. **C++-only call-site bug.** The C++ self-term call passes the
-   longitudinal image geometry factor in the transversal-image slot — do not
-   use the C++ fill as an oracle for the diagonal terms (warning added to
-   Phase 2).
-4. **All three solver layouts exist in the Matlab** as switchable methods:
-   reduced nodal (two variants), augmented (LU / GMRES fallback), and a
-   TAGS-style symmetric `(u, I_ℓ, I_t)` system ("método 5") — plus
-   commented-out "Portela convention" sign variants. Ready-made
-   consistency-test material for theory.md §6/§9.4.
-5. **Convention mixing is real and must gate cross-validation.** The Matlab
-   uses `σ + jωε` immittance and a decaying `e^{−γR}` (theory conventions),
-   but a `−jωμ/4π` longitudinal constant and a `D` incidence stored as `−1`
-   (compensated in solver assembly). Compare against it on moduli and
-   time-domain waveforms only (theory.md §2 caveat added; reinforces
-   ADR 0008).
-6. **Feature inventory is richer than previously documented**: tubular
-   internal impedance (I/K Bessel) already implemented; two dispersive-soil
-   routines (Portela power-law at ω₀ = 1 rad/s [30]; Lima–Portela at
-   2π·1 MHz [31]); field/soil-potential/touch-voltage output classes (feeds
-   P7); Heidler/double-exp/Jones/exponential/impulse/Portela-concave/sine
-   signals (Phase 6); the element list in Phase 7; a direct inverse-Fourier
-   quadrature over an interpolated spectrum besides the FFT driver
-   (theory.md §8).
-7. **Input formats**: the Matlab reads keyword-based text case files
-   (`.caso`/`.est`); XML was a C++ addition. Neither constrains the JSON
-   schema (ADR 0006), but the Matlab case files are the natural source when
-   porting reference cases to `common/`.
+Moved to [ADR 0017](adr/0017-legacy-reinspection-findings.md) (finding
+numbers preserved): Γ(ω) images are original Matlab behaviour (1); self
+geometry factor bug lineage (2); C++-only call-site bug (3); all three
+solver layouts in the Matlab (4); convention mixing gates cross-validation
+(5); feature inventory (6); legacy input formats (7).
 
 ---
 
 ## 9. Author-interview decisions (2026-07-05)
 
-Recorded from the documentation-reconstruction interview; where a decision
-changed a document or the code, the change is already applied and referenced.
-
-| Topic | Decision |
-| --- | --- |
-| Application scope | MVP: tower-footing grounding. Full application tier: complete lines or substations. |
-| Project role | Scientifically citable reference implementation (docs tone, validation rigour follow from this). |
-| Convention authority | theory.md remains normative with the **engineering convention** (`e^{+jωt}`); Portela's papers (physics convention) are mapped through the §2 conjugation table, never followed directly. |
-| Validated models | **None yet** — no end-to-end physics validation has run; only unit-level convention pins. |
-| Soil dispersion | ADR 0007 accepted: `tPortelaSoil` first, Lima–Portela [31] parametrisation, ω₀ = 2π·1 MHz. |
-| Proposals P1/P2/P4 | Confirmed as written (mHEM 1-D kernel; Γ(ω) images; NLT). |
-| Sources | Current-injection equivalents (ADR 0010). |
-| Fill interface | Theory factors inside `calcZSelf`/`calcZMutual` (ADR 0009); `current1/current2` documented as end currents `i₁`/`i₂`. |
-| Quadrature tolerances | Dissertation-era values kept for now, open to revision. |
-| Stable vs fluid modules | Stable: `mMesh` conventions, `mGeometry`, `mImpedance`. Fluid: `tResult`, `mJsonParser`, `tStudy%run`. |
-| Public contract | JSON schema + `common/` cases only; all Fortran module APIs are internal and changeable. |
-| Compilers | Latest gfortran; keep ifx-compatible. |
-| CI | No hosted CI (no GitHub Actions); local `fpm build && fpm test` gate (§5). |
-| Release process | Proposed (delegated): semver; **0.1.0 = validated Phase 2 milestone** (Portela-curve case within tolerance); annotated git tags + a CHANGELOG; no package-registry publishing planned. **Open as of the Phase 2 wiring pass**: only the DC-limit check is executable today (§3 Phase 2 item 3) — the Portela-curve tolerance check needs P3 (TAGS cross-validation) or real tabulated data first, so hitting this 0.1.0 bar needs one of those, not just the wiring done here. |
-| SLATEC | The **cloned** `fortran/slatec/` checkout (from the author's fork, fetched by `build.sh`) is canonical and may be fine-tuned in place. |
-| Benchmarks | TAGS and PRTL-mHEM to be added as git submodules under `benchmarks/` (see [BENCHMARKS.md](BENCHMARKS.md)); they are the executable validation oracles until curated reference datasets arrive. |
-| Validation data | No tabulated data from Portela 1997 exists — only the equations; further validation references to be supplied by the author. Visacro & Soares 2005 [5] has no usable comparison data. No legacy-output fixtures for now. |
-| Precision | `dp` kind added to `mCtes`; new code uses it, legacy `kind=8` migrates gradually. |
-| Error handling | All `error stop` converted to feh (`raiseError`), including the JSON parser and the CLI entry point. |
-| Housekeeping | `check.f90` stub test and `calcBase` placeholder deleted. |
+Moved to [ADR 0018](adr/0018-author-interview-decisions-2026-07.md):
+scope, project role, convention authority, sources, tolerances,
+stable/fluid modules, public contract, compilers, no-hosted-CI, release
+process (0.1.0 bar), SLATEC, benchmarks, validation-data status,
+precision, error handling.

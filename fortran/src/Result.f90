@@ -170,12 +170,15 @@ contains
 
   subroutine resultStoreAxes(this, ids, omega)
     !! Copy `ids`/`omega` into the base type. Called by each concrete
-    !! type's `alloc` before it allocates its own data array.
+    !! type's `alloc` before it allocates its own data array. Idempotent:
+    !! re-allocating (e.g. a second `runSweep` on the same study, ADR 0016
+    !! voltage-source tests) replaces the previous axes.
     class(tResult), intent(inout) :: this
     character(len=*), intent(in) :: ids(:)
     real(8), intent(in) :: omega(:)
     integer :: i
 
+    if (allocated(this%ids)) deallocate(this%ids)
     allocate(this%ids(size(ids)))
     do i = 1, size(ids)
       this%ids(i) = ids(i)
@@ -235,6 +238,7 @@ contains
     !! Angular frequencies — determines second dimension
 
     call this%storeAxes(ids, omega)
+    if (allocated(this%voltages)) deallocate(this%voltages)
     allocate(this%voltages(size(ids), size(omega)))
   end subroutine allocVoltages
 
@@ -264,6 +268,7 @@ contains
     !! Angular frequencies — determines second dimension
 
     call this%storeAxes(ids, omega)
+    if (allocated(this%currents)) deallocate(this%currents)
     allocate(this%currents(size(ids), size(omega)))
   end subroutine allocLongCurrents
 
@@ -293,6 +298,7 @@ contains
     !! Angular frequencies — determines second dimension
 
     call this%storeAxes(ids, omega)
+    if (allocated(this%currents)) deallocate(this%currents)
     allocate(this%currents(size(ids), size(omega)))
   end subroutine allocTransCurrents
 

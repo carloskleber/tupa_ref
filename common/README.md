@@ -15,7 +15,7 @@ when it reproduces every case within the stated tolerance.
 | `buried_conductor_long.json` | Two collinear buried conductors, 2 × 10 m, 10 segments each | none (structure-only) |
 | `portela1997.json` | The Phase 2 validation conductor (10 m, 0.5 m depth, σ = 0.01 S/m, εr = 10), 1∠0° A at `Node_1`, 10 Hz-1 MHz | `portela1997_expected.csv` |
 | `rod.json` | Single vertical buried rod (3 m, -0.5 to -3.5 m), same soil, 1∠0° A at `Node_1`, 10 Hz-1 MHz, 8 points/decade | `rod_expected.csv` |
-| `rod_air.json` | Two collinear rods sharing `Node_2` at the air-soil interface (z=0): 10 m above ground down to a 5 m buried rod, same soil/material, 1∠0° A at `Node_1` (top), 10 Hz-1 MHz | none yet — runs NaN-free since the ROADMAP §1 item 9 fix; fixture still to be generated (see below) |
+| `rod_air.json` | Two collinear rods sharing `Node_2` at the air-soil interface (z=0): 10 m above ground down to a 5 m buried rod, same soil/material, 1∠0° A at `Node_1` (top), 10 Hz-1 MHz | none yet — runs NaN-free since the ADR 0019 fix; fixture still to be generated (see below) |
 | `grid.json` | Small buried grounding grid, one square mesh (4 nodes/edges), 1∠0° A at `Node_A`, 100 Hz-100 kHz | `grid_expected.csv` |
 | `portela1997_transient.json` | Same geometry/soil as `portela1997.json`, but a `signal` block (ADR 0015) instead of `sources`/`frequencies`: transient GPR under a 1.2/50 µs, 30 kA double-exponential surge | none (internal-consistency check only, theory.md §9.2 data gap — see `test_transient.f90`) |
 | `silva2025_rho{100,300,1000,2400}.json` | Silva et al. 2025 (SBAI, references.md [36]) PEEC-vs-HEM base case: buried horizontal electrode, 60 m, 7 mm radius, 0.5 m depth, `alipio-visacro` dispersive soil (theory.md §7) at ρ0 = 100/300/1000/2400 Ω·m, 1∠0° A at `Node_1`, 128 log-spaced points 100 Hz–4 MHz (`pointsPerDecade: 27.6`, ADR 0013's `round(ppd·log10(fmax/fmin))+1` formula) — matches the paper's 2⁷ frequency samples. For comparison against the paper's Fig. 3 (\|Z(ω)\|); no tabulated digitised curve exists yet, so there is no `_expected.csv` (internal passivity/plausibility check only) | none yet |
@@ -28,7 +28,7 @@ when it reproduces every case within the stated tolerance.
 the odd one out: it exercises a structure with elements in *both* media at
 once (one rod entirely above ground, one entirely below, joined at the
 z=0 interface node) — a case none of the others cover. Adding it exposed
-a real bug, now fixed (ROADMAP.md §1 item 9): `tStructure%air`
+a real bug, now fixed ([ADR 0019](../docs/adr/0019-air-medium-hardcoded-vacuum.md)): `tStructure%air`
 (`fortran/src/Structure.f90`) was never populated, so every electrode
 positioned in air computed against a zeroed-out air admittance and the
 sweep returned `NaN` end to end. Air is now hardcoded to vacuum (εr=1,
@@ -54,7 +54,7 @@ which costs roughly 1-2 s per pair regardless of touching/singularity at
 today's tolerances (ROADMAP §6 "Quadrature tolerances", §7 P1) — a bigger
 grid is worth adding once the P1 mHEM single-integral kernel lands.
 
-## Schema (v1 — [ADR 0006](../docs/adr/0006-json-io.md) format, `sources`/`frequencies`/`outputs` frozen by [ADR 0013](../docs/adr/0013-input-schema-sources-frequencies-outputs.md), `signal` added by [ADR 0015](../docs/adr/0015-time-domain-signal-schema.md))
+## Schema (v1 — [ADR 0006](../docs/adr/0006-json-io.md) format, `sources`/`frequencies`/`outputs` frozen by [ADR 0013](../docs/adr/0013-input-schema-sources-frequencies-outputs.md), `signal` added by [ADR 0015](../docs/adr/0015-time-domain-signal-schema.md), voltage sources and Heidler `terms` by [ADR 0016](../docs/adr/0016-voltage-sources-by-superposition.md)/0015 amendment)
 
 ```json
 {
@@ -98,8 +98,12 @@ Semantics:
 - `materials` is optional only if no element references one.
 - `sources`, `frequencies`, `outputs` are **optional** (a structure-only
   case file, like `buried_conductor_short.json`/`buried_conductor_long.json`, stays valid) but
-  required together to run a sweep. `sources[].current` and the output
-  schema's per-frequency values share the same `{"re":..,"im":..}` pair.
+  required together to run a sweep. A `sources[]` entry carries **either**
+  `"current"` (A) **or** `"voltage"` (V) ([ADR 0016](../docs/adr/0016-voltage-sources-by-superposition.md)
+  — ideal voltage source, converted to an equivalent current injection by
+  unit-injection superposition in the study layer, per ADR 0010); both use
+  the same `{"re":..,"im":..}` complex pair as the output schema's
+  per-frequency values.
   `frequencies` is log-spaced only (`min`/`max` in Hz, `pointsPerDecade`
   density); no explicit frequency list yet (ADR 0013 — waits on the
   json-fortran migration below). `outputs` is a selection *of* the ADR
@@ -125,7 +129,13 @@ Semantics:
   is optional and independent of `sources`/`frequencies` — a case runs a
   transient (time-domain) solve instead of, or alongside, a harmonic sweep.
   `waveform` is `"doubleExp"` or `"heidler"` (`fortran/src/Signal.f90`);
-  `front`/`jones` apply only to `"doubleExp"`. `observeNodes` is an array
+  `front`/`jones` apply only to `"doubleExp"`. For `"heidler"`, an optional
+  `terms` array (ADR 0015 amendment, 2026-07-17) gives the standard
+  parametrised Heidler function (Heidler 1985 [37] / IEC 62305-1 [38]) —
+  one `{"i0", "n", "tau1", "tau2"}` object per term; `imax` is then
+  optional (absent = physical amplitudes, present = peak rescale). Without
+  `terms`, `"heidler"` keeps the legacy fixed 6-term set and `imax` is
+  required. `observeNodes` is an array
   (v(t) is computed for every entry at no extra solve cost — the transient
   pipeline's single unit-current sweep already covers every node);
   `observeElectrodes` is an optional array of *discretised* electrode IDs

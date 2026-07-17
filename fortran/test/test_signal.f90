@@ -47,6 +47,89 @@ program test_signal
                iPeak > 1 .and. iPeak < n, "peak at a record boundary — sampling window too narrow")
 
   ! ----------------------------------------------------------------
+  ! Standard parametrised Heidler (Heidler 1985 / IEC 62305-1): a single
+  ! 10/350 us first-stroke term (I0 = 200 kA, n = 10, tau1 = 19 us,
+  ! tau2 = 485 us) peaks at ~I0 without any numerical rescale — the
+  ! analytic eta correction (IEC's k = 0.93 for these parameters) already
+  ! normalises each term's peak.
+  ! ----------------------------------------------------------------
+  call test_init("newHeidlerSignalTerms: IEC 62305-1 first stroke, physical amplitude")
+
+  block
+    type(tHeidlerSignal) :: iec
+    real(dp), allocatable :: tIec(:), iIec(:)
+    real(dp) :: eta
+    integer(4) :: nIec
+
+    iec = newHeidlerSignalTerms([200.0d3], [10.0_dp], [19.0d-6], [485.0d-6])
+
+    call test_ok("no rescale requested (imax absent)", .not. iec%rescale, "")
+
+    eta = exp(-(19.0d-6 / 485.0d-6) * (10.0_dp * 485.0d-6 / 19.0d-6) ** (1.0_dp / 10.0_dp))
+    call test_ok("analytic eta matches IEC's k = 0.93 for 10/350", &
+                 abs(eta - 0.93d0) < 5.0d-3, "eta correction far from the published 0.93")
+
+    nIec = 8001
+    allocate(tIec(nIec))
+    tIec = [(real(k - 1, dp) * 2.0d-3 / real(nIec - 1, dp), k = 1, nIec)]
+    iIec = iec%waveform(tIec)
+
+    call test_ok("peak ~= I0 within 1% (eta-corrected, no rescale)", &
+                 abs(maxval(iIec) - 200.0d3) < 0.01d0 * 200.0d3, &
+                 "peak of the eta-corrected term should approximate I0")
+    call test_ok("zero at t = 0", abs(iIec(1)) < 1.0d-9, "Heidler term must start at zero")
+    call test_ok("decayed below 50% of I0 at t = 2 ms (~4x tau2)", &
+                 abs(iIec(nIec)) < 0.5d0 * 200.0d3, "tail should be decaying")
+  end block
+
+  ! ----------------------------------------------------------------
+  ! Parametrised Heidler with explicit imax: legacy-style exact rescale
+  ! ----------------------------------------------------------------
+  call test_init("newHeidlerSignalTerms: explicit imax rescales the peak exactly")
+
+  block
+    type(tHeidlerSignal) :: scaled
+    real(dp), allocatable :: tS(:), iS(:)
+    integer(4) :: nS
+
+    scaled = newHeidlerSignalTerms([200.0d3], [10.0_dp], [19.0d-6], [485.0d-6], imax=100.0d3)
+    call test_ok("rescale flag set", scaled%rescale, "")
+
+    nS = 8001
+    allocate(tS(nS))
+    tS = [(real(k - 1, dp) * 2.0d-3 / real(nS - 1, dp), k = 1, nS)]
+    iS = scaled%waveform(tS)
+    call test_ok("sampled peak equals imax exactly", &
+                 abs(maxval(iS) - 100.0d3) < 1.0d-6 * 100.0d3, &
+                 "rescaled peak must equal imax on the sampled record")
+  end block
+
+  ! ----------------------------------------------------------------
+  ! Multi-term parametrised Heidler: two-term sum is causal and bounded
+  ! by the sum of the term peaks
+  ! ----------------------------------------------------------------
+  call test_init("newHeidlerSignalTerms: two-term sum")
+
+  block
+    type(tHeidlerSignal) :: dual
+    real(dp), allocatable :: tD(:), iD(:)
+    integer(4) :: nD
+
+    dual = newHeidlerSignalTerms([10.0d3, 5.0d3], [2.0_dp, 3.0_dp], &
+                                  [1.0d-6, 10.0d-6], [50.0d-6, 200.0d-6])
+    nD = 4001
+    allocate(tD(nD))
+    tD = [(-50.0d-6 + real(k - 1, dp) * 1.0d-3 / real(nD - 1, dp), k = 1, nD)]
+    iD = dual%waveform(tD)
+
+    call test_ok("causal (zero for t <= 0)", &
+                 all(abs(iD) < 1.0d-9 .or. tD > 0.0d0), "nonzero current before t=0")
+    call test_ok("positive peak bounded by sum of term amplitudes (with eta margin)", &
+                 maxval(iD) > 10.0d3 .and. maxval(iD) < 1.1d0 * 15.0d3, &
+                 "two-term peak outside the plausible [max(I0), ~sum(I0)] range")
+  end block
+
+  ! ----------------------------------------------------------------
   ! Double exponential: causal, decays to ~0 well after the tail time,
   ! peak located near the nominal front time
   ! ----------------------------------------------------------------

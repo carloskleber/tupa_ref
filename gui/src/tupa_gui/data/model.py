@@ -44,10 +44,13 @@ class LineElement:
 
 @dataclass(frozen=True)
 class Source:
-    """A current-injection source (ADR 0010): one entry per driven node."""
+    """One excitation source per driven node: a current injection (ADR
+    0010), or an ideal voltage source (ADR 0016) when `is_voltage` is
+    true — `current` then holds the source voltage (V)."""
 
     node: str
     current: complex
+    is_voltage: bool = False
 
 
 @dataclass(frozen=True)

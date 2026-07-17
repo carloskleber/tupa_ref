@@ -1,22 +1,25 @@
 module mSignal
-  !! Time-domain excitation waveforms (ROADMAP.md Phase 6 item 1).
+  !! Time-domain excitation waveforms (ROADMAP.md Phase 6 item 1, Phase 7).
   !!
   !! The abstract base `tSignal` declares `waveform(t)`: the injected current
   !! i(t) (A) sampled at the given time axis. Two families are ported from
   !! the legacy Matlab `+sinais` package (the model reference of record,
   !! CLAUDE.local.md): `tHeidlerSignal` (multi-term Heidler function) and
   !! `tDoubleExpSignal` (double-exponential surge, with an optional Jones
-  !! correction for a zero-slope front). The Matlab reference ships several
-  !! more waveforms (single exponential, impulse/step, Portela's concave
-  !! model, sine) — ported "as needed" per ROADMAP.md Phase 6 item 1; not
-  !! duplicated here until a case needs them.
+  !! correction for a zero-slope front). Phase 7 adds the standard
+  !! user-parametrised Heidler construction (`newHeidlerSignalTerms`,
+  !! Heidler 1985 / IEC 62305-1 — references.md) alongside the legacy
+  !! fixed 6-term set. The Matlab reference ships several more waveforms
+  !! (single exponential, impulse/step, Portela's concave model, sine) —
+  !! ported "as needed" per ROADMAP.md Phase 6 item 1; not duplicated here
+  !! until a case needs them.
   use mCtes, only: dp, PI
   use mError, only: raiseError
   implicit none
   private
 
   public :: tSignal, tHeidlerSignal, tDoubleExpSignal
-  public :: newHeidlerSignal, newDoubleExpSignal, tailTaper
+  public :: newHeidlerSignal, newHeidlerSignalTerms, newDoubleExpSignal, tailTaper
 
   type, abstract :: tSignal
     !! Abstract base for a time-domain excitation waveform.
@@ -38,15 +41,25 @@ module mSignal
   end interface
 
   type, extends(tSignal) :: tHeidlerSignal
-    !! Sum-of-Heidler-terms lightning current waveform (legacy
-    !! `sinais.Heidler`, "Baseada na implementacao do Tony" — no published
-    !! source is recorded for this specific 6-term parameter set; ported
-    !! verbatim as the project's default, not independently validated
-    !! against a named reference). Each term is
+    !! Sum-of-Heidler-terms lightning current waveform (Heidler 1985; the
+    !! single-term form with standardised parameters is the IEC 62305-1
+    !! lightning current — see references.md). Each term is
     !! i_k(t) = (I0_k/η_k)·(t/τ1_k)^n_k / (1 + (t/τ1_k)^n_k)·exp(-t/τ2_k),
-    !! η_k = exp[-(τ1_k/τ2_k)·(n_k·τ2_k/τ1_k)^(1/n_k)]; the sum of all six
-    !! terms is rescaled so its own peak equals `imax`.
-    real(dp) :: i0(6), n(6), tau1(6), tau2(6)
+    !! η_k = exp[-(τ1_k/τ2_k)·(n_k·τ2_k/τ1_k)^(1/n_k)] (the peak-correction
+    !! factor, so each term's peak ≈ I0_k).
+    !!
+    !! Two construction paths (ROADMAP Phase 6/7):
+    !! `newHeidlerSignalTerms` — user-supplied terms (the standard, citable
+    !! form; `rescale` optional); `newHeidlerSignal` — the legacy Matlab
+    !! `sinais.Heidler` 6-term set ("Baseada na implementacao do Tony" — no
+    !! published source is recorded for that parameter set; ported verbatim,
+    !! not independently validated), always peak-rescaled to `imax`.
+    real(dp), allocatable :: i0(:), n(:), tau1(:), tau2(:)
+    logical :: rescale = .true.
+    !! When true, the summed waveform is numerically rescaled so its peak
+    !! equals `imax` (legacy behaviour). When false, the terms are used at
+    !! their physical amplitudes (η already corrects each peak to ≈ I0_k)
+    !! and `imax` is ignored.
   contains
     procedure :: waveform => heidlerWaveform
   end type tHeidlerSignal
@@ -57,7 +70,7 @@ module mSignal
     !! tail decay rate, k normalises the peak to 1 at the nominal front time
     !! `tFront`. With `jones = .true.` the front term becomes
     !! exp(-(αt)²) (legacy `sinais.DuplaExpJones`, R.D. Jones 1977 — see
-    !! ROADMAP.md §8 finding 6), giving zero slope at t=0 instead of the
+    !! ADR 0017 finding 6), giving zero slope at t=0 instead of the
     !! plain double-exponential's non-physical nonzero initial di/dt.
     real(dp) :: alpha, beta, tFront
     logical :: jones = .false.
@@ -82,6 +95,46 @@ contains
     sig%tau1 = [3.0_dp, 3.5_dp, 4.8_dp, 6.0_dp, 7.0_dp, 70.0_dp] * 1.0d-6
     sig%tau2 = [76.0_dp, 10.0_dp, 30.0_dp, 26.0_dp, 23.2_dp, 200.0_dp] * 1.0d-6
   end function newHeidlerSignal
+
+  function newHeidlerSignalTerms(i0, n, tau1, tau2, imax) result(sig)
+    !! Standard parametrised Heidler waveform (Heidler 1985; IEC 62305-1
+    !! uses the single-term form): the caller supplies one entry per term
+    !! of peak current `i0` (A), steepness exponent `n` (dimensionless,
+    !! >= 1), front time constant `tau1` (s) and tail time constant `tau2`
+    !! (s). Without `imax` the terms are used at their physical amplitudes
+    !! (each term's peak ≈ i0_k via the analytic η correction — the usual,
+    !! citable usage); with `imax` present the summed waveform is
+    !! numerically rescaled so its peak equals `imax` exactly (legacy
+    !! `sinais.Heidler` convention).
+    real(dp), intent(in) :: i0(:), n(:), tau1(:), tau2(:)
+    real(dp), intent(in), optional :: imax
+    type(tHeidlerSignal) :: sig
+
+    if (size(n) /= size(i0) .or. size(tau1) /= size(i0) .or. size(tau2) /= size(i0)) then
+      call raiseError("newHeidlerSignalTerms: i0/n/tau1/tau2 must all have one entry per term")
+      return
+    end if
+    if (size(i0) < 1) then
+      call raiseError("newHeidlerSignalTerms: at least one term is required")
+      return
+    end if
+    if (any(tau1 <= 0.0_dp) .or. any(tau2 <= 0.0_dp) .or. any(n < 1.0_dp)) then
+      call raiseError("newHeidlerSignalTerms: tau1/tau2 must be > 0 and n >= 1")
+      return
+    end if
+
+    sig%i0   = i0
+    sig%n    = n
+    sig%tau1 = tau1
+    sig%tau2 = tau2
+    if (present(imax)) then
+      sig%imax = imax
+      sig%rescale = .true.
+    else
+      sig%imax = 0.0_dp
+      sig%rescale = .false.
+    end if
+  end function newHeidlerSignalTerms
 
   function newDoubleExpSignal(imax, waveformName, jones) result(sig)
     !! Double-exponential waveform, looked up by the legacy named forms
@@ -121,7 +174,8 @@ contains
     class(tHeidlerSignal), intent(in) :: this
     real(dp), intent(in) :: t(:)
     real(dp) :: i(size(t))
-    real(dp) :: eta(6), peak, tp(size(t)), ratio(size(t))
+    real(dp), allocatable :: eta(:)
+    real(dp) :: peak, tp(size(t)), ratio(size(t))
     integer(4) :: k
 
     eta = exp(-(this%tau1 / this%tau2) * (this%n * this%tau2 / this%tau1) ** (1.0_dp / this%n))
@@ -133,14 +187,16 @@ contains
     tp = max(t, 0.0_dp)
 
     i = 0.0_dp
-    do k = 1, 6
+    do k = 1, size(this%i0)
       ratio = (tp / this%tau1(k)) ** this%n(k)
       i = i + merge((this%i0(k) / eta(k)) * ratio / (1.0_dp + ratio) * exp(-tp / this%tau2(k)), &
                     0.0_dp, t > 0.0_dp)
     end do
 
-    peak = maxval(abs(i))
-    if (peak > 0.0_dp) i = i / peak * this%imax
+    if (this%rescale) then
+      peak = maxval(abs(i))
+      if (peak > 0.0_dp) i = i / peak * this%imax
+    end if
   end function heidlerWaveform
 
   function doubleExpWaveform(this, t) result(i)

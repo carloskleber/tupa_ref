@@ -44,7 +44,7 @@ contains
     !! One-sided linear axis f_k = k·df, k = 0..N/2 (N/2+1 points spanning
     !! [0, nyquistHz]), with the DC bin replaced by `freqZeroHz`: the
     !! transverse admittance of a zero-conductivity medium (e.g. the
-    !! project's hardcoded air, ROADMAP.md §3 item 9) is singular at
+    !! project's hardcoded air, ADR 0019) is singular at
     !! omega = 0 exactly, so the legacy `lesinais.m` solves at a small
     !! nonzero "FREQ_ZERO" instead — same convention here.
     real(dp), intent(in) :: nyquistHz

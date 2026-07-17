@@ -66,7 +66,15 @@ def load_study(path: str | Path) -> Study:
             )
         )
 
-    sources = [Source(node=s["node"], current=_complex(s["current"])) for s in raw.get("sources", [])]
+    # A source carries either "current" (A, ADR 0010) or "voltage" (V,
+    # ADR 0016); neither present defaults to a zero current injection,
+    # matching the Fortran reader.
+    sources = [
+        Source(node=s["node"], current=_complex(s["voltage"]), is_voltage=True)
+        if "voltage" in s
+        else Source(node=s["node"], current=_complex(s.get("current", {})))
+        for s in raw.get("sources", [])
+    ]
 
     frequencies = None
     if "frequencies" in raw:
@@ -112,7 +120,7 @@ def load_study(path: str | Path) -> Study:
 
 
 def _complex(raw: dict) -> complex:
-    return complex(raw["re"], raw["im"])
+    return complex(raw.get("re", 0.0), raw.get("im", 0.0))
 
 
 def load_results(path: str | Path) -> Results:

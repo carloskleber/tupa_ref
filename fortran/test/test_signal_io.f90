@@ -105,6 +105,78 @@ program test_signal_io
                abs(maxval(injectedCurrent) - 30000.0d0) < 0.1d0 * 30000.0d0, &
                "injected current peak far from imax")
 
+  ! ----------------------------------------------------------------
+  ! ADR 0016 (voltage sources) + ADR 0015 amendment (heidler terms):
+  ! parse a scratch case carrying a voltage source, a current source and
+  ! a parametrised Heidler signal, and cross-check the waveform against
+  ! direct construction.
+  ! ----------------------------------------------------------------
+  call test_init("loadStudy: voltage source flag and parametrised heidler terms")
+
+  block
+    character(len=*), parameter :: tmpFile = "test_signal_io_tmp.json"
+    type(tStudy) :: study2
+    class(tSignal), allocatable :: signal2
+    character(len=256), allocatable :: srcIds(:)
+    complex(8), allocatable :: srcValues(:)
+    logical, allocatable :: srcIsVoltage(:)
+    real(8), allocatable :: freqHz(:)
+    type(tHeidlerSignal) :: heidlerRef
+    real(dp) :: tChk(4)
+    integer :: unit
+
+    open(newunit=unit, file=tmpFile, status="replace", action="write")
+    write(unit, '(A)') '{'
+    write(unit, '(A)') '  "title": "signal-io scratch case",'
+    write(unit, '(A)') '  "soil": {"permittivity": 10.0, "permeability": 1.0, "conductivity": 0.01},'
+    write(unit, '(A)') '  "nodes": ['
+    write(unit, '(A)') '    {"id": "N1", "position": [0.0, 0.0, -0.5]},'
+    write(unit, '(A)') '    {"id": "N2", "position": [10.0, 0.0, -0.5]}'
+    write(unit, '(A)') '  ],'
+    write(unit, '(A)') '  "materials": [{"id": "copper", "epsilonr": 1.0, "mur": 1.0, "sigma": 5.96e7}],'
+    write(unit, '(A)') '  "elements": ['
+    write(unit, '(A)') '    {"type": "line", "id": "L1", "from": "N1", "to": "N2",'
+    write(unit, '(A)') '     "radius": 0.007, "segments": 2, "material": "copper"}'
+    write(unit, '(A)') '  ],'
+    write(unit, '(A)') '  "sources": ['
+    write(unit, '(A)') '    {"node": "N1", "voltage": {"re": 10.0, "im": -2.0}},'
+    write(unit, '(A)') '    {"node": "N2", "current": {"re": 1.0, "im": 0.0}}'
+    write(unit, '(A)') '  ],'
+    write(unit, '(A)') '  "frequencies": {"min": 100.0, "max": 1000.0, "pointsPerDecade": 3},'
+    write(unit, '(A)') '  "signal": {'
+    write(unit, '(A)') '    "waveform": "heidler",'
+    write(unit, '(A)') '    "terms": [{"i0": 200000.0, "n": 10.0, "tau1": 19.0e-6, "tau2": 485.0e-6}],'
+    write(unit, '(A)') '    "sourceNode": "N1",'
+    write(unit, '(A)') '    "observeNodes": ["N1"],'
+    write(unit, '(A)') '    "nyquistHz": 1.0e6,'
+    write(unit, '(A)') '    "fftPoints": 256'
+    write(unit, '(A)') '  }'
+    write(unit, '(A)') '}'
+    close(unit)
+
+    call loadStudy(tmpFile, study2, sourceNodeIds=srcIds, sourceCurrents=srcValues, &
+                   sourceIsVoltage=srcIsVoltage, freqHz=freqHz, signal=signal2)
+
+    call test_ok("two sources parsed", size(srcIds) == 2, "wrong source count")
+    call test_ok("sourceIsVoltage allocated with two entries", &
+                 allocated(srcIsVoltage) .and. size(srcIsVoltage) == 2, "flags missing")
+    call test_ok("N1 flagged as voltage source", srcIsVoltage(1), "voltage field not detected")
+    call test_ok("N2 stays a current source", .not. srcIsVoltage(2), "current source misflagged")
+    call test_ok("voltage value parsed as complex", &
+                 abs(srcValues(1) - cmplx(10.0d0, -2.0d0, kind=8)) < 1.0d-12, "wrong voltage value")
+
+    call test_ok("signal parsed as tHeidlerSignal", same_type_as(signal2, heidlerRef), &
+                 "heidler-with-terms should still construct a tHeidlerSignal")
+    heidlerRef = newHeidlerSignalTerms([200.0d3], [10.0d0], [19.0d-6], [485.0d-6])
+    tChk = [0.0d0, 5.0d-6, 20.0d-6, 200.0d-6]
+    call test_ok("parsed terms reproduce direct construction (no rescale)", &
+                 all(abs(signal2%waveform(tChk) - heidlerRef%waveform(tChk)) < 1.0d-6 * 200.0d3), &
+                 "JSON heidler terms do not reproduce newHeidlerSignalTerms")
+
+    open(newunit=unit, file=tmpFile, status="old")
+    close(unit, status="delete")
+  end block
+
   call test_summary()
 
 end program test_signal_io
