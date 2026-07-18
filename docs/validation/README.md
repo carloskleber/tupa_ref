@@ -13,8 +13,8 @@ BENCHMARKS.md's anchor table.
 
 | Case | Reference | Quantity | Result |
 | --- | --- | --- | --- |
-| [silva2025-fig3.md](silva2025-fig3.md) | Silva et al. 2025 (SBAI, references.md [36]), Fig. 3 | Harmonic input impedance \|Z(ω)\|, 60 m buried electrode, `alipio-visacro` soil, ρ0 = 100/300/1000/2400 Ω·m | DC and high-frequency asymptotes agree within ~1-3%; the mid-band knee and the resonance dips (ρ0 = 1000/2400 Ω·m) agree in both location and depth — see writeup for the full table |
-| [silva2025-fig4.md](silva2025-fig4.md) | Silva et al. 2025 (SBAI, references.md [36]), Fig. 4 | Time-domain GPR at the injection node, same 60 m electrode/soil, MCS_FST#2 double-peaked first-stroke current (De Conti & Visacro 2007, [38]) | Both current-driven GPR humps and the tail agree within ~1-8% at every ρ0; only the ρ0 = 100 Ω·m front (smallest absolute values, steepest slope) is off by 33-45% — see writeup for the full table and the MCS_FST#1-vs-#2 finding |
+| [silva2025-fig3.md](silva2025-fig3.md) | Silva et al. 2025 (SBAI, references.md [36]), Fig. 3 | Harmonic input impedance \|Z(ω)\|, 60 m buried electrode, `alipio-visacro` soil, ρ0 = 100/300/1000/2400 Ω·m | DC/high-frequency asymptotes and the resonance dips/peaks (ρ0 = 1000/2400 Ω·m) agree closely; a mid-band knee runs up to ~14% off for ρ0 = 100/300 Ω·m, partly corroborated by an independent discretization-sensitivity study — see writeup for the full table |
+| [silva2025-fig4.md](silva2025-fig4.md) | Silva et al. 2025 (SBAI, references.md [36]), Fig. 4 | Time-domain GPR at the injection node, same 60 m electrode/soil, MCS_FST#2 double-peaked first-stroke current (De Conti & Visacro 2007, [38]) | Both current-driven GPR humps agree within ~8% at every ρ0; the front (t = 2-6 µs) underestimates ~10-31% and the tail (t ≥ 15 µs) overestimates ~4-9%, both consistently across all four ρ0 — see writeup for the full table and the MCS_FST#1-vs-#2 finding |
 
 ## Method (applies to every writeup in this folder unless stated otherwise)
 

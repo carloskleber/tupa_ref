@@ -371,8 +371,15 @@ below) as the sources of its dispersive-soil routines:
     then evaluates higher-order basis functions (piecewise linear,
     sinusoidal) against the pulse basis TUPÃ uses — more accurate per
     segment but costlier; geometric-symmetry assembly rules recover the
-    efficiency. Relevant only if pulse-basis accuracy ever becomes the
-    binding constraint (finer segmentation per [19] is the current answer).
+    efficiency. §5.3 also runs a segmentation-limits study for the pulse
+    basis itself (same one TUPÃ uses): "10r" segment length as converged
+    reference vs. coarser λ-fraction discretizations, on the same
+    electrode/Alipio-Visacro-soil family as [36]'s Fig. 3/4 — coarser
+    discretization systematically underestimates |Z(ω)| and GPR, used in
+    silva2025-fig3.md's mid-band-knee discussion as indirect corroboration
+    for the segment-count candidate cause. Otherwise relevant only if
+    pulse-basis accuracy ever becomes the binding constraint (finer
+    segmentation per [19] is the current answer).
 
 ## Line-level (EMT) context: tower models, coupling, LEMP
 
