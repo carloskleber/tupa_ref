@@ -9,7 +9,8 @@ entries.
 - **HEM (Hybrid Electromagnetic Model)** — the power-community name for this
   Method-of-Moments application to thin-wire lightning/grounding problems:
   field coupling through $Z_\ell$/$Z_t$ matrices plus circuit-type (nodal)
-  closure [1, 5]. "Hybrid" = field theory + circuit theory.
+  closure [1, 5]; thesis-length origin [55]. "Hybrid" = field theory +
+  circuit theory.
 - **MoM (Method of Moments)** — general framework for solving integral
   equations by expanding the unknown in basis functions and testing the
   residual [6, 7]. TUPÃ fixes pulse basis functions and matching on segment

@@ -673,7 +673,11 @@ Every implementation must reproduce, within stated tolerance:
    (item 6); status in [BENCHMARKS.md](BENCHMARKS.md).
 3. **Visacro & Soares 2005 [5]**: formulation reference only — the paper
    carries no data usable for quantitative comparison (author, 2026-07-05);
-   dropped as a data anchor.
+   dropped as a data anchor. The underlying thesis [55] does document an
+   experimental comparison (Ch. 5.2: insulator-string voltage waveforms vs.
+   Ishii et al.'s 1991 low-amplitude injections on a real tower, valid to
+   ~2 µs), but only as figures — same caveat as item 2, so the executable
+   oracle remains the cross-code check (item 6).
 4. **Internal consistency**: full $Z_{\text{eq}}$ solve vs. reduced $Z_g$ form;
    quadrature geometry factor vs. closed-form parallel/orthogonal formulas;
    reciprocity ($Z_t$, $Z_\ell$ symmetric); passivity ($\text{Re}\{Z_{\text{in}}\} \geq 0$).
@@ -714,8 +718,9 @@ came out of this comparison.
 | Parallelism | n/a | OpenMP on matrix fill (frequency loop under evaluation, plan §7 P6) | OpenMP over the frequency loop, single-threaded BLAS | None (NumPy internal) | None |
 | Validation anchors | Analytic canonical cases | §9: Sunde DC, Portela [2], Visacro & Soares [5], Grcev [18], cross-code | Grcev [18], Visacro & Soares, Alipio, Sunjerga examples | Published line/grounding cases | Four 138 kV test cases [12] |
 
-Premises shared by TUPÃ, TAGS and PRTL-mHEM (and inherited from [1,5],
-i.e. the HEM family reading of Harrington's framework): thin-wire
+Premises shared by TUPÃ, TAGS and PRTL-mHEM (and inherited from [1,5] —
+the HEM family reading of Harrington's framework, derived at thesis length
+in [55]): thin-wire
 approximation, uniform currents per segment (pulse basis), quasi-static image
 treatment of the single air–soil interface, dense frequency-domain solve per
 sample, linearity (no soil ionisation). Harrington's MoM is the general

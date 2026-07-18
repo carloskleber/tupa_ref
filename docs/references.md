@@ -25,6 +25,7 @@ Numbered as cited in [theory.md](theory.md).
 5. **Visacro, S.; Soares, A., Jr.** — "HEM: A model for simulation of lightning
    related engineering problems", *IEEE Trans. Power Delivery*, vol. 20, no. 2,
    pp. 1206–1208, Apr. 2005. Independent HEM formulation and validation cases.
+   Thesis-length origin and derivation: Soares [55].
 
 ## Method of Moments background
 
@@ -427,6 +428,25 @@ below) as the sources of its dispersive-soil routines:
     (Morro do Cachimbo data) move insulator overvoltages and outage rates by
     up to ~70 % — the downstream modelling choices that consume TUPÃ-class
     grounding/tower results dominate the final numbers.
+
+## HEM origin
+
+55. **Soares, A., Jr.** — *Modelagem de Linhas de Transmissão para Avaliação
+    de Desempenho Frente a Descargas Atmosféricas*, D.Sc. thesis nº 014,
+    PPGEE/UFMG, Belo Horizonte, Mar. 2001 (advisor S. Visacro; C. Portela on
+    the examining committee; in Portuguese). The thesis where the HEM was
+    assembled — [5] is its published condensate. Integrated per-frequency
+    electromagnetic coupling of tower, grounding and overhead cables as
+    cylindrical segments (the §4.3 numbered solution procedure is
+    essentially TUPÃ's per-frequency loop), frequency-dependent soil, FFT
+    time domain, impedance matching at truncated conductors; validated
+    against experimental results, then applied to a large parametric study
+    of insulator-string overvoltages — current waveshape and front time,
+    injection point, channel position, tower/grounding configuration, soil
+    resistivity, from a single grounded tower up to three towers with spans.
+    Also carries a substantial review of incidence models (electrogeometric
+    model variants) and of the CIGRE/FLASH line-performance methods that
+    consume this class of transient results.
 
 ## Related open-source implementations
 
