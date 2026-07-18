@@ -220,10 +220,13 @@ legacy survey (registered findings in theory.md §3.1, §4.3, §5, §6):
   generates channel geometry (log-spaced segments from cloud height down
   to the strike point, incidence/azimuth angles) — the channel is then
   ordinary HEM segments in air, i.e. an "electromagnetic return-stroke
-  model" in Baba & Rakov's classification [34]. *Decided (2026-07-17
+  model" in Baba & Rakov's classification [34,44]. *Decided (2026-07-17
   Q&A): antenna-model route, with added distributed series impedance
   calibrated so the channel propagation matches an intended return-stroke
-  speed prescribed in the JSON* — the loading technique surveyed in [34].
+  speed prescribed in the JSON* — the loading technique surveyed in [44].
+  A working channel also opens the induced-voltage application route
+  ([45,46]; lossy-ground coupling via Norton's approximation) and covers
+  the LEMP term plain EMT analysis misses [52] — both post-MVP.
 - Mutual impedance between segments in different media — **L**. No legacy
   implementation exists to port (unfinished body, ADR 0017); the
   candidate quasi-static transmission-coefficient route is registered in
@@ -408,8 +411,9 @@ test.
   grounding-solver milestone; revisit after Phase 8.
 - Complex images (Kuhar et al. [20]) — only relevant above a few MHz and
   only after P2 is in and validated (theory.md §5/§10.1).
-- Time-domain HEM (HEM-TD [21]) — pays off only for nonlinear phenomena,
-  which TUPÃ excludes by design (theory.md §8).
+- Time-domain HEM (HEM-TD; origin [47], refined in [21]) — pays off only for
+  nonlinear phenomena, which TUPÃ excludes by design (theory.md §8); the
+  direct TL+FDTD time-domain route [48] confirms the same trade-off.
 - Rational-model/FDNE export for EMT programs [26, 27] — a future *output
   format*, not solver work; revisit when users ask for EMT integration.
 

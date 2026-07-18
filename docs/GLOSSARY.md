@@ -17,6 +17,10 @@ entries.
 - **mHEM (modified HEM)** — the HEM with frequency-independent geometry
   integrals precomputed once [11]; the same optimisation as TUPÃ's
   geometry-factor separation (ADR 0004), published independently.
+- **HEM-TD** — time-domain reformulation of the HEM (origin [47], refined
+  in [21]), built to host the nonlinear phenomena the frequency domain
+  excludes (soil ionisation, corona, surge arresters); out of TUPÃ scope by
+  design (theory.md §8, ROADMAP §7).
 - **Electrode / segment** — one straight cylindrical piece of discretised
   conductor (`tElectrode`); carries a longitudinal and a transversal
   current. "Segment" in theory text, "electrode" in the object model — same
@@ -60,6 +64,11 @@ entries.
   `tVisacroAlipioSoil` [14], mean parameter set (ADR 0007).
 - **GPR (Ground Potential Rise)** — potential of the grounding structure vs
   remote earth under injected current; a primary engineering output.
+- **LEMP (Lightning ElectroMagnetic Pulse)** — the field radiated by the
+  return-stroke channel; its coupling to line conductors raises insulator
+  voltages beyond the conducted-current response [52]. Captured naturally
+  once the channel is modelled as HEM segments (planned channel element,
+  ROADMAP Phase 7).
 - **NLT (Numerical Laplace Transform)** — time-domain route solving at
   damped complex frequencies $s = c + j\omega$ with data windows [17];
   planned replacement for the plain FFT drive (ROADMAP P4).

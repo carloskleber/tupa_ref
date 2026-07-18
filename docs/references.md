@@ -308,6 +308,126 @@ below) as the sources of its dispersive-soil routines:
     element; complements Wedepohl & Wilcox and Schelkunoff [40] layer
     formulas.
 
+## Return-stroke channel and induced-voltage modelling
+
+44. **Baba, Y.; Rakov, V. A.** — "Electromagnetic Models of the Lightning
+    Return Stroke", *Journal of Geophysical Research*, vol. 112, D04102,
+    2007. DOI: 10.1029/2006JD007222. The classification review that [34]
+    applies: four channel representations (perfectly conducting/resistive
+    wire; wire embedded in a dielectric; wire loaded by distributed
+    inductance or capacitance) crossed with three excitation methods, solved
+    by MoM (time or frequency domain) or FDTD; its appendix checks HEM
+    channel-current distributions against FDTD. The primary design reference
+    for the planned lightning-channel element: distributed series loading is
+    the catalogued technique for slowing channel propagation from c to a
+    prescribed return-stroke speed (ROADMAP Phase 7).
+45. **Silveira, F. H.** — *Modelagem para Cálculo de Tensões Induzidas por
+    Descargas Atmosféricas*, D.Sc. thesis, PPGEE/UFMG, Belo Horizonte, 2006
+    (in Portuguese). Book-length HEM application to lightning-*induced*
+    voltages: return-stroke current distribution and channel–line
+    electromagnetic coupling solved in one integrated model, channel
+    corona/core-loss representation, and the lossy-ground effect on the
+    coupling via Norton's approximation. Documents that the machinery TUPÃ
+    implements extends from direct strikes to induced-voltage problems.
+46. **Silveira, F. H.; Visacro, S.; Herrera, J.; Torres, H.** — "Evaluation
+    of Lightning-Induced Voltages Over a Lossy Ground by the Hybrid
+    Electromagnetic Model", *IEEE Trans. Electromagnetic Compatibility*,
+    vol. 51, no. 1, Feb. 2009. DOI: 10.1109/TEMC.2008.2010403. Condensed
+    journal version of [45] Ch. 6: Norton's closed-form field expressions
+    replace the Sommerfeld integrals for the lossy-ground channel–line
+    coupling inside the HEM; validated against Ishii's reduced-scale
+    experiments and NEC-4.
+
+## Time-domain HEM origin and direct time-domain alternatives
+
+47. **Silva, B. P.** — *Novo Modelo Eletromagnético no Domínio do Tempo para
+    Cálculo da Resposta de Sistemas Elétricos Frente a Descargas
+    Atmosféricas*, D.Sc. thesis nº 359, PPGEE/UFMG, Belo Horizonte, 2021 (in
+    Portuguese). Origin of the HEM-TD that [21] refines: full time-domain
+    reformulation of the HEM, built to host the nonlinear phenomena the
+    frequency domain excludes — soil ionisation, corona, surge arresters,
+    impedance matching — validated against the frequency-domain HEM on rods,
+    electrodes and grids and applied to line backflashover analysis.
+    (Journal version: IEEE Trans. Power Delivery, 2022.)
+48. **Boukhouna, M.; Nekhoul, B.; Khelifi, B.** — "Time Domain Modeling of
+    Lightning Transients in Grounding Systems Considering Frequency
+    Dependence and Soil Ionization", *Electric Power Systems Research*,
+    2024. Transmission-line-theory route solved directly in time:
+    frequency-dependent per-unit-length parameters and dispersive soil
+    folded in by vector fitting, 1-D FDTD over the wire mesh, topological
+    network assembly scaling from single electrodes to wind-farm grounding
+    circuits, soil ionisation included; verified against Menter/EMTP,
+    FEKO-MoM and Alipio results.
+
+## Discretisation refinements
+
+49. **Silva, G. C. P.** — *Modelagem Eletromagnética de Aterramentos
+    Elétricos: Uso de Funções Base de Ordens Superiores para Representação
+    das Distribuições de Correntes Elétricas em Eletrodos*, M.Sc.
+    dissertation, PPGEL (UFSJ/CEFET-MG), São João del-Rei, c. 2024 (in
+    Portuguese). The dissertation behind [36]: derives PEEC and HEM from the
+    same MoM/Galerkin root (HEM as the thin-wire simplification of PEEC),
+    then evaluates higher-order basis functions (piecewise linear,
+    sinusoidal) against the pulse basis TUPÃ uses — more accurate per
+    segment but costlier; geometric-symmetry assembly rules recover the
+    efficiency. Relevant only if pulse-basis accuracy ever becomes the
+    binding constraint (finer segmentation per [19] is the current answer).
+
+## Line-level (EMT) context: tower models, coupling, LEMP
+
+50. **Baba, Y.; Ishii, M.** — "Numerical Electromagnetic Field Analysis on
+    Lightning Surge Response of Tower with Shield Wire", *IEEE Trans. Power
+    Delivery*, vol. 15, no. 3, Jul. 2000. NEC-2 (frequency-domain MoM + FFT)
+    study of a shield-wired tower under fast-front currents: the tower
+    behaves as an antenna until the travelling wave completes several round
+    trips — the apparent footing impedance initially exceeds the DC footing
+    resistance, and shield-wire/phase-conductor coupling sits well below its
+    TEM value — then proposes revised multistory-tower-model parameters for
+    EMTP. Full-wave background for what EMT tower models compress.
+51. **Stracqualursi, E.; Araneo, R.; Andreotti, A.; Brandão Faria, J.;
+    Silveira, F. H.; Visacro, S.** — "Effects of Macromodeling on the
+    Simulation of Transient Events Caused by Direct Lightning to Overhead
+    Power Lines", *Electric Power Systems Research*, 2025. Electromagnetic
+    model used to test what macromodeling discards: mutual coupling among
+    tower, grounding electrodes and shield wires shifts injection-node
+    overvoltages only marginally — less than typical soil-parameter
+    uncertainty — so the component-wise (macromodel) decomposition of EMT
+    chains is sound; what *is* essential is a frequency-dependent
+    representation of the grounding system. Direct support for the FDNE
+    consumption route [26,27].
+52. **Yamanaka, A.; Ishimoto, K.; Tatematsu, A.** — "Incorporating the LEMP
+    Impact on Lightning Surge Analysis of Transmission Lines in EMT
+    Simulators", *IEEE Trans. Power Delivery*, vol. 39, 2024.
+    DOI: 10.1109/TPWRD.2024.3382316. Adds return-stroke LEMP field-to-line
+    coupling (Agrawal model, Cooray–Rubinstein field correction) to standard
+    EMT tower/line models: the LEMP-induced component opposes the
+    current-generated voltages in polarity and *raises* insulator voltages —
+    conventional EMT underestimates them by up to ~58 %; the corrected
+    method stays within ~10 % of 3-D FDTD across 77–500 kV lines and
+    ρ = 0–5000 Ω·m. Quantifies the channel-coupling error HEM-class tools
+    inherit when the channel is left unmodelled (cf. [25]); TUPÃ's planned
+    channel element addresses exactly this term.
+53. **Tatematsu, A.; Yamanaka, A.** — "Three-Dimensional FDTD-Based
+    Simulation of Lightning-Induced Surges in Secondary Circuits With
+    Shielded Control Cables Over Grounding Grids in Substations", *IEEE
+    Trans. Electromagnetic Compatibility*, vol. 65, no. 2, Apr. 2023.
+    DOI: 10.1109/TEMC.2023.3245206. Full-wave FDTD (CRIEPI's VSTL REV) with
+    a vector-fitted surface transfer impedance for tape-shielded control
+    cables over substation grounding grids, validated on an instrumented
+    substation test platform. Illustrates the full-wave route for
+    grid-plus-cable problems beyond thin-wire HEM scope.
+54. **Silva, G. C. P.; Schroeder, M. A. O.; Moura, R. A. R.; Assis, F. A.;
+    Lima, A. C. S.** — "Desempenho de Linhas de Transmissão frente às
+    Descargas Atmosféricas Considerando como Fatores de Sensibilidade as
+    Modelagens das Torres e Correlações Estatísticas entre Parâmetros das
+    Ondas de Corrente", *XXV Congresso Brasileiro de Automática (CBA)*,
+    2024 (in Portuguese). DOI: 10.20906/CBA2024/4852. ATP sensitivity study
+    on a real 138 kV line: seven tower models × five soil resistivities ×
+    with/without statistical correlation among current-waveform parameters
+    (Morro do Cachimbo data) move insulator overvoltages and outage rates by
+    up to ~70 % — the downstream modelling choices that consume TUPÃ-class
+    grounding/tower results dominate the final numbers.
+
 ## Related open-source implementations
 
 Companion codes of the same model family, useful as executable cross-checks
