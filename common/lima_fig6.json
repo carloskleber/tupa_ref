@@ -1,0 +1,40 @@
+{
+  "title": "Lima et al. 2019 Fig. 6 Case #9 -- distribution tower grounding (4 horizontal + 5 vertical)",
+  "soil": {
+    "conductivity": 0.001,
+    "permittivity": 10.0,
+    "permeability": 1.0
+  },
+  "nodes": [
+    { "id": "Node_C",  "position": [ 0.0,  0.0, -0.5] },
+    { "id": "Node_H1", "position": [ 6.0,  0.0, -0.5] },
+    { "id": "Node_H2", "position": [-6.0,  0.0, -0.5] },
+    { "id": "Node_H3", "position": [ 0.0,  6.0, -0.5] },
+    { "id": "Node_H4", "position": [ 0.0, -6.0, -0.5] },
+    { "id": "Node_V0", "position": [ 0.0,  0.0, -3.5] },
+    { "id": "Node_V1", "position": [ 6.0,  0.0, -3.5] },
+    { "id": "Node_V2", "position": [-6.0,  0.0, -3.5] },
+    { "id": "Node_V3", "position": [ 0.0,  6.0, -3.5] },
+    { "id": "Node_V4", "position": [ 0.0, -6.0, -3.5] }
+  ],
+  "materials": [
+    { "id": "copper", "epsilonr": 1.0, "mur": 1.0, "sigma": 5.96e7 }
+  ],
+  "elements": [
+    { "type": "line", "id": "Horiz_1", "from": "Node_C",  "to": "Node_H1", "radius": 0.0125, "segments": 12, "material": "copper" },
+    { "type": "line", "id": "Horiz_2", "from": "Node_C",  "to": "Node_H2", "radius": 0.0125, "segments": 12, "material": "copper" },
+    { "type": "line", "id": "Horiz_3", "from": "Node_C",  "to": "Node_H3", "radius": 0.0125, "segments": 12, "material": "copper" },
+    { "type": "line", "id": "Horiz_4", "from": "Node_C",  "to": "Node_H4", "radius": 0.0125, "segments": 12, "material": "copper" },
+    { "type": "line", "id": "Vert_0",  "from": "Node_C",  "to": "Node_V0", "radius": 0.0125, "segments": 6,  "material": "copper" },
+    { "type": "line", "id": "Vert_1",  "from": "Node_H1", "to": "Node_V1", "radius": 0.0125, "segments": 6,  "material": "copper" },
+    { "type": "line", "id": "Vert_2",  "from": "Node_H2", "to": "Node_V2", "radius": 0.0125, "segments": 6,  "material": "copper" },
+    { "type": "line", "id": "Vert_3",  "from": "Node_H3", "to": "Node_V3", "radius": 0.0125, "segments": 6,  "material": "copper" },
+    { "type": "line", "id": "Vert_4",  "from": "Node_H4", "to": "Node_V4", "radius": 0.0125, "segments": 6,  "material": "copper" }
+  ],
+
+  "sources": [ { "node": "Node_C", "current": { "re": 1.0, "im": 0.0 } } ],
+  "frequencies": { "min": 100.0, "max": 1.0e7, "pointsPerDecade": 29.8 },
+  "outputs": {
+    "quantities": ["inputImpedance"]
+  }
+}
