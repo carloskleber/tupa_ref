@@ -565,7 +565,7 @@ contains
       call element%report(str)
     end do
     str = str // "=========================================" // newl
-    print *, str
+    write(*, '(A)') str
   end subroutine report
 
 end module mStudy
