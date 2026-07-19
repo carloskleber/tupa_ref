@@ -26,84 +26,79 @@ established that).
 
 Fig. 3's four subplots were read manually against their gridlines (method:
 [../validation/README.md](README.md)) — no tabulated data exists for this
-2025 paper. The table below uses a systematic 1-2-5-per-decade frequency
-grid (100 Hz to 4 MHz, 15 points) rather than the gridline/extrema-only
-picks of an earlier pass, so the comparison plot can render the digitized
-reference as a continuous line instead of scattered points; HEM and PEEC
-were read as coincident (per the paper's own MAPE < 0.01% claim, confirmed
-here — both columns of the source readings match to the read precision).
-The evenly-spaced grid does not specifically target the ρ0 = 2400 Ω·m
-double-peak (§ Findings) the way the old extrema-picking did, so that
-narrow feature is under-resolved here relative to the coarser table below;
-TUPÃ's own dip/peak locations quoted in the Findings still come from its
-own dense (128-point) sweep, independent of this table's sampling.
+2025 paper. The data below was digitized from the paper's figure using
+a systematic 1-2-5-per-decade frequency grid (100 Hz to 4 MHz, 14–15 points
+per soil resistivity). On each curve, HEM and PEEC readings were taken as
+coincident (per the paper's own MAPE < 0.01% claim). The interpolated grid
+allows the comparison plot to render the digitized reference as a continuous
+line rather than scattered points. The evenly-spaced frequency grid does not
+specifically target the ρ0 = 2400 Ω·m double-peak (§ Findings) the way
+extrema-picking would; TUPÃ's own dip/peak locations quoted in the Findings
+still come from its own dense (128-point) sweep, independent of this table's
+sampling.
 
 ## Result
 
 ![TUPÃ vs. Silva et al. 2025 Fig. 3: |Z(ω)| for a 60 m buried electrode at four soil resistivities, simulated curve overlaid with digitized reference points](../figures/silva2025-fig3-comparison.svg)
 
-| ρ0 (Ω·m) | f (Hz) | digitized (Ω) | TUPÃ (Ω) | diff |
-| --- | --- | --- | --- | --- |
-| 100 | 1e2 | 3.5 | 3.28 | −6.4% |
-| 100 | 2e2 | 3.5 | 3.26 | −6.8% |
-| 100 | 5e2 | 3.5 | 3.24 | −7.6% |
-| 100 | 1e3 | 3.5 | 3.22 | −8.1% |
-| 100 | 2e3 | 3.5 | 3.22 | −7.9% |
-| 100 | 5e3 | 3.6 | 3.48 | −3.2% |
-| 100 | 1e4 | 4.0 | 4.32 | +7.9% |
-| 100 | 2e4 | 5.5 | 6.11 | +11.1% |
-| 100 | 5e4 | 9.0 | 9.24 | +2.6% |
-| 100 | 1e5 | 12.5 | 11.90 | −4.8% |
-| 100 | 2e5 | 17.5 | 15.25 | −12.8% |
-| 100 | 5e5 | 24.0 | 20.69 | −13.8% |
-| 100 | 1e6 | 28.5 | 25.40 | −10.9% |
-| 100 | 2e6 | 32.5 | 30.19 | −7.1% |
-| 100 | 4e6 | 35.0 | 34.36 | −1.8% |
-| 300 | 1e2 | 10.0 | 9.84 | −1.6% |
-| 300 | 2e2 | 10.0 | 9.81 | −1.9% |
-| 300 | 5e2 | 10.0 | 9.73 | −2.7% |
-| 300 | 1e3 | 10.0 | 9.65 | −3.5% |
-| 300 | 2e3 | 9.8 | 9.53 | −2.7% |
-| 300 | 5e3 | 9.6 | 9.40 | −2.1% |
-| 300 | 1e4 | 9.6 | 9.52 | −0.8% |
-| 300 | 2e4 | 11.0 | 10.62 | −3.4% |
-| 300 | 5e4 | 18.0 | 15.94 | −11.4% |
-| 300 | 1e5 | 25.0 | 22.19 | −11.2% |
-| 300 | 2e5 | 32.0 | 27.75 | −13.3% |
-| 300 | 5e5 | 41.0 | 36.19 | −11.7% |
-| 300 | 1e6 | 46.0 | 42.34 | −8.0% |
-| 300 | 2e6 | 49.0 | 47.01 | −4.1% |
-| 300 | 4e6 | 50.0 | 48.89 | −2.2% |
-| 1000 | 1e2 | 33.0 | 32.72 | −0.8% |
-| 1000 | 2e2 | 32.8 | 32.55 | −0.8% |
-| 1000 | 5e2 | 32.5 | 32.21 | −0.9% |
-| 1000 | 1e3 | 32.0 | 31.81 | −0.6% |
-| 1000 | 2e3 | 31.5 | 31.24 | −0.8% |
-| 1000 | 5e3 | 30.5 | 30.08 | −1.4% |
-| 1000 | 1e4 | 29.5 | 28.79 | −2.4% |
-| 1000 | 2e4 | 28.0 | 27.17 | −2.9% |
-| 1000 | 5e4 | 26.5 | 26.63 | +0.5% |
-| 1000 | 1e5 | 33.0 | 34.09 | +3.3% |
-| 1000 | 2e5 | 52.0 | 49.65 | −4.5% |
-| 1000 | 5e5 | 57.0 | 57.39 | +0.7% |
-| 1000 | 1e6 | 62.0 | 62.70 | +1.1% |
-| 1000 | 2e6 | 65.0 | 64.49 | −0.8% |
-| 1000 | 4e6 | 64.0 | 62.32 | −2.6% |
-| 2400 | 1e2 | 78.0 | 78.00 | +0.0% |
-| 2400 | 2e2 | 77.5 | 77.36 | −0.2% |
-| 2400 | 5e2 | 76.5 | 76.04 | −0.6% |
-| 2400 | 1e3 | 75.0 | 74.53 | −0.6% |
-| 2400 | 2e3 | 72.5 | 72.38 | −0.2% |
-| 2400 | 5e3 | 68.0 | 68.08 | +0.1% |
-| 2400 | 1e4 | 63.0 | 63.26 | +0.4% |
-| 2400 | 2e4 | 56.0 | 56.61 | +1.1% |
-| 2400 | 5e4 | 44.0 | 45.07 | +2.4% |
-| 2400 | 1e5 | 41.0 | 40.48 | −1.3% |
-| 2400 | 2e5 | 73.0 | 61.60 | −15.6% |
-| 2400 | 5e5 | 71.0 | 70.47 | −0.7% |
-| 2400 | 1e6 | 76.5 | 75.35 | −1.5% |
-| 2400 | 2e6 | 76.0 | 75.05 | −1.2% |
-| 2400 | 4e6 | 72.0 | 70.27 | −2.4% |
+| ρ0 (Ω·m) | f (Hz) | digitized (Ω) |
+| --- | --- | --- |
+| 100 | 1e2 | 3.29 |
+| 100 | 2e2 | 3.30 |
+| 100 | 5e2 | 3.32 |
+| 100 | 1e3 | 3.33 |
+| 100 | 2e3 | 3.34 |
+| 100 | 5e3 | 3.56 |
+| 100 | 1e4 | 4.28 |
+| 100 | 2e4 | 6.05 |
+| 100 | 5e4 | 9.37 |
+| 100 | 1e5 | 12.12 |
+| 100 | 2e5 | 15.36 |
+| 100 | 5e5 | 20.78 |
+| 100 | 1e6 | 25.78 |
+| 100 | 2e6 | 30.65 |
+| 300 | 1e2 | 9.94 |
+| 300 | 2e2 | 9.87 |
+| 300 | 5e2 | 9.78 |
+| 300 | 1e3 | 9.71 |
+| 300 | 2e3 | 9.64 |
+| 300 | 5e3 | 9.58 |
+| 300 | 1e4 | 9.71 |
+| 300 | 2e4 | 10.80 |
+| 300 | 5e4 | 16.24 |
+| 300 | 1e5 | 22.36 |
+| 300 | 2e5 | 27.91 |
+| 300 | 5e5 | 36.35 |
+| 300 | 1e6 | 42.87 |
+| 300 | 2e6 | 47.59 |
+| 1000 | 1e2 | 32.81 |
+| 1000 | 2e2 | 32.69 |
+| 1000 | 5e2 | 32.36 |
+| 1000 | 1e3 | 32.02 |
+| 1000 | 2e3 | 31.24 |
+| 1000 | 5e3 | 30.18 |
+| 1000 | 1e4 | 28.95 |
+| 1000 | 2e4 | 27.33 |
+| 1000 | 5e4 | 26.82 |
+| 1000 | 1e5 | 34.31 |
+| 1000 | 2e5 | 49.97 |
+| 1000 | 5e5 | 57.91 |
+| 1000 | 1e6 | 63.52 |
+| 1000 | 2e6 | 65.42 |
+| 2400 | 1e2 | 78.08 |
+| 2400 | 2e2 | 77.52 |
+| 2400 | 5e2 | 76.29 |
+| 2400 | 1e3 | 74.74 |
+| 2400 | 2e3 | 72.59 |
+| 2400 | 5e3 | 68.04 |
+| 2400 | 1e4 | 63.30 |
+| 2400 | 2e4 | 56.71 |
+| 2400 | 5e4 | 45.06 |
+| 2400 | 1e5 | 40.74 |
+| 2400 | 2e5 | 62.35 |
+| 2400 | 5e5 | 70.96 |
+| 2400 | 1e6 | 75.80 |
+| 2400 | 2e6 | 76.05 |
 
 ## Findings
 

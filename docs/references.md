@@ -455,6 +455,72 @@ below) as the sources of its dispersive-soil routines:
     model variants) and of the CIGRE/FLASH line-performance methods that
     consume this class of transient results.
 
+## Model validity domains
+
+56. **Grcev, L.; Arnautovski-Toseva, V.** — "Grounding Systems Modeling for
+    High Frequencies and Transients: Some Fundamental Considerations", *IEEE
+    Bologna Power Tech*, Bologna, Italy, Jun. 2003. The fundamental statement
+    of what bounds every model in this class: the upper frequency of interest
+    is set by the frequency content of the *response*, not only of the
+    excitation (their 6 m rod example needs 8–16 MHz bandwidth depending on
+    soil resistivity); the quasi-static approximation requires system
+    dimensions below ~λ/10 measured in the soil at that frequency; and toward
+    MHz frequencies the voltage to ground becomes path-dependent, so the
+    "impedance to ground" itself loses unique definition. Catalogues the
+    simplification ladder — electrostatic images, modified images
+    ($\Gamma = (k_1^2 - k_2^2)/(k_1^2 + k_2^2)$, the coefficient the legacy
+    Matlab TUPÃ implements, theory.md §5), quasi-static kernels, decoupled
+    electric/magnetic couplings, static-analogy parameters — separating
+    HEM-class models from the full-wave Sommerfeld reference, and shows
+    circuit models overestimating grid voltages away from the injection
+    point.
+
+## Nonuniform-line modelling
+
+57. **Liu, Y.; Theethayi, N.; Thottappillil, R.** — "An Engineering Model for
+    Transient Analysis of Grounding System Under Lightning Strikes:
+    Nonuniform Transmission-Line Approach", *IEEE Trans. Power Delivery*,
+    vol. 20, no. 2, pp. 722–730, Apr. 2005. DOI: 10.1109/TPWRD.2004.843437.
+    Origin of the nonuniform-TL route of theory.md §10.1: per-unit-length
+    parameters made space- and time-dependent by summing the quasi-static
+    couplings (image method included) over all segments, then Telegrapher's
+    equations solved by 1-D FDTD. Predicts both the injection-point voltage
+    and the effective length where uniform-TL parametrisations fail at one or
+    the other; checked against circuit and electromagnetic references on
+    horizontal wires and grids.
+58. **Moura, R. A. R.** — *Representação de Linha de Transmissão com
+    Geometria Não Uniforme para Estudos de Sobretensões Atmosféricas*, D.Sc.
+    thesis, COPPE/UFRJ, Rio de Janeiro, Apr. 2018 (advisors A. C. S. Lima
+    and M. A. O. Schroeder; in Portuguese). Nonuniform *overhead* spans —
+    wide river crossings, tall towers: cascaded uniform-line quadripoles
+    discard the electromagnetic coupling between segments and can go
+    numerically unstable for tall towers, while the HEM applied directly to
+    the catenary (same mean-distance separation as theory.md §4.1, reduced
+    to closed-form single integrals) represents the nonuniform geometry
+    natively; vector-fitting rational models with RLC synthesis then carry
+    the result into EMT programs. Also finds grounding influences tall-tower
+    overvoltages less than for conventional spans. Appendix B catalogues
+    power-series and Padé closed forms for the grounding integrals — the
+    precursors of sHEM [59].
+
+## Closed-form HEM acceleration
+
+59. **Moura, R. A. R.; Schroeder, M. A. O.; Lima, A. C. S.; Vieira,
+    P. H. N.; Alipio, R.** — "Closed-Form Approximation for Grounding Grids
+    Transient Analysis", *Journal of Control, Automation and Electrical
+    Systems*, vol. 32, 2021. DOI: 10.1007/s40313-021-00708-x. sHEM
+    (series-HEM): truncates $\exp(-\gamma r)/r$ to its two-term MacLaurin
+    series $1/r - \gamma$, making both HEM double integrals fully
+    closed-form for parallel and orthogonal segments — frequency-independent
+    "geometrical" terms plus one $\gamma$-proportional term, no numerical
+    integration at all. Up to ~2000× faster than the plain HEM on grounding
+    grids; the error grows with soil resistivity and frequency (worst-case
+    ~10–20 % on harmonic impedance above ~100 kHz for 1000–2000 Ω·m soils,
+    largely washed out in time-domain responses); validated against grid
+    measurements. The one-term variant (dropping $\gamma$) is markedly less
+    accurate. Sibling of the mean-exponential separation [11]/theory.md
+    §4.1, trading bandwidth for speed.
+
 ## Related open-source implementations
 
 Companion codes of the same model family, useful as executable cross-checks

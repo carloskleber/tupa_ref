@@ -196,6 +196,17 @@ HEM on grounding grids; it is the default integration mode of the open-source
 TAGS and PRTL-mHEM codes (references.md). Their published results are an
 external validation of this optimisation.
 
+Two neighbouring results from the same group bracket this choice. sHEM [59]
+goes one step further and truncates $\exp(-\gamma r)/r$ to its two-term
+MacLaurin series $1/r - \gamma$, which makes the double integrals fully
+closed-form (no numerical integration at all, up to ~2000× faster than the
+plain HEM) — but its error grows above ~100 kHz in high-resistivity soils,
+exactly where the $\exp(-\gamma\bar R)$ factor retained here stays exact.
+And Moura's thesis [58] applies this same mean-distance separation to
+nonuniform *overhead* spans (catenaries, river crossings), evidence that the
+approximation carries over from buried electrodes to the line conductors
+TUPÃ models in air.
+
 **Segmentation in practice.** Two families of rules coexist in the
 literature: thin-wire-driven (segment length $\gtrsim 10\, r_0$, so the
 thin-wire approximation holds — the classic HEM prescription [5]) and
@@ -397,7 +408,9 @@ $\Gamma_t$ to both; TAGS keeps them independent parameters). The **original
 Matlab TUPÃ already implements exactly this coefficient** as its default
 (non-ideal-soil) mode: assuming equal permeabilities it computes
 $\Gamma = (k_1^2 - k_2^2)/(k_1^2 + k_2^2)$ between the media — algebraically
-identical to $(W_1 - W_2)/(W_1 + W_2)$ — per frequency, and multiplies the
+identical to $(W_1 - W_2)/(W_1 + W_2)$, and precisely the "modified image
+theory" kernel in Grcev's classification of interface treatments [56] — per
+frequency, and multiplies the
 image parcels of both $Z_t$ and $Z_\ell$ by it (the PRTL-mHEM choice); the
 C++ port dropped this and kept only the ideal limits. The ideal sign
 rules in the table are the $|W_s| \gg \omega\varepsilon_0$ limit of these
@@ -620,7 +633,12 @@ impulse/step,
 Portela's concave model, sine) are ported on demand, not spawned in advance.
 
 Practical notes from [1] and [3]: 512–8192 frequencies in $[0, 1\, \text{MHz}]$ suffice
-for lightning impulses; for large structures, the smooth behaviour of $H(\omega)$
+for lightning impulses. A caution from [56]: the required bandwidth is set by
+the frequency content of the *response*, not of the excitation alone — their
+6 m rod under a subsequent-stroke pulse needed 8 MHz (30 Ω·m soil) to 16 MHz
+(300 Ω·m) before the computed voltage converged, so the upper bound deserves
+a convergence check per study rather than a fixed rule. For large structures,
+the smooth behaviour of $H(\omega)$
 allows computing a reduced set of frequencies and interpolating (analytic
 fitting), drastically cutting run time. Logarithmic frequency spacing is the
 project default for broadband sweeps. The legacy Matlab implements this
@@ -765,13 +783,20 @@ relative to each:
 | PEEC | Frequency / time | Partial-element equivalent circuits from the volume EFIE: separate current and potential cells (R, L, P matrices, MNA solve), no thin-wire restriction | Same MoM roots, more general discretisation; on grounding electrodes agrees with HEM to negligible differences (harmonic-impedance MAPE < 0.01 %), while HEM's unified segments + symmetry reuse are far cheaper for wire-like geometries; higher-order (piecewise-linear/sinusoidal) bases trade that efficiency for per-segment accuracy | [36,49] |
 | Antenna theory (Pocklington) | Frequency | Thin-wire Pocklington EFIE, sub-segment current expansion, boundary-element solve; interface via a Fresnel reflection coefficient in the kernel | The reflection-coefficient kernel is the antenna-theory analogue of §5's $\Gamma(\omega)$ images — accuracy between quasi-static images and full Sommerfeld treatment at a fraction of the Sommerfeld cost | [35] |
 | Multilayer-soil hybrid | Frequency + time | Layered-earth Green's functions via quasi-static complex images (matrix pencil); soil ionisation via conductor-radius adjustment | Lifts §5's single-interface premise; TUPÃ assumes a uniform soil half-space by design — the reference route if stratified soil is ever required | [33] |
-| TL-model + FDTD | Time | Per-unit-length parameters (frequency-dependent Z, Y via vector fitting), 1-D FDTD over the wire mesh; soil ionisation representable | Cheaper thin-wire route solved directly in time; ≤5 % deviation from a full EM model on parallel counterpoises (effective length independent of wire separation); scales to grids and wind-farm grounding networks | [24,48] |
+| TL-model + FDTD | Time | Per-unit-length parameters (frequency-dependent Z, Y via vector fitting), 1-D FDTD over the wire mesh; soil ionisation representable | Cheaper thin-wire route solved directly in time; route originated by the nonuniform-TL model [57] (space-dependent per-unit-length parameters from summed segment couplings — predicts effective length where uniform-TL fits fail); ≤5 % deviation from a full EM model on parallel counterpoises (effective length independent of wire separation); scales to grids and wind-farm grounding networks | [24,48,57] |
 | FDTD–PEEC hybrid | Time | 1-D FDTD for the line + PEEC for tower and lightning channel | Models the lightning-channel↔tower coupling that HEM-class tools (TUPÃ included) neglect; relevant for tower-surge, not grounding, accuracy | [25] |
 | Full-wave MoM (NEC-4 class) | Frequency | Sommerfeld-integral treatment of the interface, sub-segment current expansion | The accuracy oracle above HEM: [20] and [23] use it as reference; no geometry-factor shortcut, so far costlier; NEC-2 tower studies [50] show the non-TEM effects (transient footing impedance, sub-TEM shield-wire coupling) EMT models compress | [20,23,50] |
-| EMT line-level analysis (multistory towers, LEMP-corrected) | Time (EMT programs) | Towers as TL/multistory circuit models calibrated from full-wave analyses [50]; grounding as macromodels; LEMP field-to-line coupling addable [52] | The consumer layer above TUPÃ for line lightning performance: component-coupling neglect is validated (< a few % on peaks, less than soil-parameter uncertainty [51]), but frequency-dependent grounding [51] and LEMP-induced voltages [52] must be represented — plain EMT underestimates insulator voltages by up to ~58 %; model choices swing outage rates by up to ~70 % [54] | [50,51,52,54] |
+| EMT line-level analysis (multistory towers, LEMP-corrected) | Time (EMT programs) | Towers as TL/multistory circuit models calibrated from full-wave analyses [50]; grounding as macromodels; LEMP field-to-line coupling addable [52] | The consumer layer above TUPÃ for line lightning performance: component-coupling neglect is validated (< a few % on peaks, less than soil-parameter uncertainty [51]), but frequency-dependent grounding [51] and LEMP-induced voltages [52] must be represented — plain EMT underestimates insulator voltages by up to ~58 %; model choices swing outage rates by up to ~70 % [54]; nonuniform spans (wide river crossings, tall towers) break the cascaded-uniform-line recipe, which can go numerically unstable — HEM segments over the catenary handle them natively [58] | [50,51,52,54,58] |
 | Rational models / FDNE for EMT | s-domain → time | Vector fitting / matrix-pencil approximation of $Z_g(\omega)$, passivity-enforced, plugged into ATP/EMTP/PSCAD | A *consumer* of TUPÃ's output, not a competitor; effective length drives realization order and robustness | [26,27] |
 
-Segmentation guidance ([19], §4.1) and the scope ceiling illustrated by the
+Grcev & Arnautovski-Toseva [56] give the fundamental statement of the
+validity bounds that organise this table: the upper frequency of interest is
+set by the *response* spectrum, not the excitation's; the quasi-static
+approximation requires system dimensions under ~λ/10 in the soil at that
+frequency; and toward MHz frequencies the voltage to ground turns
+path-dependent, so even the "impedance to ground" stops being uniquely
+defined. Segmentation guidance ([19], §4.1) and the scope ceiling
+illustrated by the
 200-MHz SW-TDR diagnostics application [29] round out the picture: below the
 thin-wire limits, circuit models suffice; above a few MHz, complex images or
 full-wave methods take over. In the time domain the oracle role passes to

@@ -30,3 +30,9 @@ computed curve using the versions of the case JSON files under
 [../../common/](../../common/); regenerate with
 `fpm run --profile release -- ../common/<case>.json` (`fortran/`, see
 [fortran/README.md](../../fortran/README.md#running-tupa)).
+
+Figures are plotted with matplotlib from a per-case script alongside this
+folder (e.g. [plot_silva2025_fig3.py](plot_silva2025_fig3.py)), which reads
+the digitized points straight out of the writeup's markdown table and the
+TUPÃ curve out of the `fpm run` output above — rerun it after regenerating
+either input to refresh the SVG under `../figures/`.
