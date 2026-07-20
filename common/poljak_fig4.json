@@ -1,0 +1,32 @@
+{
+  "title": "Poljak & Doric 2006 Fig. 4 vertical grounding electrode, L=2 m, d=0.5 m, rho=5400 ohm.m",
+  "soil": {
+    "conductivity": 0.0001851851851851852,
+    "permittivity": 10.0,
+    "permeability": 1.0
+  },
+  "nodes": [
+    { "id": "Node_1", "position": [0.0, 0.0, -0.5] },
+    { "id": "Node_2", "position": [0.0, 0.0, -2.5] }
+  ],
+  "materials": [
+    { "id": "copper", "epsilonr": 1.0, "mur": 1.0, "sigma": 5.96e7 }
+  ],
+  "elements": [
+    {
+      "type": "line",
+      "id": "Rod_1",
+      "from": "Node_1",
+      "to": "Node_2",
+      "radius": 0.005,
+      "segments": 60,
+      "material": "copper"
+    }
+  ],
+
+  "sources": [ { "node": "Node_1", "current": { "re": 1.0, "im": 0.0 } } ],
+  "frequencies": { "min": 1e4, "max": 1e8, "pointsPerDecade": 80 },
+  "outputs": {
+    "quantities": ["inputImpedance"]
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "title": "Lima et al. 2020 Fig. 7(a) Case #10 -- 20x20 m grounding grid, 2x2 mesh",
+  "soil": {
+    "conductivity": 0.001,
+    "permittivity": 10.0,
+    "permeability": 1.0
+  },
+  "nodes": [
+    { "id": "Node_r0_c0", "position": [  0.0,   0.0, -0.5] },
+    { "id": "Node_r0_c1", "position": [ 10.0,   0.0, -0.5] },
+    { "id": "Node_r0_c2", "position": [ 20.0,   0.0, -0.5] },
+    { "id": "Node_r1_c0", "position": [  0.0,  10.0, -0.5] },
+    { "id": "Node_r1_c1", "position": [ 10.0,  10.0, -0.5] },
+    { "id": "Node_r1_c2", "position": [ 20.0,  10.0, -0.5] },
+    { "id": "Node_r2_c0", "position": [  0.0,  20.0, -0.5] },
+    { "id": "Node_r2_c1", "position": [ 10.0,  20.0, -0.5] },
+    { "id": "Node_r2_c2", "position": [ 20.0,  20.0, -0.5] }
+  ],
+  "materials": [
+    { "id": "copper", "epsilonr": 1.0, "mur": 1.0, "sigma": 5.96e7 }
+  ],
+  "elements": [
+    { "type": "line", "id": "Line_1", "from": "Node_r0_c0", "to": "Node_r0_c1", "radius": 0.007, "segments": 20, "material": "copper" },
+    { "type": "line", "id": "Line_2", "from": "Node_r0_c1", "to": "Node_r0_c2", "radius": 0.007, "segments": 20, "material": "copper" },
+    { "type": "line", "id": "Line_3", "from": "Node_r1_c0", "to": "Node_r1_c1", "radius": 0.007, "segments": 20, "material": "copper" },
+    { "type": "line", "id": "Line_4", "from": "Node_r1_c1", "to": "Node_r1_c2", "radius": 0.007, "segments": 20, "material": "copper" },
+    { "type": "line", "id": "Line_5", "from": "Node_r2_c0", "to": "Node_r2_c1", "radius": 0.007, "segments": 20, "material": "copper" },
+    { "type": "line", "id": "Line_6", "from": "Node_r2_c1", "to": "Node_r2_c2", "radius": 0.007, "segments": 20, "material": "copper" },
+    { "type": "line", "id": "Line_7", "from": "Node_r0_c0", "to": "Node_r1_c0", "radius": 0.007, "segments": 20, "material": "copper" },
+    { "type": "line", "id": "Line_8", "from": "Node_r1_c0", "to": "Node_r2_c0", "radius": 0.007, "segments": 20, "material": "copper" },
+    { "type": "line", "id": "Line_9", "from": "Node_r0_c1", "to": "Node_r1_c1", "radius": 0.007, "segments": 20, "material": "copper" },
+    { "type": "line", "id": "Line_10", "from": "Node_r1_c1", "to": "Node_r2_c1", "radius": 0.007, "segments": 20, "material": "copper" },
+    { "type": "line", "id": "Line_11", "from": "Node_r0_c2", "to": "Node_r1_c2", "radius": 0.007, "segments": 20, "material": "copper" },
+    { "type": "line", "id": "Line_12", "from": "Node_r1_c2", "to": "Node_r2_c2", "radius": 0.007, "segments": 20, "material": "copper" }
+  ],
+
+  "sources": [ { "node": "Node_r0_c0", "current": { "re": 1.0, "im": 0.0 } } ],
+  "frequencies": { "min": 100.0, "max": 1.0e7, "pointsPerDecade": 29.8 },
+  "outputs": {
+    "quantities": ["inputImpedance"]
+  }
+}
