@@ -20,22 +20,17 @@ BENCHMARKS.md's anchor table.
 | [lima-fig7.md](lima-fig7.md) | Lima et al. 2020 (IEEE TEMC, references.md [11]), Fig. 7 (Cases #10/#11, MHEM curve only) | Harmonic input impedance \|Z(ω)\| of two square buried grounding grids, 20×20 m 2×2 mesh (#10) and 40×40 m 4×4 mesh (#11), ρ = 1000 Ω·m | Closest agreement of the three Lima et al. comparisons — both grids track the digitized curve within ±7% below ~4 MHz (DC within +1%), then diverge to 10-19% through the ~6.5-7 MHz peak, matching the paper's own stated mismatch-onset frequency; every geometry parameter is stated explicitly for these cases, unlike case #9 — see writeup for the full tables |
 | [poljak-fig4.md](poljak-fig4.md) | Poljak & Doric 2006 (PIER, references.md [35]), Fig. 4 | Harmonic input impedance \|Z(ω)\| of a single L = 2 m, a = 5 mm vertical grounding electrode, d = 0.5 m, ρ = 5400 Ω·m, DC-100 MHz | Closest agreement of any comparison in this folder — DC plateau, roll-off and all four antenna-resonance lobes reproduced within ±10% almost everywhere (several points within ±3%); the two largest errors (up to −23%) sit at the steepest null crossings, a reading artifact rather than a modeling gap — see writeup for the full table and the digitization fix (original xlsx frequency column was 10x too low) |
 
-## Method (applies to every writeup in this folder unless stated otherwise)
+## Methodology
 
-The source is a rasterized plot inside a processed-PDF figure (not
-redistributed into this public repo — see `CLAUDE.local.md`'s external
-reference library note). Data points are read manually off the plot against
-its gridlines, cropped and zoomed via ImageMagick for precision; this is
-**not** a pixel-traced digitization, so treat individual points as accurate
-to roughly the gridline spacing (typically 5-10% of the plotted range),
-worse on steep slopes where a small horizontal misread maps to a large
-vertical one. Comparison plots overlay the digitized points on TUPÃ's own
+The source is a rasterized plot inside a PDF. Data points are read manually by the user
+(using e.g. https://www.colliseum.net/WebPlot/ , better than AI agents).
+Comparison plots overlay the digitized points on TUPÃ's own
 computed curve using the versions of the case JSON files under
 [../../common/](../../common/); regenerate with
 `fpm run --profile release -- ../common/<case>.json` (`fortran/`, see
 [fortran/README.md](../../fortran/README.md#running-tupa)).
 
-Figures are plotted with matplotlib from a per-case script alongside this
+All figures can be regenerated using the preserved scripts alongside this
 folder (e.g. [plot_silva2025_fig3.py](plot_silva2025_fig3.py),
 [plot_silva2025_fig4.py](plot_silva2025_fig4.py),
 [plot_grcev_fig12.py](plot_grcev_fig12.py),
@@ -47,8 +42,6 @@ digitized points from a per-case xlsx (e.g.
 [grcev_fig12.xlsx](grcev_fig12.xlsx), [Lima_fig6.xlsx](Lima_fig6.xlsx),
 [Lima_fig7.xlsx](Lima_fig7.xlsx),
 [Poljak_fig4.xlsx](Poljak_fig4.xlsx)) and
-the TUPÃ curve out of the `fpm run` output above — the writeup's own table
-re-samples both onto a coarser common grid for a compact, readable
-point-for-point comparison, it is not the script's data source. Rerun the
+the TUPÃ curve out of the `fpm run` output above. Rerun the
 script after regenerating either input to refresh the SVG under
 `../figures/`.

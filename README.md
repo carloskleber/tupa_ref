@@ -1,5 +1,7 @@
 # TUPÃ
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21454767.svg)](https://doi.org/10.5281/zenodo.21454767)
+
 Reference model for electromagnetic field transient simulations — codename
 TUPÃ.
 
@@ -50,9 +52,14 @@ engineering-tool convenience is secondary.
 anchors of [docs/theory.md](docs/theory.md) §9 within stated tolerances —
 DC grounding resistance (Sunde), the Portela 1997 harmonic-impedance case,
 internal-consistency checks, and cross-code agreement with the open-source
-TAGS/PRTL-mHEM solvers. Current status: **no end-to-end validation has run
-yet** (the solver pipeline is being wired) — see
-[docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+TAGS/PRTL-mHEM solvers. Current status: the end-to-end frequency-sweep and
+time-domain pipeline are wired and green (ROADMAP Phases 0–6, Phase 7 in
+progress); six comparisons against published papers' own figures — Silva et
+al. 2025, Grcev et al. 2018, Lima et al. 2020 and Poljak & Doric 2006 —
+mostly agree within ±10-20% (closer for some cases, see
+[docs/validation/](docs/validation/README.md)). The formal anchors needing
+tabulated data or a cross-code run (TAGS/PRTL-mHEM, added as submodules but
+not yet run) are still open — see [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
 ## Documentation
 
@@ -66,6 +73,7 @@ yet** (the solver pipeline is being wired) — see
 | [docs/BENCHMARKS.md](docs/BENCHMARKS.md) | Validation status and benchmark policy |
 | [docs/GLOSSARY.md](docs/GLOSSARY.md) | Terminology |
 | [docs/adr/](docs/README.md#adr-index) | Architecture Decision Records |
+| [docs/validation/](docs/validation/README.md) | External-reference comparisons |
 | [common/README.md](common/README.md) | Shared JSON cases and schema (the public contract) |
 | [fortran/README.md](fortran/README.md) | Building and testing the Fortran implementation |
 | [gui/README.md](gui/README.md) | Solver-agnostic GUI (viewer); design in [docs/GUI_SDD.md](docs/GUI_SDD.md) |
@@ -99,6 +107,12 @@ language-neutral inputs every implementation must reproduce:
 | `portela1997.json` | Phase 2 validation conductor (10 m, εr = 10 soil), 10 Hz–1 MHz sweep |
 | `rod.json` | Single vertical buried rod, same soil, 10 Hz–1 MHz sweep |
 | `grid.json` | Small buried grounding grid (one square mesh), 100 Hz–100 kHz sweep |
+
+This is a starter sample; [common/](common/README.md) also holds the
+time-domain (Heidler-driven) cases and the literature-validation cases —
+Silva et al. 2025, Grcev et al. 2018, Lima et al. 2020, Poljak & Doric
+2006 — compared against the source papers' own figures in
+[docs/validation/](docs/validation/README.md).
 
 ## Regarding the name
 

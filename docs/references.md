@@ -521,6 +521,45 @@ below) as the sources of its dispersive-soil routines:
     accurate. Sibling of the mean-exponential separation [11]/theory.md
     §4.1, trading bandwidth for speed.
 
+## Early full-wave and finite-element grounding models
+
+60. **Papalexopoulos, A. D.; Meliopoulos, A. P.** — "Frequency Dependent
+    Characteristics of Grounding Systems", *IEEE/PES 1986 Transmission and
+    Distribution Conference*, Anaheim, USA, Sep. 1986, Paper 36 T&D 597-9.
+    Finite-element/transmission-line grounding model predating HEM: segments
+    treated as lossy TL elements (distributed R, L, C, mutual coupling to
+    every other segment) from a quasi-static Maxwell solve, characterised by
+    frequency-dependent Voltage Distribution Functions; validated against BPA
+    field measurements on large tower footings. Early frequency-domain
+    lineage of the circuit/TL family in theory.md §10.1.
+61. **Grcev, L.; Dawalibi, F.** — "An Electromagnetic Model for Transients in
+    Grounding Systems", *IEEE/PES 1990 Winter Meeting*, Atlanta, USA,
+    Feb. 1990, Paper 90 WM 130-5 PWRD. The earliest of Grcev's papers in this
+    library: thin-wire segment ensemble solved by electromagnetic field
+    theory in the frequency domain, converted to the time domain by FFT —
+    establishes the modified-image-theory route that [56] later classifies
+    and that TUPÃ's $\Gamma(\omega)$ coefficient (theory.md §5) implements.
+62. **Grcev, L.** — "Computer Analysis of Transient Voltages in Large
+    Grounding Systems", *IEEE/PES 1995 Summer Meeting*, Portland, USA,
+    Jul. 1995, Paper 95 SM 363-2 PWRD. Extends [61] to large grounding grids
+    with the same modified-image-theory approach; validated against EDF field
+    measurements.
+63. **Grcev, L.** — "Impulse Efficiency of Ground Electrodes", *IEEE Trans.
+    Power Delivery*, vol. 24, no. 1, pp. 441–451, Jan. 2009.
+    DOI: 10.1109/TPWRD.2008.923396. Full-wave analysis of fast-fronted
+    lightning-current pulses on ground electrodes; empirical
+    impulse-efficiency (effective-length) formulas for slow and very-fast
+    fronts, soil ionisation disregarded (conservative upper bound on impulse
+    impedance).
+64. **Heimbach, M.; Grcev, L.** — "Grounding System Analysis in Transients
+    Programs Applying Electromagnetic Field Approach", *IEEE/PES 1996 Summer
+    Meeting*, Denver, USA, Jul.–Aug. 1996, Paper 96 SM 392-1 PWRD. Rational
+    function representation of frequency-dependent grounding impedance for
+    direct incorporation into EMTP (arbitrary feeding points, mutual coupling
+    retained) — precedes by ~25–30 years the FDNE/rational-model EMT-export
+    route of [26,27]. A distinct paper from the same author pair's later
+    journal article [18] despite the similar author order and topic.
+
 ## Related open-source implementations
 
 Companion codes of the same model family, useful as executable cross-checks
