@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from tupa_gui.data import StudyLoadError, load_study
+from tupa_gui.data import LineElement, MeshElement, StudyLoadError, load_study
 
 COMMON = Path(__file__).resolve().parents[2] / "common"
 
@@ -19,6 +19,7 @@ def test_load_example1():
     assert len(study.elements) == 1
 
     line = study.elements[0]
+    assert isinstance(line, LineElement)
     assert line.from_node == "Node_1"
     assert line.to_node == "Node_2"
     assert line.segments == 2
@@ -73,6 +74,39 @@ def test_load_portela1997_transient_signal_block():
     assert signal.nyquist_hz == pytest.approx(1.0e6)
     assert signal.fft_points == 1024
     assert signal.freq_zero_hz == pytest.approx(1.0e-6)  # default, omitted in the JSON
+
+
+def test_load_portela_mesh_element():
+    study = load_study(COMMON / "portelaMesh.json")
+
+    assert study.nodes == []  # the mesh plants its own main nodes, none pre-declared
+    assert len(study.elements) == 1
+
+    mesh = study.elements[0]
+    assert isinstance(mesh, MeshElement)
+    assert mesh.id == "portelaMesh"
+    assert mesh.position == (0.0, -32.0, -1.0)
+    assert mesh.length_x == pytest.approx(32.0)
+    assert mesh.length_y == pytest.approx(32.0)
+    assert mesh.rows_x == 5
+    assert mesh.rows_y == 5
+    assert mesh.radius == pytest.approx(0.005)
+    assert mesh.segments == 5
+    assert mesh.material == "copper"
+
+    # node/bar expansion mirrors fortran/src/element/Mesh.f90's grid formula
+    # (fortran/test/test_mesh_element.f90 covers the Fortran side directly;
+    # this pins the GUI's independent Python re-derivation of the same math).
+    positions = mesh.node_positions()
+    assert len(positions) == 25
+    assert positions["portelaMesh-0000"] == pytest.approx((0.0, -32.0, -1.0))
+    assert positions["portelaMesh-0404"] == pytest.approx((32.0, 0.0, -1.0))
+    assert positions["portelaMesh-0202"] == pytest.approx((16.0, -16.0, -1.0))
+
+    bars = mesh.bars()
+    assert len(bars) == 40  # rowsX*(rowsY-1) + rowsY*(rowsX-1) = 5*4 + 5*4
+    assert ("portelaMesh-0000", "portelaMesh-0001") in bars
+    assert ("portelaMesh-0000", "portelaMesh-0100") in bars
 
 
 def test_unknown_element_type_is_skipped(tmp_path, caplog):

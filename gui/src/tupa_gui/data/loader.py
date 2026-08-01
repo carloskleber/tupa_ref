@@ -12,6 +12,7 @@ from .model import (
     FrequencySweep,
     LineElement,
     Material,
+    MeshElement,
     Node,
     NodeVoltage,
     Outputs,
@@ -50,21 +51,36 @@ def load_study(path: str | Path) -> Study:
     except KeyError as exc:
         raise StudyLoadError(f"{path}: missing required field {exc}") from exc
 
-    elements: list[LineElement] = []
+    elements: list[LineElement | MeshElement] = []
     for e in raw.get("elements", []):
-        if e.get("type") != "line":
-            logger.warning("%s: skipping element %r of unknown type %r", path, e.get("id"), e.get("type"))
-            continue
-        elements.append(
-            LineElement(
-                id=e["id"],
-                from_node=e["from"],
-                to_node=e["to"],
-                radius=e["radius"],
-                segments=e["segments"],
-                material=e["material"],
+        etype = e.get("type")
+        if etype == "line":
+            elements.append(
+                LineElement(
+                    id=e["id"],
+                    from_node=e["from"],
+                    to_node=e["to"],
+                    radius=e["radius"],
+                    segments=e["segments"],
+                    material=e["material"],
+                )
             )
-        )
+        elif etype == "mesh":
+            elements.append(
+                MeshElement(
+                    id=e["id"],
+                    position=tuple(e["position"]),
+                    length_x=e["lengthX"],
+                    length_y=e["lengthY"],
+                    rows_x=e["rowsX"],
+                    rows_y=e["rowsY"],
+                    radius=e["radius"],
+                    segments=e["segments"],
+                    material=e["material"],
+                )
+            )
+        else:
+            logger.warning("%s: skipping element %r of unknown type %r", path, e.get("id"), etype)
 
     # A source carries either "current" (A, ADR 0010) or "voltage" (V,
     # ADR 0016); neither present defaults to a zero current injection,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QStandardItem, QStandardItemModel
 
-from tupa_gui.data import Study
+from tupa_gui.data import LineElement, Study
 
 # Qt.UserRole payload on a node/element's tree item: ("node"|"element", id).
 # Lets the controller (main_window) map a tree selection to the matching 3D
@@ -51,12 +51,25 @@ def build_study_model(study: Study) -> tuple[QStandardItemModel, dict[tuple[str,
 
     elements = _row("Elements", f"({len(study.elements)})")
     for e in study.elements:
-        item = _row(e.id, f"line {e.from_node} -> {e.to_node}")
-        item.setData(("element", e.id), ENTITY_ROLE)
-        entity_items[("element", e.id)] = item
-        item.appendRow(_row("radius", f"{e.radius} m"))
-        item.appendRow(_row("segments", str(e.segments)))
-        item.appendRow(_row("material", e.material))
+        if isinstance(e, LineElement):
+            item = _row(e.id, f"line {e.from_node} -> {e.to_node}")
+            item.setData(("element", e.id), ENTITY_ROLE)
+            entity_items[("element", e.id)] = item
+            item.appendRow(_row("radius", f"{e.radius} m"))
+            item.appendRow(_row("segments", str(e.segments)))
+            item.appendRow(_row("material", e.material))
+        else:  # MeshElement (ADR 0020)
+            item = _row(e.id, f"mesh {e.rows_x}x{e.rows_y} rows @ {tuple(e.position)}")
+            item.setData(("element", e.id), ENTITY_ROLE)
+            entity_items[("element", e.id)] = item
+            item.appendRow(_row("position", str(tuple(e.position))))
+            item.appendRow(_row("lengthX", f"{e.length_x} m"))
+            item.appendRow(_row("lengthY", f"{e.length_y} m"))
+            item.appendRow(_row("rowsX", str(e.rows_x)))
+            item.appendRow(_row("rowsY", str(e.rows_y)))
+            item.appendRow(_row("radius", f"{e.radius} m"))
+            item.appendRow(_row("segments (per bar)", str(e.segments)))
+            item.appendRow(_row("material", e.material))
         elements.appendRow(item)
     root.appendRow(elements)
 

@@ -32,7 +32,13 @@ module mStructure
     type(tElectrode), allocatable :: electrodes(:)
     !! Array of all electrode segments (populated during assembly)
     type(tElementNode), pointer :: elements => null()
-    !! Linked list of geometric elements waiting to be assembled
+    !! Linked list of geometric elements waiting to be assembled, head to
+    !! tail in JSON declaration order (see `addElementToStructure`) — later
+    !! elements may reference nodes created by earlier ones (e.g. a `line`
+    !! connecting to a `mesh`'s main nodes), so `assembleStructureImpl` must
+    !! visit them in this order
+    type(tElementNode), pointer :: elementsTail => null()
+    !! Tail of the `elements` list, for O(1) append
     class(tMaterialNode), pointer :: materials => null()
     !! Linked list of conductor materials
     class(tMaterial), allocatable :: soil
@@ -191,7 +197,8 @@ contains
   ! =====================================================================
 
   subroutine addElementToStructure(this, element)
-    !! Append an element to the linked list.
+    !! Append an element to the tail of the linked list, preserving JSON
+    !! declaration order (see the `elements` field comment).
     class(tStructure), intent(inout) :: this
     class(tElement), allocatable, intent(inout) :: element
     !! Element to add (moved, not copied)
@@ -200,8 +207,12 @@ contains
     allocate(node)
     call move_alloc(element, node%elem)
 
-    node%next => this%elements
-    this%elements => node
+    if (associated(this%elementsTail)) then
+      this%elementsTail%next => node
+    else
+      this%elements => node
+    end if
+    this%elementsTail => node
     this%elementCount = this%elementCount + 1
   end subroutine addElementToStructure
 
@@ -359,6 +370,7 @@ contains
       pElem => nextElem
     end do
     nullify(this%elements)
+    nullify(this%elementsTail)
 
     pMat => this%materials
     do while (associated(pMat))

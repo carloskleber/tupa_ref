@@ -21,6 +21,7 @@ when it reproduces every case within the stated tolerance.
 | `silva2025_rho{100,300,1000,2400}.json` | Silva et al. 2025 (SBAI, references.md [36]) PEEC-vs-HEM base case: buried horizontal electrode, 60 m, 7 mm radius, 0.5 m depth, `alipio-visacro` dispersive soil (theory.md §7) at ρ0 = 100/300/1000/2400 Ω·m, 1∠0° A at `Node_1`, 128 log-spaced points 100 Hz–4 MHz (`pointsPerDecade: 27.6`, ADR 0013's `round(ppd·log10(fmax/fmin))+1` formula) — matches the paper's 2⁷ frequency samples. For comparison against the paper's Fig. 3 (\|Z(ω)\|); no tabulated digitised curve exists yet, so there is no `_expected.csv` (internal passivity/plausibility check only) | none yet |
 | `silva2025_rho{100,300,1000,2400}_transient.json` | Same geometry/soil as the files above, but a `signal` block (ADR 0015): GPR at `Node_1` under De Conti & Visacro [38]'s **MCS_FST#2** double-peaked first-stroke current (7 `terms`, physical amplitudes, no `imax` rescale), `nyquistHz: 4e6`, `fftPoints: 4096`. For comparison against the paper's Fig. 4 (GPR(t)) — see [`docs/validation/silva2025-fig4.md`](../docs/validation/silva2025-fig4.md), including why MCS_FST#2 rather than the legacy 6-term MCS_FST#1 | none yet (plausibility check only, same caveat as the frequency-domain files above) |
 | `grcev_fig12_l{10,100}_rho{30,300,3000}.json` | Grcev et al. 2018 (IEEE TPWRD, references.md [23]) §IX-B case: buried horizontal electrode, ℓ = 10 or 100 m, 7 mm radius, 0.5 m depth, homogeneous non-dispersive soil (ρ1 = 30/300/3000 Ω·m, εr = 10), 0.25 m segments (theory.md §4.1 λ/10 bound at 10 MHz), 1∠0° A at `Node_1`, 101 log-spaced points 100 Hz–10 MHz (`pointsPerDecade: 20`). For comparison against the paper's Fig. 12 (rigorous full-wave model's \|Z(ω)\|, not a circuit-model approximation) — see [`docs/validation/grcev-fig12.md`](../docs/validation/grcev-fig12.md) | none yet (plausibility check only, same caveat as the Silva files above) |
+| `portelaMesh.json` | Native `"mesh"` element demo (ADR 0020): a single 32x32 m grounding grid, 5x5 main nodes (8 m pitch), 5 segments/bar, corner at `(0, -32, -1)` so the grid spans `x` in `[0, 32]`, `y` in `[-32, 0]`, from the classic layout in Portela's *Frequency and Transient Behavior of Grounding Systems* papers (references.md — the M2 point at x=30,y=-30 used there sits inside this mesh's footprint) | none — **structure-only** (no `sources`/`frequencies`): a full sweep over 200 electrodes' worth of mostly-non-parallel pairs is impractical before ROADMAP §7 P1 lands, so this case stays fast to parse/assemble (185 nodes, 200 electrodes — verified in `fortran/test/test_mesh_element.f90`'s topology tests, not by solving this file) rather than tempting an hours-long run |
 | `lima_fig6.json` | Lima et al. 2020 (IEEE TEMC, references.md [11]) §III-B Case #9: distribution tower grounding — 4 horizontal electrodes (6 m) radiating 90° apart from a center node, each ending in a vertical rod (3 m), plus a 5th vertical rod at the center (injection point); homogeneous soil (σ1 = 1 mS/m, εr = 10); 12.5 mm radius, arms at -0.5 m with rods to -3.5 m (both inferred — see writeup), 0.5 m segments, 1∠0° A at `Node_C`, 150 log-spaced points 100 Hz–10 MHz (`pointsPerDecade: 29.8`). For comparison against the paper's Fig. 6 MHEM curve — see [`docs/validation/lima-fig6.md`](../docs/validation/lima-fig6.md) | none yet (plausibility check only; case geometry only partially specified by the paper) |
 
 `buried_conductor_short.json`/`buried_conductor_long.json` stay εr = 1 soil smoke tests with no
@@ -57,7 +58,7 @@ which costs roughly 1-2 s per pair regardless of touching/singularity at
 today's tolerances (ROADMAP §6 "Quadrature tolerances", §7 P1) — a bigger
 grid is worth adding once the P1 mHEM single-integral kernel lands.
 
-## Schema (v1 — [ADR 0006](../docs/adr/0006-json-io.md) format, `sources`/`frequencies`/`outputs` frozen by [ADR 0013](../docs/adr/0013-input-schema-sources-frequencies-outputs.md), `signal` added by [ADR 0015](../docs/adr/0015-time-domain-signal-schema.md), voltage sources and Heidler `terms` by [ADR 0016](../docs/adr/0016-voltage-sources-by-superposition.md)/0015 amendment)
+## Schema (v1 — [ADR 0006](../docs/adr/0006-json-io.md) format, `sources`/`frequencies`/`outputs` frozen by [ADR 0013](../docs/adr/0013-input-schema-sources-frequencies-outputs.md), `signal` added by [ADR 0015](../docs/adr/0015-time-domain-signal-schema.md), voltage sources and Heidler `terms` by [ADR 0016](../docs/adr/0016-voltage-sources-by-superposition.md)/0015 amendment, `"mesh"` element by [ADR 0020](../docs/adr/0020-grid-mesh-element.md))
 
 ```json
 {
@@ -66,7 +67,10 @@ grid is worth adding once the P1 mHEM single-integral kernel lands.
   "nodes": [ { "id": "Node_1", "position": [x, y, z] } ],
   "materials": [ { "id": "copper", "epsilonr": 1.0, "mur": 1.0, "sigma": 5.96e7 } ],
   "elements": [ { "type": "line", "id": "Line_1", "from": "Node_1", "to": "Node_2",
-                  "radius": 0.01, "segments": 10, "material": "copper" } ],
+                  "radius": 0.01, "segments": 10, "material": "copper" },
+                { "type": "mesh", "id": "Grid_1", "position": [0.0, 0.0, -0.5],
+                  "lengthX": 10.0, "lengthY": 10.0, "rowsX": 3, "rowsY": 3,
+                  "radius": 0.01, "segments": 2, "material": "copper" } ],
 
   "sources": [ { "node": "Node_1", "current": { "re": 1.0, "im": 0.0 } } ],
   "frequencies": { "min": 100.0, "max": 1.0e6, "pointsPerDecade": 3 },
@@ -94,11 +98,37 @@ Semantics:
   (Alipio & Visacro [14], mean parameter set) takes `permeability`/`sigma0`
   only — e.g. `{ "type": "alipio-visacro", "permeability": 1.0, "sigma0": 0.01 }`.
   See `silva2025_rho100.json` for a worked example.
-- `elements[].type`: only `"line"` exists today; unknown types are skipped
-  with a warning.
-- `segments` is the discretisation count of the element; segment length
-  must respect the λ/10 and thin-wire bounds (theory.md §4.1).
+- `elements[].type`: `"line"` or `"mesh"` (ADR 0020); unknown types are
+  skipped with a warning.
+- `segments` is the discretisation count of the element (per bar, for
+  `"mesh"`); segment length must respect the λ/10 and thin-wire bounds
+  (theory.md §4.1).
+- `"mesh"` (ADR 0020) is a rectangular, axis-aligned grounding grid: a
+  composite element that plants its own `rowsX * rowsY` main nodes on a
+  regular grid — `rowsX` bars parallel to the X axis (each `lengthX` long,
+  evenly spaced along Y), `rowsY` bars parallel to Y — from corner
+  `position` (3D, same field as a node's `position`; `position[2] == 0`,
+  exactly on the air-soil interface, is rejected — theory.md §2), and wires
+  every adjacent pair with a `"line"`-equivalent bar (`radius`/`segments`/
+  `material`, same meaning as `line`'s). Main nodes are named
+  `"<mesh id>-<row:02d><col:02d>"` (0-based, so `rowsX`/`rowsY <= 100`) and
+  are externally referenceable, e.g. by a `sources[].node` injection or
+  another element's `from`/`to` (a down-conductor connecting to a grid
+  corner) — same ID gotcha as `line` applies if `segments > 1` on a bar
+  (the bar's own internal nodes/electrodes get `_nK`/`_eK` suffixes, not
+  the main-node IDs). Because a `"mesh"` is one array item regardless of
+  grid size, it is not subject to the 64-items-per-array parser cap below
+  the way a manually flattened grid (enumerated `nodes`/`elements`, as
+  `horizontal_vertical_mesh.json` predates this element and still does)
+  would be — but running an actual frequency sweep over a real-sized grid
+  is a different constraint: any non-parallel, non-touching segment pair
+  falls back to ~1-2s-per-pair 2-D adaptive quadrature (see the `grid.json`
+  note below), impractical until ROADMAP.md §7 P1 lands. See
+  `common/portelaMesh.json` and ADR 0020.
 - `materials` is optional only if no element references one.
+- `nodes`/`elements` may each be omitted entirely (equivalent to an empty
+  array) — e.g. a case built from a single `"mesh"` element needs no
+  top-level `nodes` at all, since the element creates its own.
 - `sources`, `frequencies`, `outputs` are **optional** (a structure-only
   case file, like `buried_conductor_short.json`/`buried_conductor_long.json`, stays valid) but
   required together to run a sweep. A `sources[]` entry carries **either**

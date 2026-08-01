@@ -80,11 +80,11 @@ def load_tupa_curve(length: int, rho: int) -> tuple[list[float], list[float]]:
 
 
 def main() -> None:
-    fig, axes = plt.subplots(1, 2, figsize=(11, 5.5))
-    fig.suptitle(
-        "TUPÃ vs. Grcev et al. 2018 (IEEE TPWRD) Fig. 12 — "
-        "horizontal grounding electrode, 0.5 m depth"
-    )
+    fig, axes = plt.subplots(2, 1, figsize=(8, 8))
+    #fig.suptitle(
+    #    "TUPÃ vs. Grcev et al. 2018 (IEEE TPWRD) Fig. 12 — "
+    #    "horizontal grounding electrode, 0.5 m depth"
+    #)
 
     digitized = load_digitized_points()
     handles: list = []
@@ -102,7 +102,7 @@ def main() -> None:
             (points,) = ax.loglog(
                 dig_f, dig_z, color=color, linewidth=0, marker="o",
                 markersize=4, markerfacecolor="none", markeredgewidth=1.1,
-                label=f"Grcev et al. 2018, digitized, ρ = {rho} Ω·m",
+                label=f"Grcev, ρ = {rho} Ω·m",
             )
             if length == LENGTHS[0]:
                 handles += [line, points]
@@ -112,10 +112,10 @@ def main() -> None:
         ax.set_title(f"({label}) l = {length} m")
         ax.grid(True, which="both", alpha=0.3)
 
-    fig.legend(handles=handles, loc="lower center", ncol=3, fontsize=8,
+    fig.legend(handles=handles, loc="lower center", ncol=3, fontsize=10,
                bbox_to_anchor=(0.5, 0.0))
 
-    fig.tight_layout(rect=(0.0, 0.14, 1.0, 1.0))
+    fig.tight_layout(rect=(0.0, 0.08, 1.0, 1.0))
     OUTPUT_SVG.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUTPUT_SVG, format="svg")
     print(f"Wrote {OUTPUT_SVG}")

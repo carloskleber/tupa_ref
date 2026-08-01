@@ -40,6 +40,17 @@ class tLine {
     +assemble(...) : void
 }
 
+' Composite element: plants its own main nodes, then delegates each bar
+' to a tLine (see ADR 0020) — JSON "type": "mesh", named tMeshElement to
+' avoid colliding with the unrelated tMesh (linear-system) type below.
+class tMeshElement {
+    {field} position : real(8)(3)
+    {field} lengthX, lengthY : real(8)
+    {field} rowsX, rowsY : integer(4)
+    {field} segments : integer(4)
+    +assemble(...) : void
+}
+
 ' Data types
 class tNode {
     {field} id : character(256)
@@ -123,11 +134,13 @@ class mNode_createNode {
 tLinear --> tMaterial
 tPortelaSoil --> tMaterial
 tLine --> tElement
+tMeshElement --> tElement
 
 ' Composition/Association relationships
 tElement --> tMaterial : has
 tLine --> tNode : points to (nodeStart)
 tLine --> tNode : points to (nodeEnd)
+tMeshElement --> tLine : creates one per bar (composite)
 tStructure --> tNode : contains (array)
 tStructure --> tElectrode : contains (array)
 tStructure --> tElement : contains (linked list)

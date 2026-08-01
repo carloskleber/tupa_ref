@@ -24,12 +24,19 @@ module tupa
   !!
   !! **Element Types:**
   !! - `"line"` — straight conductor with parameters: `id`, `from`, `to`, `radius`, `segments`, `material`
+  !! - `"mesh"` — rectangular grounding grid (`mElementMesh`), composite of
+  !!   `"line"` bars on an axis-aligned grid: `id`, `position` (grid corner,
+  !!   3D), `lengthX`, `lengthY`, `rowsX`, `rowsY`, `radius`, `segments`,
+  !!   `material`. Plants its own main nodes, named `"<id>-<row><col>"`
+  !!   (2-digit zero-padded, 0-based) — externally referenceable by
+  !!   `sources[].node` or another element's `from`/`to`.
   !!
-  !! Currently only tLine elements are supported. Future versions will add tCatenary, tCircumference, tTower.
+  !! Future versions will add tCatenary, tCircumference, tTower.
   use mStudy
   use mNode
   use mMaterial
   use mElementLine
+  use mElementMesh
   use mJsonParser
   use mSignal, only: tSignal, newHeidlerSignal, newHeidlerSignalTerms, newDoubleExpSignal
   use mTransient, only: transientResponse
@@ -124,11 +131,11 @@ contains
     !! Temporary material object for adding to structure
     class(tElement),  allocatable :: elem
     !! Temporary element object for adding to structure
-    integer :: i, n, nseg
-    !! Loop indices and segment count
+    integer :: i, n, nseg, rowsX, rowsY
+    !! Loop indices, segment count, and "mesh" row/column counts
     character(len=256) :: id, from_id, to_id, mat_id, elem_type
     !! String fields from JSON: identifiers and element type
-    real(8) :: x, y, z, radius, sigma, epsr, mur_val
+    real(8) :: x, y, z, radius, sigma, epsr, mur_val, lengthX, lengthY
     !! Geometric and material parameters
 
     call parseJsonFile(filename, root)
@@ -163,17 +170,19 @@ contains
       return
     end select
 
-    nodes_arr => json_child(root, "nodes")
-    n = json_size(nodes_arr)
-    do i = 1, n
-      node_obj => json_item(nodes_arr, i)
-      id       = json_str(node_obj, "id")
-      pos_arr  => json_child(node_obj, "position")
-      pos_item => json_item(pos_arr, 1); x = pos_item%rval
-      pos_item => json_item(pos_arr, 2); y = pos_item%rval
-      pos_item => json_item(pos_arr, 3); z = pos_item%rval
-      call study%structure%addNode(newNode(trim(id), [x, y, z]))
-    end do
+    if (json_has(root, "nodes")) then
+      nodes_arr => json_child(root, "nodes")
+      n = json_size(nodes_arr)
+      do i = 1, n
+        node_obj => json_item(nodes_arr, i)
+        id       = json_str(node_obj, "id")
+        pos_arr  => json_child(node_obj, "position")
+        pos_item => json_item(pos_arr, 1); x = pos_item%rval
+        pos_item => json_item(pos_arr, 2); y = pos_item%rval
+        pos_item => json_item(pos_arr, 3); z = pos_item%rval
+        call study%structure%addNode(newNode(trim(id), [x, y, z]))
+      end do
+    end if
 
     if (json_has(root, "materials")) then
       mats_arr => json_child(root, "materials")
@@ -189,26 +198,44 @@ contains
       end do
     end if
 
-    elems_arr => json_child(root, "elements")
-    n = json_size(elems_arr)
-    do i = 1, n
-      elem_obj  => json_item(elems_arr, i)
-      elem_type = json_str(elem_obj, "type")
-      select case (trim(elem_type))
-      case ("line")
-        id      = json_str(elem_obj, "id")
-        from_id = json_str(elem_obj, "from")
-        to_id   = json_str(elem_obj, "to")
-        radius  = json_real(elem_obj, "radius")
-        nseg    = json_int(elem_obj, "segments")
-        mat_id  = json_str(elem_obj, "material")
-        elem = newElementLine(trim(id), trim(from_id), trim(to_id), &
-                              radius, nseg, trim(mat_id))
-        call study%structure%addElement(elem)
-      case default
-        print *, "mTupa: unknown element type '", trim(elem_type), "' — skipped"
-      end select
-    end do
+    if (json_has(root, "elements")) then
+      elems_arr => json_child(root, "elements")
+      n = json_size(elems_arr)
+      do i = 1, n
+        elem_obj  => json_item(elems_arr, i)
+        elem_type = json_str(elem_obj, "type")
+        select case (trim(elem_type))
+        case ("line")
+          id      = json_str(elem_obj, "id")
+          from_id = json_str(elem_obj, "from")
+          to_id   = json_str(elem_obj, "to")
+          radius  = json_real(elem_obj, "radius")
+          nseg    = json_int(elem_obj, "segments")
+          mat_id  = json_str(elem_obj, "material")
+          elem = newElementLine(trim(id), trim(from_id), trim(to_id), &
+                                radius, nseg, trim(mat_id))
+          call study%structure%addElement(elem)
+        case ("mesh")
+          id       = json_str(elem_obj, "id")
+          pos_arr  => json_child(elem_obj, "position")
+          pos_item => json_item(pos_arr, 1); x = pos_item%rval
+          pos_item => json_item(pos_arr, 2); y = pos_item%rval
+          pos_item => json_item(pos_arr, 3); z = pos_item%rval
+          lengthX  = json_real(elem_obj, "lengthX")
+          lengthY  = json_real(elem_obj, "lengthY")
+          rowsX    = json_int(elem_obj, "rowsX")
+          rowsY    = json_int(elem_obj, "rowsY")
+          radius   = json_real(elem_obj, "radius")
+          nseg     = json_int(elem_obj, "segments")
+          mat_id   = json_str(elem_obj, "material")
+          elem = newElementMesh(trim(id), [x, y, z], lengthX, lengthY, rowsX, rowsY, &
+                                radius, nseg, trim(mat_id))
+          call study%structure%addElement(elem)
+        case default
+          print *, "mTupa: unknown element type '", trim(elem_type), "' — skipped"
+        end select
+      end do
+    end if
 
     ! ------------------------------------------------------------------
     ! Optional sources / frequencies / outputs blocks (ADR 0013,

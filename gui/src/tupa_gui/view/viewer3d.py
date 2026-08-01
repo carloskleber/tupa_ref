@@ -17,7 +17,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QQuaternion, QVector3D
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
-from tupa_gui.data import Study
+from tupa_gui.data import LineElement, MeshElement, Study
 
 # theory.md §2: right-handed, z up, air-soil interface at z = 0.
 # Qt3D's convention is y-up; map study (x, y, z) -> Qt3D (x, z, y) so the
@@ -50,7 +50,12 @@ MIN_VISIBLE_RADIUS_FRACTION = 0.0025
 
 @dataclass
 class _Highlightable:
-    material: Qt3DExtras.QPhongMaterial
+    """One tree-selectable entity's Qt3D material(s). Usually a single
+    material (one node sphere, one line's one cylinder); a `MeshElement`
+    (ADR 0020) draws many bar cylinders for a single element ID, so all of
+    them are held here together and highlighted/cleared as a unit."""
+
+    materials: list[Qt3DExtras.QPhongMaterial]
     base_color: QColor
 
 
@@ -141,6 +146,16 @@ class GeometryViewer(QWidget):
 
         for node in study.nodes:
             node_positions[node.id] = _to_qt3d(node.position)
+        # A MeshElement (ADR 0020) plants its own main nodes rather than
+        # referencing pre-declared ones — fold them into the same
+        # id -> position map so they frame the scene, render as markers
+        # (below) just like declared nodes, and resolve correctly if a
+        # `line`/source references one of them by ID.
+        for element in study.elements:
+            if isinstance(element, MeshElement):
+                for node_id, position in element.node_positions().items():
+                    node_positions[node_id] = _to_qt3d(position)
+
         positions = list(node_positions.values())
         extent = max((v.length() for v in positions), default=1.0)
         extent = max(extent, 1.0)
@@ -153,17 +168,31 @@ class GeometryViewer(QWidget):
         self._add_soil_plane(root, scene, extent)
         self._add_grid(root, scene, extent)
         self._add_axes(root, scene, extent)
-        for node in study.nodes:
-            position = node_positions[node.id]
-            entry = self._add_node(root, scene, position, node.id, node_radius)
-            node_entries[node.id] = entry
-            self._node_labels[node.id] = self._make_label(node.id)
+        for node_id, position in node_positions.items():
+            entry = self._add_node(root, scene, position, node_id, node_radius)
+            node_entries[node_id] = entry
+            self._node_labels[node_id] = self._make_label(node_id)
         for element in study.elements:
-            a = node_positions[element.from_node]
-            b = node_positions[element.to_node]
-            entry = self._add_conductor(root, scene, a, b, element.radius, min_visible_radius, element.id)
-            element_entries[element.id] = entry
-            element_centers[element.id] = (a + b) * 0.5
+            if isinstance(element, LineElement):
+                a = node_positions[element.from_node]
+                b = node_positions[element.to_node]
+                entry = self._add_conductor(root, scene, a, b, element.radius, min_visible_radius, element.id)
+                if entry is not None:
+                    element_entries[element.id] = entry
+                element_centers[element.id] = (a + b) * 0.5
+            else:  # MeshElement (ADR 0020) — one cylinder per bar, all sharing the element's ID
+                materials: list[Qt3DExtras.QPhongMaterial] = []
+                centers: list[QVector3D] = []
+                for from_id, to_id in element.bars():
+                    a, b = node_positions[from_id], node_positions[to_id]
+                    entry = self._add_conductor(root, scene, a, b, element.radius, min_visible_radius, element.id)
+                    if entry is not None:
+                        materials += entry.materials
+                        centers.append((a + b) * 0.5)
+                if materials:
+                    element_entries[element.id] = _Highlightable(materials, CONDUCTOR_COLOR)
+                if centers:
+                    element_centers[element.id] = sum(centers, QVector3D()) * (1.0 / len(centers))
         self._add_injection_arrows(root, scene, study, node_positions, node_radius, extent)
 
         camera = self._camera
@@ -217,12 +246,14 @@ class GeometryViewer(QWidget):
 
     def clear_highlight(self) -> None:
         if self._highlighted is not None:
-            self._highlighted.material.setDiffuse(self._highlighted.base_color)
+            for material in self._highlighted.materials:
+                material.setDiffuse(self._highlighted.base_color)
             self._highlighted = None
 
     def _set_highlight(self, entry: _Highlightable) -> None:
         self.clear_highlight()
-        entry.material.setDiffuse(HIGHLIGHT_COLOR)
+        for material in entry.materials:
+            material.setDiffuse(HIGHLIGHT_COLOR)
         self._highlighted = entry
 
     def _focus_camera(self, target: QVector3D) -> None:
@@ -348,7 +379,7 @@ class GeometryViewer(QWidget):
         entity.addComponent(transform)
         entity.addComponent(picker)
         scene += [entity, mesh, material, transform, picker]
-        return _Highlightable(material, NODE_COLOR)
+        return _Highlightable([material], NODE_COLOR)
 
     def _add_conductor(
         self,
@@ -384,7 +415,7 @@ class GeometryViewer(QWidget):
         entity.addComponent(transform)
         entity.addComponent(picker)
         scene += [entity, mesh, material, transform, picker]
-        return _Highlightable(material, CONDUCTOR_COLOR)
+        return _Highlightable([material], CONDUCTOR_COLOR)
 
     @staticmethod
     def _align_to_direction(direction: QVector3D) -> QQuaternion:

@@ -238,9 +238,12 @@ legacy survey (registered findings in theory.md §3.1, §4.3, §5, §6):
   an arbitrary plane (centre + normal vector + rotation), ≥ 3 straight
   segments, closed loop (exercises loop topology); single-medium
   constraint enforced.
-- Grid/mesh generator element — **S**. Composite element emitting `tLine`s
-  on a rectangular pattern (legacy `Malha.m` is exactly this, though
-  unfinished); practical only after §7 P1 (quadrature cost, §5).
+- ~~Grid/mesh generator element~~ — **done** (ADR 0020): JSON `"type":
+  "mesh"`, `mElementMesh`/`tMeshElement`, composite element emitting
+  `tLine` bars on a rectangular pattern. Running an actual frequency sweep
+  over a real-sized grid stays impractical until §7 P1 (quadrature cost,
+  §5) lands — `common/portelaMesh.json` ships structure-only for that
+  reason.
 - Multipolar cables (internal representation by impedance/admittance
   matrix) — **L**. Object-model change (multi-conductor element); refs:
   Ametani cable constants [43], Schelkunoff [40]; PRTL-mHEM's tubular

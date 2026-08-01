@@ -1,0 +1,26 @@
+{
+  "title": "Portela grounding mesh (32x32 m, 8 m pitch, corner at y=-32)",
+  "soil": {
+    "conductivity": 0.001,
+    "permittivity": 10.0,
+    "permeability": 1.0
+  },
+  "nodes": [],
+  "materials": [
+    { "id": "copper", "epsilonr": 1.0, "mur": 1.0, "sigma": 5.96e7 }
+  ],
+  "elements": [
+    {
+      "type": "mesh",
+      "id": "portelaMesh",
+      "position": [0.0, -32.0, -1.0],
+      "lengthX": 32.0,
+      "lengthY": 32.0,
+      "rowsX": 5,
+      "rowsY": 5,
+      "radius": 0.005,
+      "segments": 5,
+      "material": "copper"
+    }
+  ]
+}

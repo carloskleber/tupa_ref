@@ -32,7 +32,7 @@ class Material:
 
 @dataclass(frozen=True)
 class LineElement:
-    """The only element type the schema defines today (common/README.md)."""
+    """A straight conductor between two pre-declared nodes (common/README.md)."""
 
     id: str
     from_node: str
@@ -40,6 +40,61 @@ class LineElement:
     radius: float
     segments: int
     material: str
+
+
+@dataclass(frozen=True)
+class MeshElement:
+    """Rectangular grounding grid (`"type": "mesh"`, ADR 0020) — a composite
+    element that plants its own `rows_x * rows_y` main nodes and wires them
+    with bars along both axes, rather than referencing pre-declared nodes.
+
+    `node_positions`/`bars` mirror `fortran/src/element/Mesh.f90`'s node/bar
+    mnemonic and grid formula exactly, so the GUI can render the same
+    authored geometry (main nodes + one cylinder per bar) without a
+    solver-side structure dump — consistent with G1's scope of showing
+    authored geometry, not the solver's per-electrode discretisation
+    (`segments` subdivisions are not expanded here; see viewer3d.py header
+    and GUI_SDD.md §5.1a)."""
+
+    id: str
+    position: tuple[float, float, float]
+    length_x: float
+    length_y: float
+    rows_x: int
+    rows_y: int
+    radius: float
+    segments: int
+    material: str
+
+    def node_id(self, row: int, col: int) -> str:
+        """Main-node ID at (row, col), 0-based — matches `mElementMesh::meshNodeId`."""
+        return f"{self.id}-{row:02d}{col:02d}"
+
+    def node_positions(self) -> dict[str, tuple[float, float, float]]:
+        """Main-node id -> position for every (row, col) in the grid."""
+        x0, y0, z0 = self.position
+        dx = self.length_x / (self.rows_y - 1)
+        dy = self.length_y / (self.rows_x - 1)
+        return {
+            self.node_id(row, col): (x0 + col * dx, y0 + row * dy, z0)
+            for row in range(self.rows_x)
+            for col in range(self.rows_y)
+        }
+
+    def bars(self) -> list[tuple[str, str]]:
+        """(from_id, to_id) main-node pairs, one per bar — same topology as
+        `mElementMesh::assembleMesh`'s two loops (X-parallel then Y-parallel)."""
+        pairs = [
+            (self.node_id(row, col), self.node_id(row, col + 1))
+            for row in range(self.rows_x)
+            for col in range(self.rows_y - 1)
+        ]
+        pairs += [
+            (self.node_id(row, col), self.node_id(row + 1, col))
+            for col in range(self.rows_y)
+            for row in range(self.rows_x - 1)
+        ]
+        return pairs
 
 
 @dataclass(frozen=True)
@@ -99,7 +154,7 @@ class Study:
     soil: Soil
     nodes: list[Node] = field(default_factory=list)
     materials: list[Material] = field(default_factory=list)
-    elements: list[LineElement] = field(default_factory=list)
+    elements: list[LineElement | MeshElement] = field(default_factory=list)
     sources: list[Source] = field(default_factory=list)
     frequencies: FrequencySweep | None = None
     outputs: Outputs | None = None
