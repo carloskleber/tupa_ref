@@ -60,7 +60,7 @@ Correctness is preferred over performance everywhere until validation exists
 | --- | --- | --- | --- |
 | `main` | `fortran/app/main.f90` | CLI entry: JSON path → `runFromFile` → assemble/report, then (only if the case carries `sources`/`frequencies`) `runSweep` + write `<basename>_results.csv`/`.json` to the working directory | working |
 | `tupa` | `fortran/src/Tupa.f90` | JSON → object model mapping | working for the current schema |
-| `mJsonParser` | `fortran/src/JsonParser.f90` | Minimal recursive-descent JSON subset (ADR 0006) | working within subset limits |
+| `mJsonParser` | `fortran/src/JsonParser.f90` | Thin wrapper over json-fortran (ADR 0006) | working, full JSON grammar |
 | `tStudy` | `fortran/src/Study.f90` | Top container; owns structure, mesh, results; `run` solves one ω, `runSweep` drives the full frequency axis | working (Phase 2 `run`, Phase 3 `runSweep`) |
 | `tStructure` | `fortran/src/Structure.f90` | Owns nodes/electrodes (dynamic arrays) and elements/materials (linked lists); `assembleStructure` | working |
 | `tElement`/`tLine` | `fortran/src/element/` | Geometric generators; self-discretising | `tLine` only |
@@ -82,6 +82,11 @@ ROADMAP Phase 6):
 load JSON ──► build tStudy ──► structure%assembleStructure()
                                     │  elements discretise themselves:
                                     │  resolve IDs → internal nodes → electrodes
+                                    ▼
+              validateStudyReferences: sources[].node, signal.sourceNode/
+              observeNodes/observeElectrodes, outputs.nodes/electrodes
+              resolved against the assembled structure — bad ID raises here,
+              before any of the (expensive) steps below run
                                     ▼
               buildGeometryMatrices(p1, p2, radius)          [once per geometry]
                     G, Gi, R̄, R̄i, cosθ, cosθi
@@ -188,9 +193,11 @@ Tracked, deliberate, and safe at the current scale:
 - `mImpedance` keeps a legacy `COMMON /params/` block and module-level
   function pointers for the nested quadrature — not reentrant, hostile to
   threading; must be refactored before any OpenMP lands on the fill path.
-- `mJsonParser` is a non-reentrant single-buffer parser with hard subset
-  limits (64 items/container, no string escapes) — the escape hatch to
-  json-fortran is pre-decided (ADR 0006).
+- `mJsonParser` (now a json-fortran wrapper, ADR 0006) keeps one
+  module-level `json_core` instance — non-reentrant, fine for this
+  project's one-file-at-a-time usage but would need revisiting for a
+  hypothetical concurrent/multi-file caller. The old hard subset limits
+  (64 items/container, no string escapes) are gone.
 - `tMesh` per-frequency state (see §4) makes the frequency loop inherently
   sequential over one mesh instance; frequency-level parallelism (ROADMAP
   P6) implies one mesh (or at least one `Zeq`/solution set) per thread.

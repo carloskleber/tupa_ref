@@ -1,29 +1,26 @@
 module mJsonParser
-  !! Minimal recursive-descent JSON parser for study configuration files.
+  !! Thin wrapper over json-fortran, presenting the same minimal accessor
+  !! API the project used with the old hand-rolled parser (ADR 0006 —
+  !! migration to json-fortran once the hand-rolled subset's limits (64
+  !! items/container, no string escapes, no real error reporting) became a
+  !! real problem). Callers (`fortran/src/Tupa.f90`) talk only to this
+  !! accessor API, never to json-fortran's `json_core`/`json_value` types
+  !! directly, per ADR 0006's "thin reader interface" requirement.
   !!
-  !! **Design Philosophy:**
-  !! This parser is hand-written to avoid external dependencies (no json-fortran).
-  !! It uses a carefully controlled memory model to prevent double-free crashes with
-  !! GFortran's handling of recursive derived types with allocatable components:
+  !! **Supported JSON**: the full JSON grammar (objects, arrays, strings
+  !! with escapes, numbers, booleans, null), no item-count cap, real
+  !! error messages with line/column from json-fortran's parser.
   !!
-  !! - `tJsonValue` objects are NEVER copied via intrinsic assignment
-  !! - `parse_object()` and `parse_array()` pre-allocate items() and write directly into them
-  !! - `json_child()` and `json_item()` return pointers, never copies
-  !! - Recursive tree ownership: parent owns child items; deallocating parent cascades
-  !!
-  !! **Supported JSON subset:**
-  !! - Objects (key-value pairs)
-  !! - Arrays (indexed items)
-  !! - Strings (double-quoted; no escape sequences)
-  !! - Numbers (integer and floating-point)
-  !! - Booleans (true, false)
-  !! - Null
-  !!
-  !! **Limitations:**
-  !! - Does not support escape sequences in strings
-  !! - Maximum 64 items per object or array (MAX_ITEMS)
-  !! - Maximum 256 characters per object key (MAX_KEY_LEN)
-  !! - Not reentrant (single global parse buffer)
+  !! **Non-reentrant by design, same as the parser it replaces**: a single
+  !! module-level `json_core` instance backs every `tJsonValue` in play.
+  !! This project only ever has one case file loaded at a time (one
+  !! `loadStudy` call per CLI run; sequential, not concurrent, in tests),
+  !! so this is a deliberate simplicity trade, not an oversight.
+  use json_module, only: json_core, json_value, &
+                          jfNull => json_null, jfObject => json_object, &
+                          jfArray => json_array, jfLogical => json_logical, &
+                          jfInteger => json_integer, jfDouble => json_double, &
+                          jfString => json_string
   use mError, only: raiseError
   implicit none
   private
@@ -42,418 +39,268 @@ module mJsonParser
   !! Type tag: object (key-value pairs)
 
   integer, parameter :: MAX_KEY_LEN = 256
-  !! Maximum length of an object key
-  integer, parameter :: MAX_ITEMS   = 64
-  !! Maximum number of items in an object or array
+  !! Length of the fixed-length character functions (`json_str`) return in,
+  !! kept from the old parser's API for source compatibility with callers
 
   type, public :: tJsonValue
-    !! A JSON value: scalar (null, bool, number, string) or container (array, object).
-    !!
-    !! Stores the type tag (vtype) and the value in one of the variant fields:
-    !! - bval: boolean (for JSON_BOOL)
-    !! - rval: number (for JSON_NUMBER)
-    !! - sval: string (for JSON_STRING)
-    !! - items: array of nested values (for JSON_ARRAY and JSON_OBJECT)
-    !! - keys: parallel array of keys (for JSON_OBJECT only)
-    integer :: vtype  = JSON_NULL
-    !! Type tag from JSON_NULL, JSON_BOOL, JSON_NUMBER, JSON_STRING, JSON_ARRAY, JSON_OBJECT
-    logical :: bval   = .false.
-    !! Boolean value (only valid if vtype == JSON_BOOL)
-    real(8) :: rval   = 0.0d0
-    !! Numeric value (only valid if vtype == JSON_NUMBER)
-    character(:), allocatable :: sval
-    !! String value (only valid if vtype == JSON_STRING)
-    type(tJsonValue), allocatable :: items(:)
-    !! Array of child items (valid if vtype == JSON_ARRAY or JSON_OBJECT)
-    character(len=MAX_KEY_LEN), allocatable :: keys(:)
-    !! Array of keys parallel to items() (valid only if vtype == JSON_OBJECT)
-    integer :: nitems = 0
-    !! Count of items actually populated in the items() array
+    !! Handle to one node of the parsed JSON tree (wraps a json-fortran
+    !! `json_value` pointer). Deliberately just a pointer wrapper: unlike
+    !! the old hand-rolled parser's recursive derived type, this has no
+    !! allocatable components, so intrinsic assignment/copy is safe.
+    type(json_value), pointer :: p => null()
   end type tJsonValue
 
-  character(:), allocatable :: g_buf
-  !! Module-level: entire file contents as a single string
-  integer :: g_pos, g_len
-  !! Module-level: current parse position and buffer length
+  type(json_core), save :: g_core
+  !! Module-level parser/accessor instance backing every tJsonValue
+  logical, save :: g_coreInitialised = .false.
 
   public :: parseJsonFile
   !! Parse a JSON file and populate a tJsonValue tree
   public :: json_child, json_item
-  !! Return pointers to child values (no copy)
+  !! Return pointers to child values (by key / by 1-based array index)
   public :: json_size, json_has, json_str, json_real, json_int, json_getbool
-  !! Scalar accessor functions
+  !! Scalar accessor functions, looked up by key on an object
+  public :: json_value_type, json_value_real, json_value_str
+  !! Scalar accessors on a tJsonValue itself (e.g. one already fetched via
+  !! json_item on an array of non-object scalars) rather than by key
 
 contains
 
   ! =====================================================================
-  ! Public entry point — subroutine to avoid function-result copy
+  ! Public entry point
   ! =====================================================================
 
   subroutine parseJsonFile(filename, v)
-    !! Parse a JSON file and return the root value as a tree structure.
+    !! Parse a JSON file and return the root value as a tree handle.
     !!
-    !! Reads the entire file into memory, then parses it using a recursive-descent
-    !! algorithm. The resulting `v` is typically a JSON_OBJECT at the root.
-    !!
-    !! This is a subroutine (not a function) to avoid GFortran's double-free bug
-    !! when returning recursive types with allocatable components.
+    !! The resulting `v` is typically a JSON_OBJECT at the root. On a
+    !! missing file or malformed JSON, routes json-fortran's own
+    !! (line/column-aware) error message through `mError%raiseError`.
     character(len=*), intent(in)  :: filename
     !! Path to the JSON file to parse
     type(tJsonValue), intent(out) :: v
-    !! Output: the parsed JSON tree (root value)
-    integer :: iunit, ios
-    character(len=4096) :: line
+    !! Output: handle to the parsed JSON tree (root value)
+    logical :: statusOk
+    character(:), allocatable :: errMsg
 
-    open(newunit=iunit, file=filename, status='old', action='read', iostat=ios)
-    if (ios /= 0) then
-      call raiseError("mJsonParser: cannot open file '" // trim(filename) // "'")
+    if (.not. g_coreInitialised) then
+      call g_core%initialize()
+      g_coreInitialised = .true.
+    end if
+    call g_core%clear_exceptions()
+
+    call g_core%parse(file=filename, p=v%p)
+
+    if (g_core%failed()) then
+      call g_core%check_for_errors(statusOk, errMsg)
+      call g_core%clear_exceptions()
+      call raiseError("mJsonParser: " // errMsg)
       return
     end if
-
-    g_buf = ''
-    do
-      read(iunit, '(A)', iostat=ios) line
-      if (ios /= 0) exit
-      g_buf = g_buf // trim(line) // ' '
-    end do
-    close(iunit)
-
-    g_len = len(g_buf)
-    g_pos = 1
-    call parse_value(v)
   end subroutine parseJsonFile
 
   ! =====================================================================
-  ! Core recursive parser — subroutines with intent(out), no copies
-  ! =====================================================================
-
-  recursive subroutine parse_value(v)
-    !! Parse one JSON value (null, bool, number, string, array, or object).
-    !!
-    !! Dispatches to type-specific parsers (parse_object, parse_array, etc.).
-    !! Written as a subroutine with intent(out) to write directly into the
-    !! caller's tJsonValue, avoiding any intermediate copy.
-    type(tJsonValue), intent(out) :: v
-    !! Output: the parsed value
-    character :: c
-
-    call skip_ws()
-    if (g_pos > g_len) return
-
-    c = g_buf(g_pos:g_pos)
-    select case (c)
-    case ('{')
-      call parse_object(v)
-    case ('[')
-      call parse_array(v)
-    case ('"')
-      v%vtype = JSON_STRING
-      v%sval  = parse_string()
-    case ('t')
-      v%vtype = JSON_BOOL
-      v%bval  = .true.
-      g_pos   = g_pos + 4
-    case ('f')
-      v%vtype = JSON_BOOL
-      v%bval  = .false.
-      g_pos   = g_pos + 5
-    case ('n')
-      v%vtype = JSON_NULL
-      g_pos   = g_pos + 4
-    case default
-      if (c == '-' .or. (c >= '0' .and. c <= '9')) then
-        v%vtype = JSON_NUMBER
-        v%rval  = parse_number()
-      end if
-    end select
-  end subroutine parse_value
-
-  recursive subroutine parse_object(v)
-    !! Parse a JSON object (key-value pairs between `{` and `}`).
-    !!
-    !! Pre-allocates the items() array to MAX_ITEMS slots to allow parse_value()
-    !! to write child values directly, avoiding tJsonValue copies. After parsing,
-    !! trims keys() to the actual count.
-    type(tJsonValue), intent(out) :: v
-    !! Output: a JSON_OBJECT value
-    character(len=MAX_KEY_LEN) :: tmp_keys(MAX_ITEMS)
-    character :: c
-    integer :: n
-    character(:), allocatable :: key
-
-    v%vtype = JSON_OBJECT
-    n = 0
-    g_pos = g_pos + 1
-    allocate(v%items(MAX_ITEMS))
-
-    do
-      call skip_ws()
-      if (g_pos > g_len) exit
-      c = g_buf(g_pos:g_pos)
-      select case (c)
-      case ('}')
-        g_pos = g_pos + 1
-        exit
-      case (',')
-        g_pos = g_pos + 1
-      case ('"')
-        key = parse_string()
-        call skip_ws()
-        if (g_pos <= g_len) then
-          if (g_buf(g_pos:g_pos) == ':') g_pos = g_pos + 1
-        end if
-        call skip_ws()
-        n = n + 1
-        if (n > MAX_ITEMS) then
-          call raiseError("mJsonParser: object exceeds MAX_ITEMS (ADR 0006: switch to json-fortran)")
-          return
-        end if
-        tmp_keys(n) = key
-        call parse_value(v%items(n))
-      end select
-    end do
-
-    v%nitems = n
-    allocate(v%keys(n))
-    if (n > 0) v%keys(1:n) = tmp_keys(1:n)
-  end subroutine parse_object
-
-  recursive subroutine parse_array(v)
-    !! Parse a JSON array (values between `[` and `]`).
-    !!
-    !! Pre-allocates the items() array to MAX_ITEMS slots to allow parse_value()
-    !! to write child values directly. After parsing, the actual count is stored
-    !! in nitems; excess slots are left allocated but unused.
-    type(tJsonValue), intent(out) :: v
-    !! Output: a JSON_ARRAY value
-    character :: c
-    integer :: n
-
-    v%vtype = JSON_ARRAY
-    n = 0
-    g_pos = g_pos + 1
-    allocate(v%items(MAX_ITEMS))
-
-    do
-      call skip_ws()
-      if (g_pos > g_len) exit
-      c = g_buf(g_pos:g_pos)
-      select case (c)
-      case (']')
-        g_pos = g_pos + 1
-        exit
-      case (',')
-        g_pos = g_pos + 1
-      case default
-        n = n + 1
-        if (n > MAX_ITEMS) then
-          call raiseError("mJsonParser: array exceeds MAX_ITEMS (ADR 0006: switch to json-fortran)")
-          return
-        end if
-        call parse_value(v%items(n))
-      end select
-    end do
-
-    v%nitems = n
-  end subroutine parse_array
-
-  function parse_string() result(s)
-    !! Extract the contents of a JSON string (between `"` delimiters).
-    !!
-    !! Handles escaped characters by skipping them. Currently does not unescape
-    !! them (e.g., `\"` remains as two characters in the output).
-    character(:), allocatable :: s
-    !! Output: the string content (without quotes)
-    integer :: start
-
-    s = ''
-    if (g_buf(g_pos:g_pos) /= '"') return
-    g_pos = g_pos + 1
-    start = g_pos
-    do while (g_pos <= g_len)
-      if (g_buf(g_pos:g_pos) == achar(92) .and. g_pos + 1 <= g_len) then
-        g_pos = g_pos + 2
-      else if (g_buf(g_pos:g_pos) == '"') then
-        s = g_buf(start:g_pos-1)
-        g_pos = g_pos + 1
-        return
-      else
-        g_pos = g_pos + 1
-      end if
-    end do
-  end function parse_string
-
-  function parse_number() result(r)
-    !! Extract and convert a JSON number (integer or floating-point).
-    !!
-    !! Reads a sequence of characters matching a number pattern (`-`, `+`, `0-9`, `.`, `e`, `E`)
-    !! and converts to a real(8) via Fortran's internal READ.
-    real(8) :: r
-    !! Output: the numeric value
-    integer :: start, ios
-
-    start = g_pos
-    do while (g_pos <= g_len)
-      select case (g_buf(g_pos:g_pos))
-      case ('-', '+', '0':'9', '.', 'e', 'E')
-        g_pos = g_pos + 1
-      case default
-        exit
-      end select
-    end do
-    read(g_buf(start:g_pos-1), *, iostat=ios) r
-    if (ios /= 0) r = 0.0d0
-  end function parse_number
-
-  subroutine skip_ws()
-    !! Skip whitespace characters (space, tab, newline, carriage return).
-    do while (g_pos <= g_len)
-      select case (g_buf(g_pos:g_pos))
-      case (' ', achar(9), achar(10), achar(13))
-        g_pos = g_pos + 1
-      case default
-        return
-      end select
-    end do
-  end subroutine skip_ws
-
-  ! =====================================================================
-  ! Pointer-returning accessors — no tJsonValue copy, no double-free risk
+  ! Pointer-returning accessors
   ! =====================================================================
 
   function json_child(v, key) result(ptr)
     !! Retrieve a child value from an object by key, returning a pointer.
     !!
-    !! Returns a null pointer if the key is not found or if `v` is not an object.
-    type(tJsonValue), intent(in), target :: v
-    !! Object to search (must be JSON_OBJECT)
+    !! Returns a null pointer if the key is not found or if `v` is not an
+    !! object (json-fortran itself just reports "not found" in that case).
+    type(tJsonValue), intent(in) :: v
+    !! Object to search
     character(len=*), intent(in) :: key
     !! Key to look up
     type(tJsonValue), pointer :: ptr
-    !! Output: pointer to the child value (null if not found)
-    integer :: idx
+    !! Output: pointer to a freshly wrapped handle for the child value
+    !! (null if not found). Each call allocates a small wrapper shell;
+    !! see the module docstring on the single-file, non-reentrant scope
+    !! this is meant for — bounded and reclaimed at process exit, not
+    !! worth a manual arena for case files this small.
+    type(json_value), pointer :: child
+    logical :: found
 
-    ptr => null()
-    idx = json_find_key(v, key)
-    if (idx > 0) ptr => v%items(idx)
+    nullify(ptr)
+    if (.not. associated(v%p)) return
+    call g_core%get_child(v%p, key, child, found)
+    if (.not. found) return
+    allocate(ptr)
+    ptr%p => child
   end function json_child
 
   function json_item(v, i) result(ptr)
-    !! Retrieve a child value from an array by 1-based index, returning a pointer.
-    !!
-    !! Returns a null pointer if the index is out of bounds or if `v` is not an array.
-    type(tJsonValue), intent(in), target :: v
-    !! Array to index (must be JSON_ARRAY)
+    !! Retrieve a child value from an array by 1-based index, returning a
+    !! pointer. Returns a null pointer if `v` is not an array or `i` is
+    !! out of bounds.
+    type(tJsonValue), intent(in) :: v
+    !! Array to index
     integer, intent(in) :: i
     !! 1-based index into the array
     type(tJsonValue), pointer :: ptr
     !! Output: pointer to the child value (null if out of bounds)
+    type(json_value), pointer :: child
+    integer :: vtype
+    logical :: found
 
-    ptr => null()
-    if (v%vtype == JSON_ARRAY .and. allocated(v%items) &
-        .and. i >= 1 .and. i <= v%nitems) then
-      ptr => v%items(i)
-    end if
+    nullify(ptr)
+    if (.not. associated(v%p)) return
+    call g_core%info(v%p, var_type=vtype)
+    if (vtype /= jfArray) return
+    if (i < 1 .or. i > g_core%count(v%p)) return
+    call g_core%get_child(v%p, i, child, found)
+    if (.not. found) return
+    allocate(ptr)
+    ptr%p => child
   end function json_item
 
   ! =====================================================================
-  ! Scalar accessors — safe as functions, return copies of scalar values
+  ! Scalar accessors, looked up by key on an object
   ! =====================================================================
 
-  pure function json_find_key(v, key) result(idx)
-    !! Find the index of a key in an object, or return 0 if not found.
-    type(tJsonValue), intent(in) :: v
-    character(len=*),  intent(in) :: key
-    integer :: idx, i
-
-    idx = 0
-    if (v%vtype /= JSON_OBJECT .or. .not. allocated(v%keys)) return
-    do i = 1, v%nitems
-      if (trim(v%keys(i)) == trim(key)) then
-        idx = i
-        return
-      end if
-    end do
-  end function json_find_key
-
-  pure function json_has(v, key) result(found)
+  function json_has(v, key) result(found)
     !! Check whether an object contains a given key.
     type(tJsonValue), intent(in) :: v
-    character(len=*),  intent(in) :: key
+    character(len=*), intent(in) :: key
     logical :: found
-    found = json_find_key(v, key) > 0
+    type(json_value), pointer :: child
+
+    found = .false.
+    if (.not. associated(v%p)) return
+    call g_core%get_child(v%p, key, child, found)
   end function json_has
 
-  pure function json_size(v) result(n)
+  function json_size(v) result(n)
     !! Return the number of items in an array or object.
     type(tJsonValue), intent(in) :: v
     integer :: n
-    n = v%nitems
+    n = 0
+    if (associated(v%p)) n = g_core%count(v%p)
   end function json_size
 
   function json_str(v, key) result(s)
     !! Extract a string value from an object by key.
     !!
-    !! Returns an empty string if the key is not found or if the value is not a string.
-    type(tJsonValue), intent(in), target :: v
+    !! Returns an empty string if the key is not found or if the value is
+    !! not a string.
+    type(tJsonValue), intent(in) :: v
     character(len=*),  intent(in) :: key
     character(len=MAX_KEY_LEN) :: s
-    type(tJsonValue), pointer :: child
+    type(json_value), pointer :: child
+    character(:), allocatable :: tmp
+    integer :: vtype
+    logical :: found
 
     s = ''
-    child => json_child(v, key)
-    if (associated(child)) then
-      if (child%vtype == JSON_STRING .and. allocated(child%sval)) &
-        s = child%sval
+    if (.not. associated(v%p)) return
+    call g_core%get_child(v%p, key, child, found)
+    if (.not. found) return
+    call g_core%info(child, var_type=vtype)
+    if (vtype == jfString) then
+      call g_core%get(child, tmp)
+      s = tmp
     end if
   end function json_str
 
   function json_real(v, key) result(r)
     !! Extract a numeric value from an object by key as real(8).
     !!
-    !! Returns 0.0 if the key is not found or if the value is not a number.
-    type(tJsonValue), intent(in), target :: v
+    !! Returns 0.0 if the key is not found or if the value is not a
+    !! number (integer- and floating-point-looking JSON literals both
+    !! count, matching the old parser's "numbers are always real(8)").
+    type(tJsonValue), intent(in) :: v
     character(len=*),  intent(in) :: key
     real(8) :: r
-    type(tJsonValue), pointer :: child
+    type(json_value), pointer :: child
+    integer :: vtype
+    logical :: found
 
     r = 0.0d0
-    child => json_child(v, key)
-    if (associated(child)) then
-      if (child%vtype == JSON_NUMBER) r = child%rval
-    end if
+    if (.not. associated(v%p)) return
+    call g_core%get_child(v%p, key, child, found)
+    if (.not. found) return
+    call g_core%info(child, var_type=vtype)
+    if (vtype == jfInteger .or. vtype == jfDouble) call g_core%get(child, r)
   end function json_real
 
   function json_int(v, key) result(n)
     !! Extract a numeric value from an object by key as integer.
     !!
     !! Returns 0 if the key is not found or if the value is not a number.
-    type(tJsonValue), intent(in), target :: v
+    type(tJsonValue), intent(in) :: v
     character(len=*),  intent(in) :: key
     integer :: n
-    type(tJsonValue), pointer :: child
-
-    n = 0
-    child => json_child(v, key)
-    if (associated(child)) then
-      if (child%vtype == JSON_NUMBER) n = int(child%rval)
-    end if
+    n = int(json_real(v, key))
   end function json_int
 
   function json_getbool(v, key) result(b)
     !! Extract a boolean value from an object by key.
     !!
-    !! Returns .false. if the key is not found or if the value is not a boolean.
-    type(tJsonValue), intent(in), target :: v
+    !! Returns .false. if the key is not found or if the value is not a
+    !! boolean.
+    type(tJsonValue), intent(in) :: v
     character(len=*),  intent(in) :: key
     logical :: b
-    type(tJsonValue), pointer :: child
+    type(json_value), pointer :: child
+    integer :: vtype
+    logical :: found
 
     b = .false.
-    child => json_child(v, key)
-    if (associated(child)) then
-      if (child%vtype == JSON_BOOL) b = child%bval
-    end if
+    if (.not. associated(v%p)) return
+    call g_core%get_child(v%p, key, child, found)
+    if (.not. found) return
+    call g_core%info(child, var_type=vtype)
+    if (vtype == jfLogical) call g_core%get(child, b)
   end function json_getbool
+
+  ! =====================================================================
+  ! Scalar accessors on a tJsonValue itself (no key lookup) — for array
+  ! elements that are themselves scalars, e.g. a position [x, y, z] triple
+  ! fetched one item at a time via json_item.
+  ! =====================================================================
+
+  function json_value_type(v) result(t)
+    !! The JSON_* type tag of `v` itself.
+    type(tJsonValue), intent(in) :: v
+    integer :: t
+    integer :: vtype
+
+    t = JSON_NULL
+    if (.not. associated(v%p)) return
+    call g_core%info(v%p, var_type=vtype)
+    select case (vtype)
+    case (jfNull);              t = JSON_NULL
+    case (jfLogical);           t = JSON_BOOL
+    case (jfInteger, jfDouble); t = JSON_NUMBER
+    case (jfString);            t = JSON_STRING
+    case (jfArray);             t = JSON_ARRAY
+    case (jfObject);            t = JSON_OBJECT
+    end select
+  end function json_value_type
+
+  function json_value_real(v) result(r)
+    !! The numeric value of `v` itself as real(8); 0.0 if `v` isn't a
+    !! number.
+    type(tJsonValue), intent(in) :: v
+    real(8) :: r
+    integer :: vtype
+
+    r = 0.0d0
+    if (.not. associated(v%p)) return
+    call g_core%info(v%p, var_type=vtype)
+    if (vtype == jfInteger .or. vtype == jfDouble) call g_core%get(v%p, r)
+  end function json_value_real
+
+  function json_value_str(v) result(s)
+    !! The string value of `v` itself; empty if `v` isn't a string.
+    type(tJsonValue), intent(in) :: v
+    character(:), allocatable :: s
+    integer :: vtype
+
+    s = ''
+    if (.not. associated(v%p)) return
+    call g_core%info(v%p, var_type=vtype)
+    if (vtype == jfString) call g_core%get(v%p, s)
+  end function json_value_str
 
 end module mJsonParser

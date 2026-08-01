@@ -54,8 +54,10 @@ Add three optional top-level blocks to the input schema:
   to think in decades. An explicit frequency list (bypassing log-spacing)
   is deliberately left out of v1: `runSweep` already accepts an arbitrary
   array from Fortran callers, but a JSON `values` array would sit against
-  the 64-item parser cap (ADR 0006) for any real sweep, so it waits for the
-  json-fortran migration that cap is already expected to force.
+  the 64-item parser cap (ADR 0006) for any real sweep. That cap is gone as
+  of ADR 0006's 2026-08-01 json-fortran migration, so a `values` array is
+  no longer blocked on the parser — it remains a deliberate v2 schema
+  addition, not implemented here.
 - **`outputs`**: opt-in projection over what the results writer stores/
   emits. `quantities` names match the ADR 0012 output shape directly —
   `voltage` (per node), `i1`/`i2` (per electrode, long./trans. current —

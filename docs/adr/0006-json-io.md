@@ -1,6 +1,6 @@
 # ADR 0006 — JSON study format with a hand-rolled minimal parser
 
-- **Status**: Accepted (parser choice reversible)
+- **Status**: Accepted; parser choice superseded 2026-08-01 (see update below)
 - **Date**: 2026-07-03
 
 ## Context
@@ -36,3 +36,35 @@ copies.
 - Case files must stay within the supported subset until then; the reference
   cases in `common/` double as parser conformance tests.
 - Output JSON writing is trivial (no parser needed) and is not affected.
+
+> **Update (2026-08-01).** Migrated to json-fortran, per the trigger this ADR
+> named up front: the hand-rolled parser's limits stopped being purely
+> theoretical once a real case (`common/portelaMesh.json`) needed a clear
+> error message and there was no room to add validation without them.
+> `fortran/src/JsonParser.f90` (`mJsonParser`) is now a thin wrapper around
+> `json-fortran`'s `json_core`/`json_value` (added as an FPM git dependency,
+> `fpm.toml`) — same public accessor API (`json_child`, `json_item`,
+> `json_size`, `json_has`, `json_str`, `json_real`, `json_int`,
+> `json_getbool`, plus two new no-key-lookup scalar accessors,
+> `json_value_type`/`json_value_real`/`json_value_str`, needed once a couple
+> of `Tupa.f90` call sites turned out to read `tJsonValue` fields directly
+> instead of going through the accessors), so `fortran/src/Tupa.f90` — the
+> only consumer — needed no changes beyond those two call sites. The 64-item
+> cap, the no-string-escapes restriction, and the "not reentrant" caveat are
+> gone; malformed JSON now raises `mError%raiseError` with json-fortran's own
+> line/column-aware message instead of the old parser's generic one. The
+> single remaining non-reentrancy note: `mJsonParser` keeps one module-level
+> `json_core` instance (mirroring the old parser's single global buffer),
+> which is fine for this project's one-file-at-a-time usage but would need
+> revisiting for a hypothetical concurrent/multi-file caller.
+>
+> Alongside the parser swap, `fortran/src/Tupa.f90` gained
+> `validateStudyReferences`, called right after `loadStudy` (before any
+> geometry-factor or solve work) to resolve every ID a case file
+> references — `sources[].node`, `signal.sourceNode`/`observeNodes`/
+> `observeElectrodes`, `outputs.nodes`/`electrodes` — against the assembled
+> structure, closing a separate but related gap: a bad ID used to surface
+> only deep inside `runSweep`/`transientResponse` (after expensive geometry/
+> solve work had already run), or, for `outputs.*`, not at all. See ADR
+> 0013's exercised note and `common/README.md`'s discretised-ID gotcha for
+> the ID-naming details this now enforces up front.

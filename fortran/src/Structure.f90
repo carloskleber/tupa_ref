@@ -57,6 +57,12 @@ module mStructure
     !! Current number of elements in the linked list
     integer :: materialCount = 0
     !! Current number of materials in the linked list
+    logical :: assembled = .false.
+    !! Set by `assembleStructure` on completion; guards it against running
+    !! twice (elements would double-register nodes/electrodes otherwise),
+    !! so callers can assemble early — e.g. to validate ID cross-references
+    !! before any geometry/solve work — without disturbing the later, lazy
+    !! `assembleStructure` call inside `tStudy%prepareStudy`
   contains
     procedure :: addNode           => addNodeToStructure
     !! Append a new node to the `nodes` array (with dynamic expansion)
@@ -64,6 +70,9 @@ module mStructure
     !! Return the current number of nodes
     procedure :: findNodeIndex     => findNodeIndexInStructure
     !! Look up a node's 1-based index by its user-assigned ID (0 if not found)
+    procedure :: findElectrodeIndex => findElectrodeIndexInStructure
+    !! Look up an electrode's 1-based index by its (discretised segment)
+    !! ID (0 if not found)
     procedure :: addElectrode      => addElectrodeToStructure
     !! Append a new electrode to the `electrodes` array (with dynamic expansion)
     procedure :: getElectrodeCount => getElectrodeCountStructure
@@ -150,6 +159,28 @@ contains
       end if
     end do
   end function findNodeIndexInStructure
+
+  function findElectrodeIndexInStructure(this, id) result(idx)
+    !! Look up an electrode's 1-based index by its (discretised segment)
+    !! ID, e.g. `"Line_1_e3"` (`common/README.md`'s discretised-ID gotcha).
+    !!
+    !! Returns 0 if no electrode with that ID exists. Valid as soon as
+    !! `assembleStructure` has run — no solve required, unlike looking an
+    !! electrode up by searching solved results.
+    class(tStructure), intent(in) :: this
+    character(len=*), intent(in) :: id
+    !! Discretised electrode identifier
+    integer :: idx
+    integer :: i
+
+    idx = 0
+    do i = 1, this%electrodeCount
+      if (trim(this%electrodes(i)%id) == trim(id)) then
+        idx = i
+        return
+      end if
+    end do
+  end function findElectrodeIndexInStructure
 
   ! =====================================================================
   ! Electrode management (dynamic array)
@@ -336,14 +367,21 @@ contains
     !! Iterates through the linked list of elements and calls each element's
     !! `assemble` method, passing the structure itself so the element can
     !! register its nodes, electrodes, and material references.
+    !!
+    !! Idempotent: a no-op if assembly already ran (see `assembled`) — calling
+    !! this a second time would otherwise double-register every node/electrode.
     class(tStructure), intent(inout) :: this
     type(tElementNode), pointer :: p
+
+    if (this%assembled) return
 
     p => this%elements
     do while (associated(p))
       call p%elem%assemble(this)
       p => p%next
     end do
+
+    this%assembled = .true.
   end subroutine assembleStructureImpl
 
   subroutine finalizeStructure(this)
@@ -385,6 +423,7 @@ contains
     this%nodeCount      = 0
     this%electrodeCount = 0
     this%elementCount   = 0
+    this%assembled      = .false.
   end subroutine finalizeStructure
 
 end module mStructure

@@ -161,20 +161,22 @@ contains
   end subroutine transientResponse
 
   integer(4) function electrodeIndex(study, electrodeId) result(idx)
-    !! Index of `electrodeId` in `study%longCurrentResults`/`transCurrentResults`
-    !! (both share the same electrode ordering — `runSweep`, Study.f90).
+    !! Index of `electrodeId` in `study%structure%electrodes` — shared
+    !! ordering with `study%longCurrentResults`/`transCurrentResults`
+    !! (both allocated from `structure%electrodes(i)%id`, `runSweep`,
+    !! Study.f90), so it doubles as the index into either. Looked up
+    !! against the structure rather than the (post-sweep) results so this
+    !! also works before any sweep has run.
+    !!
+    !! `mTupa::validateStudyReferences` already rejects an unresolvable
+    !! `signal.observeElectrodes` entry before `transientResponse` is ever
+    !! called, so the `raiseError` below is a defence-in-depth backstop,
+    !! not the primary check.
     class(tStudy), intent(in) :: study
     character(len=*), intent(in) :: electrodeId
-    integer(4) :: i
 
-    idx = 0
-    do i = 1, study%longCurrentResults%entityCount()
-      if (trim(study%longCurrentResults%entityId(i)) == electrodeId) then
-        idx = i
-        return
-      end if
-    end do
-    call raiseError("transientResponse: electrode '" // electrodeId // "' not found")
+    idx = study%structure%findElectrodeIndex(electrodeId)
+    if (idx == 0) call raiseError("transientResponse: electrode '" // electrodeId // "' not found")
   end function electrodeIndex
 
   function spectrumToTimeSeries(transferFunction, excitationSpectrum, nBins, nSamples) result(series)

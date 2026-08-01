@@ -1,0 +1,17 @@
+{
+  "title": "Regression fixture: signal.observeElectrodes names the bar's compound ID, not a discretised segment ID (the common/README.md gotcha) — used for manual CLI verification only, see test_validation.f90",
+  "soil": { "conductivity": 0.001, "permittivity": 10.0, "permeability": 1.0 },
+  "materials": [ { "id": "copper", "epsilonr": 1.0, "mur": 1.0, "sigma": 5.96e7 } ],
+  "elements": [
+    { "type": "mesh", "id": "m", "position": [0.0, -8.0, -1.0], "lengthX": 8.0, "lengthY": 8.0,
+      "rowsX": 2, "rowsY": 2, "radius": 0.005, "segments": 2, "material": "copper" }
+  ],
+  "signal": {
+    "waveform": "doubleExp", "imax": 30000.0, "front": "f1_2_50", "jones": false,
+    "sourceNode": "m-0000",
+    "observeNodes": ["m-0000"],
+    "observeElectrodes": ["m-0000-0001"],
+    "nyquistHz": 1.0e6,
+    "fftPoints": 1024
+  }
+}

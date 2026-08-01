@@ -7,7 +7,7 @@ module mVerbosity
   implicit none
   private
 
-  public :: setVerbosity, verbosityLevel
+  public :: setVerbosity, verbosityLevel, verbose
   public :: VERB_QUIET, VERB_NORMAL, VERB_VERBOSE
 
   integer, parameter :: VERB_QUIET   = 0
@@ -30,5 +30,13 @@ contains
   integer function verbosityLevel() result(level)
     level = currentLevel
   end function verbosityLevel
+
+  subroutine verbose(level, msg)
+    !! Print `msg` if the current verbosity level is >= `level`.
+    integer, intent(in) :: level
+    character(len=*), intent(in) :: msg
+
+    if (currentLevel >= level) print *, trim(msg)
+  end subroutine verbose
 
 end module mVerbosity

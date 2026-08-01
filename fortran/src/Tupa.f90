@@ -47,7 +47,7 @@ module tupa
   implicit none
   private
 
-  public :: loadStudy, runFromFile, runStudyFromFile
+  public :: loadStudy, runFromFile, runStudyFromFile, validateStudyReferences
 
 contains
 
@@ -177,9 +177,9 @@ contains
         node_obj => json_item(nodes_arr, i)
         id       = json_str(node_obj, "id")
         pos_arr  => json_child(node_obj, "position")
-        pos_item => json_item(pos_arr, 1); x = pos_item%rval
-        pos_item => json_item(pos_arr, 2); y = pos_item%rval
-        pos_item => json_item(pos_arr, 3); z = pos_item%rval
+        pos_item => json_item(pos_arr, 1); x = json_value_real(pos_item)
+        pos_item => json_item(pos_arr, 2); y = json_value_real(pos_item)
+        pos_item => json_item(pos_arr, 3); z = json_value_real(pos_item)
         call study%structure%addNode(newNode(trim(id), [x, y, z]))
       end do
     end if
@@ -218,9 +218,9 @@ contains
         case ("mesh")
           id       = json_str(elem_obj, "id")
           pos_arr  => json_child(elem_obj, "position")
-          pos_item => json_item(pos_arr, 1); x = pos_item%rval
-          pos_item => json_item(pos_arr, 2); y = pos_item%rval
-          pos_item => json_item(pos_arr, 3); z = pos_item%rval
+          pos_item => json_item(pos_arr, 1); x = json_value_real(pos_item)
+          pos_item => json_item(pos_arr, 2); y = json_value_real(pos_item)
+          pos_item => json_item(pos_arr, 3); z = json_value_real(pos_item)
           lengthX  = json_real(elem_obj, "lengthX")
           lengthY  = json_real(elem_obj, "lengthY")
           rowsX    = json_int(elem_obj, "rowsX")
@@ -391,10 +391,119 @@ contains
       out(i) = ''
       item => json_item(arr, i)
       if (associated(item)) then
-        if (item%vtype == JSON_STRING .and. allocated(item%sval)) out(i) = item%sval
+        if (json_value_type(item) == JSON_STRING) out(i) = json_value_str(item)
       end if
     end do
   end subroutine readJsonStringArray
+
+  ! =====================================================================
+  ! Upfront ID cross-reference validation
+  ! =====================================================================
+
+  subroutine validateStudyReferences(study, sourceNodeIds, signal, signalSourceNode, &
+                                      signalObserveNodeIds, signalObserveElectrodeIds, &
+                                      outputNodeIds, outputElectrodeIds)
+    !! Resolve every ID a case file references — `sources[].node`,
+    !! `signal.sourceNode`/`observeNodes`/`observeElectrodes`,
+    !! `outputs.nodes`/`electrodes` — against the assembled structure,
+    !! right after (cheap) `assembleStructure` and before any
+    !! geometry-factor or solve work runs. Without this, a bad ID is
+    !! caught only deep inside `runSweep`/`transientResponse` (after the
+    !! O(n^2) geometry-factor quadrature and a full frequency sweep have
+    !! already run), or — for `outputs.nodes`/`outputs.electrodes` — not
+    !! caught at all: `mResultsWriter`'s `wanted()` filter silently
+    !! excludes an unmatched ID rather than erroring.
+    !!
+    !! Idempotent to call before `runSweep`/`transientResponse`:
+    !! `assembleStructure` itself is now idempotent (`mStructure`), so the
+    !! later, lazy assembly inside `tStudy%prepareStudy` stays a no-op.
+    class(tStudy), intent(inout) :: study
+    !! Study whose (not-yet-assembled) structure will be validated against
+    character(len=*), intent(in), optional :: sourceNodeIds(:)
+    !! "sources[].node" (ADR 0013)
+    class(tSignal), allocatable, intent(in), optional :: signal
+    !! The parsed "signal" block (ADR 0015); when absent/unallocated,
+    !! `signalSourceNode`/`signalObserveNodeIds`/`signalObserveElectrodeIds`
+    !! are not meaningful and are skipped regardless of whether they're
+    !! present as arguments
+    character(len=*), intent(in), optional :: signalSourceNode
+    !! "signal.sourceNode"
+    character(len=*), intent(in), optional :: signalObserveNodeIds(:)
+    !! "signal.observeNodes"
+    character(len=*), intent(in), optional :: signalObserveElectrodeIds(:)
+    !! "signal.observeElectrodes"
+    character(len=*), intent(in), optional :: outputNodeIds(:)
+    !! "outputs.nodes"
+    character(len=*), intent(in), optional :: outputElectrodeIds(:)
+    !! "outputs.electrodes"
+    integer :: i
+
+    call study%structure%assembleStructure()
+
+    if (present(sourceNodeIds)) then
+      do i = 1, size(sourceNodeIds)
+        call requireNodeReference(study, trim(sourceNodeIds(i)), "sources[].node")
+      end do
+    end if
+
+    if (present(signal)) then
+      if (allocated(signal)) then
+        if (present(signalSourceNode)) &
+          call requireNodeReference(study, trim(signalSourceNode), "signal.sourceNode")
+        if (present(signalObserveNodeIds)) then
+          do i = 1, size(signalObserveNodeIds)
+            call requireNodeReference(study, trim(signalObserveNodeIds(i)), "signal.observeNodes")
+          end do
+        end if
+        if (present(signalObserveElectrodeIds)) then
+          do i = 1, size(signalObserveElectrodeIds)
+            call requireElectrodeReference(study, trim(signalObserveElectrodeIds(i)), &
+                                            "signal.observeElectrodes")
+          end do
+        end if
+      end if
+    end if
+
+    if (present(outputNodeIds)) then
+      do i = 1, size(outputNodeIds)
+        call requireNodeReference(study, trim(outputNodeIds(i)), "outputs.nodes")
+      end do
+    end if
+
+    if (present(outputElectrodeIds)) then
+      do i = 1, size(outputElectrodeIds)
+        call requireElectrodeReference(study, trim(outputElectrodeIds(i)), "outputs.electrodes")
+      end do
+    end if
+  end subroutine validateStudyReferences
+
+  subroutine requireNodeReference(study, nodeId, fieldName)
+    !! Raise a clear, greppable error if `nodeId` (from JSON field
+    !! `fieldName`) does not name a node in `study%structure`.
+    class(tStudy), intent(in) :: study
+    character(len=*), intent(in) :: nodeId, fieldName
+
+    if (study%structure%findNodeIndex(nodeId) == 0) then
+      call raiseError("mTupa: " // trim(fieldName) // " references unknown node '" // &
+                       trim(nodeId) // "'")
+    end if
+  end subroutine requireNodeReference
+
+  subroutine requireElectrodeReference(study, electrodeId, fieldName)
+    !! Raise a clear, greppable error if `electrodeId` (from JSON field
+    !! `fieldName`) does not name a discretised electrode segment in
+    !! `study%structure` — the common mistake is naming the input element
+    !! ID instead of the generated segment ID (`common/README.md`'s
+    !! discretised-ID gotcha).
+    class(tStudy), intent(in) :: study
+    character(len=*), intent(in) :: electrodeId, fieldName
+
+    if (study%structure%findElectrodeIndex(electrodeId) == 0) then
+      call raiseError("mTupa: " // trim(fieldName) // " references unknown electrode '" // &
+        trim(electrodeId) // "' (discretised segment IDs look like '<element id>_e<n>', " // &
+        "not the input element/boundary-node ID — see common/README.md)")
+    end if
+  end subroutine requireElectrodeReference
 
   ! =====================================================================
   ! Convenience entry point
@@ -457,6 +566,12 @@ contains
                    signalNyquistHz=signalNyquistHz, signalFftPoints=signalFftPoints, &
                    signalFreqZeroHz=signalFreqZeroHz)
 
+    call validateStudyReferences(study, sourceNodeIds=sourceNodeIds, signal=signal, &
+                                  signalSourceNode=signalSourceNode, &
+                                  signalObserveNodeIds=signalObserveNodeIds, &
+                                  signalObserveElectrodeIds=signalObserveElectrodeIds, &
+                                  outputNodeIds=outputNodeIds, outputElectrodeIds=outputElectrodeIds)
+
     ranSweep     = allocated(sourceNodeIds) .and. allocated(freqHz)
     ranTransient = allocated(signal)
     base = basenameNoExt(filename)
@@ -471,10 +586,7 @@ contains
                             electrodeIds=outputElectrodeIds, quantities=outputQuantities)
       call writeResultsJson(study, trim(jsonFile), nodeIds=outputNodeIds, &
                              electrodeIds=outputElectrodeIds, quantities=outputQuantities)
-      if (verbosityLevel() >= VERB_NORMAL) then
-        print *, ""
-        print *, "Wrote ", trim(csvFile), " and ", trim(jsonFile)
-      end if
+      call verbose(VERB_NORMAL, "Wrote " // trim(csvFile) // " and " // trim(jsonFile))
     end if
 
     if (ranTransient) then
@@ -496,27 +608,18 @@ contains
       call writeTransientResultsJson(study%title, trim(signalSourceNode), t, injectedCurrent, &
         signalObserveNodeIds, nodeResponses, trim(jsonFile), &
         observeElectrodeIds=signalObserveElectrodeIds, i1Responses=i1Responses, i2Responses=i2Responses)
-      if (verbosityLevel() >= VERB_NORMAL) then
-        print *, ""
-        print *, "Wrote ", trim(csvFile), " and ", trim(jsonFile)
-      end if
+      call verbose(VERB_NORMAL, "Wrote " // trim(csvFile) // " and " // trim(jsonFile))
     end if
 
     if (.not. (ranSweep .or. ranTransient)) then
       call study%structure%assembleStructure()
       call study%report()
-      if (verbosityLevel() >= VERB_NORMAL) then
-        print *, ""
-        print *, "(structure-only case: no sources/frequencies/signal block -- nothing to solve)"
-      end if
+      call verbose(VERB_NORMAL, "(structure-only case: no sources/frequencies/signal block -- nothing to solve)")
     end if
 
     call system_clock(count=clockEnd)
-    if (verbosityLevel() >= VERB_NORMAL) then
-      print *, ""
-      print *, "Simulation duration: " // &
-        formatDuration(real(clockEnd - clockStart, 8) / real(clockRate, 8))
-    end if
+    call verbose(VERB_NORMAL, "Simulation duration: " // &
+        formatDuration(real(clockEnd - clockStart, 8) / real(clockRate, 8)))
   end subroutine runFromFile
 
   function formatDuration(seconds) result(str)
@@ -597,6 +700,8 @@ contains
 
     call loadStudy(filename, study, sourceNodeIds=sourceNodeIds, &
                    sourceCurrents=sourceCurrents, sourceIsVoltage=sourceIsVoltage, freqHz=freqHz)
+
+    call validateStudyReferences(study, sourceNodeIds=sourceNodeIds)
 
     if (.not. (allocated(sourceNodeIds) .and. allocated(freqHz))) then
       call raiseError("runStudyFromFile: '" // trim(filename) // &

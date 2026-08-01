@@ -1,5 +1,5 @@
 {
-  "title": "Portela grounding mesh (32x32 m, 8 m pitch, corner at y=-32)",
+  "title": "Portela grounding mesh (32x32 m, 8 m pitch, corner at [0,-32,-1])",
   "soil": {
     "conductivity": 0.001,
     "permittivity": 10.0,
@@ -12,7 +12,7 @@
   "elements": [
     {
       "type": "mesh",
-      "id": "portelaMesh",
+      "id": "m",
       "position": [0.0, -32.0, -1.0],
       "lengthX": 32.0,
       "lengthY": 32.0,
@@ -22,5 +22,21 @@
       "segments": 5,
       "material": "copper"
     }
-  ]
+  ],
+  "sources": [ { "node": "m-0000", "current": { "re": 1.0, "im": 0.0 } } ],
+  "frequencies": { "min": 100.0, "max": 1.0e7, "pointsPerDecade": 8 },
+  "outputs": {
+    "quantities": ["voltage", "i1", "i2", "inputImpedance"]
+  },
+  "signal": {
+    "waveform": "doubleExp",
+    "imax": 30000.0,
+    "front": "f1_2_50",
+    "jones": false,
+    "sourceNode": "m-0000",
+    "observeNodes": ["m-0000", "m-0001", "m-0101"],
+    "observeElectrodes": ["m-0000-0001_e1"],
+    "nyquistHz": 1.0e7,
+    "fftPoints": 4096
+  }
 }

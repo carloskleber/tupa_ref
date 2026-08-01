@@ -157,7 +157,12 @@ Semantics:
   about. None of the four sweep cases above use `outputs.nodes`/
   `outputs.electrodes` for this reason (only `outputs.quantities`, which
   has no such gotcha) — see `test_common_cases.f90` for a worked filtering
-  example using the correct generated ID.
+  example using the correct generated ID. Naming the wrong (undiscretised)
+  ID here, or in `sources[].node`/`signal.sourceNode`/`observeNodes`/
+  `observeElectrodes` below, is caught immediately by
+  `fortran/src/Tupa.f90::validateStudyReferences` — right after structure
+  assembly, before any geometry-factor or solve work runs — rather than
+  deep inside a sweep, or (for `outputs.*`) not at all.
 - **`signal`** ([ADR 0015](../docs/adr/0015-time-domain-signal-schema.md))
   is optional and independent of `sources`/`frequencies` — a case runs a
   transient (time-domain) solve instead of, or alongside, a harmonic sweep.
@@ -176,12 +181,12 @@ Semantics:
   is the time/FFT sample count, stated explicitly (must be a power of two).
   See `portela1997_transient.json` for a worked example.
 
-## Parser subset limits (ADR 0006)
+## Parser (ADR 0006)
 
-Case files must stay inside the minimal-parser subset of the Fortran
-implementation: objects/arrays/strings/numbers/booleans/null only, **no
-string escape sequences**, at most **64 items per object or array**.
-Exceeding a limit raises a feh error naming the ADR. The moment a real case
-needs more (e.g. a long explicit frequency list), the plan is to switch to
-json-fortran, not to grow the custom parser. These cases double as parser
-conformance tests.
+The Fortran implementation reads case files with json-fortran (via a thin
+wrapper, `fortran/src/JsonParser.f90`): the full JSON grammar is supported —
+no item-count cap, string escape sequences work — and a malformed file
+raises a feh error with json-fortran's own line/column-aware message. These
+cases still double as parser conformance tests, and as conformance tests for
+`validateStudyReferences`'s ID cross-checks (see the `signal`/`outputs`
+notes above).
