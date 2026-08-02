@@ -33,8 +33,9 @@ implementation**; usability as an engineering tool is secondary.
 | Materials | `tLinear`, `tPortelaSoil` (ADR 0007), `tVisacroAlipioSoil` (mean set, theory.md §7); air hardcoded to vacuum (ADR 0019) |
 | Sweep & results | `runSweep` + `tResult` storage, `inputImpedance`/`maxVoltageMagnitude`; CSV/JSON writers (ADR 0012) with `outputs` filtering |
 | Time domain | `mSignal` (Heidler — legacy 6-term [38] and standard parametrised form [37, 39]; double-exp ± Jones), tail taper, in-repo FFT (ADR 0014), transfer-function transient driver (`mTransient`) |
-| JSON I/O | Minimal parser (ADR 0006); schema v1: structure + `sources`/`frequencies`/`outputs` (ADR 0013) + `signal` (ADR 0015) + voltage sources/Heidler terms (ADR 0016/0015 amendment) |
-| Cases & tests | `common/` regression fixtures (golden, not an oracle — §7 P3), 12 test programs, all green under `fpm test --profile release` |
+| JSON I/O | json-fortran parser (ADR 0006, superseded-in-place 2026-08-01); schema v1: structure + `sources`/`frequencies`/`outputs` (ADR 0013) + `signal` (ADR 0015) + voltage sources/Heidler terms (ADR 0016/0015 amendment) + `mesh` composite element (ADR 0020); pre-run reference validation (`validateStudyReferences`) and CLI verbosity levels |
+| Cases & tests | `common/` regression fixtures (golden), 15 test programs, all green under `fpm test --profile release` |
+| Validation | [`docs/validation/`](validation/README.md): digitized published-curve comparisons — Grcev et al. 2018 Fig. 12 (6 cases), Lima et al. 2020 Figs. 6/7, Poljak & Doric 2006 Fig. 4, Silva et al. 2025 Figs. 3/4 (harmonic + transient) — accepted as the release-bar oracle (§4) |
 | GUI | Python/PySide6 view-only module (`gui/`, ADR 0011): study tree, 3-D view, results/transient plots |
 
 The original gap analysis (nine numbered gaps between this repository and
@@ -163,11 +164,46 @@ Done (2026-07-17):
   supported; JSON `sources[].voltage`; `inputImpedance` uses per-frequency
   effective currents.
 
-Remaining, in order of preference. Scoping decisions from the 2026-07-17
-author Q&A in *italics*; effort rated S/M/L (S ≈ days, M ≈ a focused
-week-scale task, L = new theory/object-model work) from the 2026-07-17
-legacy survey (registered findings in theory.md §3.1, §4.3, §5, §6):
+Remaining, in order of preference. Scoping decisions from the author
+Q&As (2026-07-17, 2026-08-02) in *italics*; effort rated S/M/L (S ≈ days,
+M ≈ a focused week-scale task, L = new theory/object-model work) from the
+2026-07-17 legacy survey (registered findings in theory.md §3.1, §4.3,
+§5, §6):
 
+- Transient driver fed by the harmonic scan (interpolated transfer
+  function) — **S**. Today `transientResponse` solves the system at
+  every FFT bin (N/2 + 1 solves), so the transient dominates run time
+  even where the harmonic sweep itself is fast. The original Matlab
+  already ships the remedy as its default mode (`TODA_FREQ` off): solve
+  H(ω) only on a reduced scan grid (`freq_log` — log-spaced points with
+  the low end raised to the linear-bin floor, first point `FREQ_ZERO`),
+  then interpolate onto the FFT bins (`imitancia.m`, complex `pchip`
+  with extrapolation) before the usual inverse FFT. *Decided
+  (2026-08-02): the scan grid is the existing `frequencies` block —
+  with `signal.transferFunction: "interpolated"` the case's
+  `frequencies` axis is solved and interpolated onto the FFT bins;
+  `"full"` (default — golden fixtures unchanged) keeps today's per-bin
+  solve.* Unlike the legacy, no extrapolation: the loader must reject a
+  scan axis that does not span [`freqZeroHz`, `nyquistHz`]. Validate by
+  comparing both paths on the `silva2025_*_transient` cases; needs an
+  ADR 0015 amendment (schema) and an interpolation routine (pchip,
+  componentwise on Re/Im, matching the Matlab).
+- Windowing, Hanning first — **S**. Decoupled from the NLT item (which
+  will reuse it). *Decided (2026-08-02): both placements, selectable in
+  the file* — a `signal.window` option choosing the window function and
+  where it acts: (a) spectral data window applied to the one-sided
+  H·X product before the inverse transform (Gibbs suppression, the
+  NLT-style filter — theory.md §8), or (b) time-domain window on the
+  sampled excitation record. Default stays "none"; the erfc tail taper
+  (`tailTaper`) keeps its separate record-truncation role and default.
+  Same ADR 0015 amendment as above.
+- Portela concave-front signal — **S**. Faithful port of the legacy
+  `sinais.Portela`/`impulso.m` waveform: concave exponential front
+  i(t) = I·(e^(αt/t₁) − 1)/(e^α − 1) up to the front time t₁, flat top
+  at I until t₂, linear decay to zero at t₃ (formula now in theory.md
+  §8); JSON `signal.waveform: "portela"` with English parameter names
+  (peak, alpha = front-inclination factor, front/top-end/tail-end
+  times); cite Portela 1997 [1] as the usage context.
 - `tCatenary` — **S**. *Matlab-faithful port, discretised into straight
   segments like `tLine`*. Survey finding: the legacy "catenary"
   (`Catenaria.m`) is actually a **parabolic** sag profile (z ∝ x², sag
@@ -178,10 +214,8 @@ legacy survey (registered findings in theory.md §3.1, §4.3, §5, §6):
   `signal.transform: "fft"` (default) `| "nlt"`; flip the default only
   after P3 cross-validation, keeping golden fixtures stable*. Driver-only
   change (theory.md §8); refs: Gómez & Uribe [17], TAGS as executable
-  reference.
-- Hanning (and other) windowing — **S**, rides on NLT (the window filter
-  before the inverse transform, theory.md §8); the plain-FFT path keeps
-  the existing erfc tail taper (different role: record truncation).
+  reference. Reuses the `signal.window` spectral filter from the
+  windowing item above.
 - Ground potential rise (GPR), touch and step voltage — single-frequency
   study (§7 P7) — **M**. *Both input forms from the start: explicit
   observation-points array plus an optional auto surface-grid block,
@@ -282,11 +316,20 @@ side (ADR 0011).
 
 - **Phases 0–6**: met (see §3) — end-to-end harmonic sweep and FFT
   transient from a JSON case file, dispersive soils, regression fixtures.
-- **0.1.0 release bar** (ADR 0018): the Portela-curve case within
-  tolerance. Blocked on an executable oracle — §7 P3 (TAGS
-  cross-validation) or real tabulated data.
-- **Next engineering steps**: §7 P1 (mHEM 1-D kernel — unblocks larger
-  `common/` grids) and §7 P2 (Γ(ω) images — restores reference behaviour).
+- **Release bar — met (2026-08-02 decision)**: ADR 0018's "0.1.0" bar
+  asked for one validated physics case; the
+  [`docs/validation/`](validation/README.md) published-curve campaign
+  (Grcev, Lima ×2, Poljak, Silva ×2 — six writeups, harmonic and
+  transient) is accepted as the executable-oracle substitute (ADR 0018
+  postscript). **v0.5.0** (tagged 2026-07-31, "first release") is the
+  first public release. The Portela-curve case itself remains unmatched
+  for lack of tabulated data (theory.md §9.2); §7 P3 (TAGS
+  cross-validation) stays valuable as an independent oracle but is no
+  longer release-blocking.
+- **Next engineering steps**: the three transient items opening the
+  Phase 7 list (scan-fed transient, windowing, Portela signal), then
+  §7 P1 (mHEM 1-D kernel — unblocks larger `common/` grids) and §7 P2
+  (Γ(ω) images — restores reference behaviour).
 
 ---
 
@@ -297,6 +340,7 @@ side (ADR 0011).
 | Unit | `fortran/test/` | quadrature vs closed forms; sign/decay pins; Bessel `Z_int` vs tables; dispersion DC limit; waveforms |
 | Integration | `fortran/test/` | end-to-end DC resistance; sweep/transient consistency; reciprocity, passivity; voltage-source superposition |
 | Reference | `common/` | JSON in → CSV out, golden diff at 1e-6; shared across languages |
+| Published curves | `docs/validation/` | digitized-figure comparisons (Grcev, Lima, Poljak, Silva) with regenerable plots + per-case xlsx data |
 | Benchmarks | `benchmarks/` (proposed) | TAGS and PRTL-mHEM as git submodules; cross-code runs per [BENCHMARKS.md](BENCHMARKS.md) |
 
 There is **no hosted CI** (ADR 0018): the gate is a local
@@ -322,7 +366,7 @@ There is **no hosted CI** (ADR 0018): the gate is a local
 | Voltage-source handling | **Implemented** — current-injection equivalents (ADR 0010) by unit-injection superposition (ADR 0016), Phase 7 |
 | Impedance-fill interface | **Implemented** — theory factors inside `calcZ*` (ADR 0009) |
 | FFT dependency | **Implemented** — in-repo double-precision radix-2 FFT (ADR 0014); NLT proposed on top (§7 P4) |
-| JSON schema v1 | **Implemented (Fortran, GUI)** — ADR 0013 + 0015 (+ 0016 additions); Rust reader pending Phase 8 |
+| JSON schema v1 | **Implemented (Fortran, GUI)** — ADR 0013 + 0015 (+ 0016/0020 additions); parser migrated to json-fortran (ADR 0006 update); Rust reader pending Phase 8 |
 | Reduced `Z_g` solver | Deferred optimisation (ADR 0003) |
 | GUI module | **Decided** — Python/PySide6/Qt3D, view-only v1 (ADR 0011) |
 | Results JSON schema | **Frozen** — ADR 0012 (harmonic) and ADR 0015 (transient) |

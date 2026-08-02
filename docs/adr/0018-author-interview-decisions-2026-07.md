@@ -40,3 +40,14 @@ applied and referenced. Other documents cite this record as "ROADMAP §9"
 
 - These decisions are standing project policy until superseded by a later
   ADR; the roadmap references them instead of restating them.
+
+## Postscript (2026-08-02)
+
+- The release-process row's bar is resolved: the author accepted the
+  [`docs/validation/`](../validation/README.md) published-curve campaign
+  (Grcev et al. 2018, Lima et al. 2020 ×2, Poljak & Doric 2006,
+  Silva et al. 2025 ×2 — six writeups, harmonic and transient) as the
+  executable-oracle substitute and declared the bar met; **v0.5.0**
+  (tagged 2026-07-31) is the first public release. P3 (TAGS
+  cross-validation) remains desirable as an independent oracle but is no
+  longer release-blocking.

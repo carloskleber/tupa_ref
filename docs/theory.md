@@ -631,6 +631,15 @@ double-exponential (plain and Jones-corrected) excitation waveforms are
 implemented; the Matlab reference's remaining waveforms (single exponential,
 impulse/step,
 Portela's concave model, sine) are ported on demand, not spawned in advance.
+First in that queue (ROADMAP Phase 7) is Portela's concave-front surge
+(legacy `impulso.m`), a piecewise model used in Portela's grounding
+studies [1]:
+
+$$i(t) = I_{max}\,\frac{e^{\alpha t/t_1} - 1}{e^{\alpha} - 1} \quad (0 < t < t_1),
+\qquad i = I_{max} \quad (t_1 \le t < t_2),$$
+
+then a linear decay from $I_{max}$ at $t_2$ to zero at $t_3$ — a concave
+exponential front (inclination factor $\alpha$), flat top, straight tail.
 
 Practical notes from [1] and [3]: 512–8192 frequencies in $[0, 1\, \text{MHz}]$ suffice
 for lightning impulses. A caution from [56]: the required bandwidth is set by
@@ -642,9 +651,29 @@ the smooth behaviour of $H(\omega)$
 allows computing a reduced set of frequencies and interpolating (analytic
 fitting), drastically cutting run time. Logarithmic frequency spacing is the
 project default for broadband sweeps. The legacy Matlab implements this
-route literally: besides the plain FFT driver it ships a direct inverse
-Fourier integral evaluated by adaptive quadrature over a spline interpolation
-of the computed spectrum.
+route in two forms: (i) its *default* transient mode solves $H$ only on the
+reduced scan grid (log-spaced, low-end points raised to the linear-bin
+floor, first point `FREQ_ZERO`) and interpolates onto the $N/2+1$ FFT bins
+by complex `pchip` before the inverse FFT — a global `TODA_FREQ` flag
+switches to solving every bin; (ii) a direct inverse Fourier integral
+evaluated by adaptive quadrature over a spline interpolation of the
+computed spectrum.
+
+**Planned (ROADMAP Phase 7): scan-fed transient.** The Fortran driver
+gains form (i) as `signal.transferFunction: "full"` (default — today's
+per-bin solve) `| "interpolated"`; the scan grid is the case's own
+`frequencies` axis, which must span $[f_{zero}, f_{Nyq}]$ — the loader
+rejects an axis it would have to extrapolate, unlike the legacy. The
+`"full"` path remains the oracle the interpolated path is validated
+against (the `silva2025_*_transient` cases).
+
+**Planned (ROADMAP Phase 7): windowing.** A `signal.window` option
+(Hanning first) selectable in two placements: a spectral data window
+applied to the one-sided $H \cdot X$ product before the inverse transform
+(Gibbs suppression — the same filter the NLT refinement below applies), or
+a time-domain window on the sampled excitation record. Default is no
+window; the erfc taper on the record's final 20 % (legacy `sinalt0Pad`
+convention, `tailTaper`) keeps its separate record-truncation role.
 
 **Numerical Laplace Transform (NLT) refinement.** TAGS, PRTL and PRTL-mHEM
 solve at complex frequencies $s = c + j\omega$ instead of $j\omega$, with damping
