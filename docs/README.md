@@ -41,9 +41,13 @@ ARCHITECTURE → theory.md; contributors add CONVENTIONS and ROADMAP.
 | [0017](adr/0017-legacy-reinspection-findings.md) | Legacy re-inspection findings (July 2026) | Recorded |
 | [0018](adr/0018-author-interview-decisions-2026-07.md) | Author-interview decisions (2026-07-05) | Accepted |
 | [0019](adr/0019-air-medium-hardcoded-vacuum.md) | Air medium hardcoded as vacuum (no JSON `air` block) | Accepted |
+| [0020](adr/0020-grid-mesh-element.md) | Grid/mesh element (`"type": "mesh"`) and FIFO element order | Accepted |
+| [0021](adr/0021-transient-antialias-filter.md) | Optional anti-aliasing filter for transient synthesis | Accepted |
+| [0022](adr/0022-rust-implementation.md) | Rust implementation (`rust/`): design decisions and conformance status | Accepted |
 
 Language-specific build documentation stays with each implementation
-(e.g. [../fortran/README.md](../fortran/README.md)); FORD API docs are
+(e.g. [../fortran/README.md](../fortran/README.md),
+[../rust/README.md](../rust/README.md)); FORD API docs are
 generated from the Fortran sources (`fortran/Tupa.md`). The shared JSON
 cases and schema live in [../common/](../common/README.md). The solver-
 agnostic GUI ([GUI_SDD.md](GUI_SDD.md)) lives in [../gui/](../gui/README.md).

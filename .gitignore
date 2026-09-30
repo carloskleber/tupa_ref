@@ -14,3 +14,5 @@ fortran/gmon.out
 julia/Manifest.toml
 *_transient_plot.png
 docs/figures/*.pdf
+benchmarks/cross-impl/results/
+__pycache__/

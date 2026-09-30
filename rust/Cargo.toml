@@ -1,0 +1,26 @@
+[package]
+name = "tupa"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "TUPÃ reference model — Rust implementation of the Hybrid Electromagnetic Model (HEM)"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/carloskleber/tupa_ref"
+readme = "README.md"
+
+[lib]
+name = "tupa"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tupa"
+path = "src/main.rs"
+
+[dependencies]
+num-complex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = 3
+# No fast-math in Rust; keep default FP semantics (auditable, reproducible).

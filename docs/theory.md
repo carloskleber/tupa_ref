@@ -3,7 +3,7 @@
 This document states the electromagnetic model implemented by TUPÃ: the Hybrid
 Electromagnetic Model (HEM), an application of the Method of Moments (MoM) to
 lightning and grounding-system transients. It is the normative reference for
-every implementation (Fortran, and the planned Rust port — ROADMAP Phase 8;
+every implementation (Fortran, the Rust port in `rust/` — ROADMAP Phase 8;
 Python is reserved for the GUI, ADR 0011): where code and this
 document disagree, one of them has a bug — and the discrepancy must be resolved
 before the code is merged.
@@ -442,8 +442,8 @@ in the Fortran code is a planned refinement (ROADMAP §7 P2) that
 *restores* reference behaviour rather than adding to it; the cross-media
 coupling (air segment ↔ buried segment) is second-order and is neglected, as
 in both legacy codes (the Matlab returns zero for its "transmission"
-condition pairs). Should ROADMAP Phase 7's "mutual impedance between
-segments in different media" ever be implemented, there is **no legacy
+condition pairs). Should ROADMAP Phase 14 item 1 ("mutual impedance between
+segments in different media") ever be implemented, there is **no legacy
 implementation to port** (the Matlab's cross-media routine was left
 syntactically unfinished — ADR 0017): the theory must be derived fresh.
 The natural quasi-static candidate is a Fresnel-type *transmission*
@@ -557,7 +557,7 @@ variants), the augmented form (with LU and GMRES-fallback variants), and
 additionally a TAGS-style symmetric block system in the unknowns
 $(\mathbf{u}, I_\ell, I_t)$ (its "método 5").
 
-**Lumped circuit branches** (registered finding, feeds ROADMAP Phase 7's
+**Lumped circuit branches** (registered finding, feeds ROADMAP Phase 12 item 3,
 series-RLC element): the legacy Matlab appends its `Impedancia` elements
 *after* the $n_s$ electromagnetic segments as extra branches of the same
 $(\mathbf{i}_1, \mathbf{i}_2)$ system. A lumped branch between two existing
@@ -683,7 +683,7 @@ implemented (the legacy Jones variant [65] replaces the front term
 $e^{-\alpha t}$ by $e^{-(\alpha t)^2}$, giving zero initial $di/dt$); the Matlab reference's remaining waveforms (single exponential,
 impulse/step,
 Portela's concave model, sine) are ported on demand, not spawned in advance.
-First in that queue (ROADMAP Phase 7) is Portela's concave-front surge
+First in that queue (ROADMAP Phase 9 item 3) is Portela's concave-front surge
 (legacy `impulso.m`), a piecewise model used in Portela's grounding
 studies [1]:
 
@@ -729,7 +729,7 @@ switches to solving every bin; (ii) a direct inverse Fourier integral
 evaluated by adaptive quadrature over a spline interpolation of the
 computed spectrum.
 
-**Planned (ROADMAP Phase 7): scan-fed transient.** The Fortran driver
+**Planned (ROADMAP Phase 9 item 1): scan-fed transient.** The Fortran driver
 gains form (i) as `signal.transferFunction: "full"` (default — today's
 per-bin solve) `| "interpolated"`; the scan grid is the case's own
 `frequencies` axis, which must span $[f_{zero}, f_{Nyq}]$ — the loader
@@ -737,7 +737,7 @@ rejects an axis it would have to extrapolate, unlike the legacy. The
 `"full"` path remains the oracle the interpolated path is validated
 against (the `silva2025_*_transient` cases).
 
-**Planned (ROADMAP Phase 7): windowing.** A `signal.window` option
+**Planned (ROADMAP Phase 9 item 2): windowing.** A `signal.window` option
 (Hanning first) selectable in two placements: a spectral data window
 applied to the one-sided $H \cdot X$ product before the inverse transform
 (Gibbs suppression — the same filter the NLT refinement below applies), or
@@ -916,7 +916,7 @@ magnetic effects through separate circuit quantities like the latter — and
 reports HEM channel-current distributions consistent with full
 electromagnetic solutions, an independent endorsement of the family's
 physics from outside the grounding literature. The planned TUPÃ
-lightning-channel element (ROADMAP Phase 7) sits exactly in this class:
+lightning-channel element (ROADMAP Phase 14 item 2) sits exactly in this class:
 the channel is represented as ordinary HEM segments in air (the legacy
 provides only the geometry generator — log-spaced segments along the
 incidence direction), with **added distributed series impedance

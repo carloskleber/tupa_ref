@@ -69,7 +69,7 @@ entries.
   return-stroke channel; its coupling to line conductors raises insulator
   voltages beyond the conducted-current response [52]. Captured naturally
   once the channel is modelled as HEM segments (planned channel element,
-  ROADMAP Phase 7).
+  ROADMAP Phase 14 item 2).
 - **NLT (Numerical Laplace Transform)** — time-domain route solving at
   damped complex frequencies $s = c + j\omega$ with data windows [17];
   planned replacement for the plain FFT drive (ROADMAP P4).

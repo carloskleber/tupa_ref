@@ -44,8 +44,9 @@ instructions (retired 2026-07-05).
   case → per-language implementation (ADR 0002).
 - **No new abstraction layers** unless explicitly agreed (reference-quality
   code prefers the simple, auditable path — ADR 0003).
-- **Language separation**: no Python/Rust code inside `fortran/`; future
-  implementations get sibling top-level folders sharing `common/`.
+- **Language separation**: no Python/Rust code inside `fortran/`;
+  implementations get sibling top-level folders (`rust/`, `julia/`, `gui/`)
+  sharing `common/`.
 - **Public repo hygiene**: private legacy-code locations and personal
   reference-library paths must never appear in committed files.
 
@@ -53,14 +54,14 @@ instructions (retired 2026-07-05).
 
 | Topic | Default |
 | --- | --- |
-| Implementation language for new features | Fortran (until the Python port starts, ROADMAP Phase 8) |
+| Implementation language for new features | Fortran first; the Rust port (`rust/`, ROADMAP Phase 8) follows per its item 10 follow-along rule; Rust gate: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test --release` |
 | Soil dispersion model | `tPortelaSoil`, Lima–Portela parametrisation (ADR 0007) |
 | JSON library escape hatch | json-fortran (ADR 0006) |
 | Frequency axis | Logarithmic spacing for harmonic sweeps; linear grid for transients (theory.md §8) |
 | FFT implementation | In-repo double-precision radix-2 (`mFft`), not SLATEC (single precision) or stdlib (no FFT module in the pinned version) — ADR 0014 |
-| Parallelism | OpenMP on the geometry-factor fill loop deferred: blocked on making `mImpedance`'s quadrature reentrant first (ARCHITECTURE.md §7, ROADMAP Phase 3 item 4); frequency-loop parallelism under evaluation (ROADMAP P6) |
+| Parallelism | OpenMP on the geometry-factor fill loop deferred: blocked on making `mImpedance`'s quadrature reentrant first (ARCHITECTURE.md §7, ROADMAP Phase 3 item 4); frequency-loop parallelism under evaluation (ROADMAP P6, Phase 10 item 4) |
 | Output formats | CSV (primary) + JSON (structured) |
-| Element priority | `tLine` (done); next per ROADMAP Phase 7 |
+| Element priority | `tLine`, `mesh` (done); next per ROADMAP Phases 12–13 (`tCircumference` first) |
 | Reference validation case | Buried straight conductor, 10 m, 0.5 m depth, σ = 0.01 S/m, εr ≈ 10 (theory.md §9) |
 
 ## Testing

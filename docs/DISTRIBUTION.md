@@ -14,6 +14,7 @@ policy and the dependency inventory.
 | Optimised build | `fortran/build.sh` | `--profile release` plus `-O3 -march=native -fopenmp -ffast-math …` |
 | Development build/test | `fpm build` / `fpm test` | needs `LIBRARY_PATH=$HOME/.local/lib:$LIBRARY_PATH` for the SLATEC link when not run via build.sh |
 | API docs | FORD (`fortran/Tupa.md`) | optional; needs a Python venv (`pip install ford lxml`) |
+| Rust build/test | `cargo build --release` / `cargo test --release` in `rust/` | no system libraries; crates: `serde`, `serde_json`, `num-complex` (MIT/Apache-2.0); `Cargo.lock` is committed ([ADR 0022](adr/0022-rust-implementation.md)) |
 
 **Compilers**: latest gfortran is the reference; the code must stay
 ifx-compatible (author decision, [ROADMAP §9](ROADMAP.md)). The

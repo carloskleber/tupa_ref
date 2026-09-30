@@ -175,7 +175,7 @@ automatically as a side effect of `runSweep`.
 
 | Axis | How | Guard rails |
 | --- | --- | --- |
-| New geometry (ring, catenary, tower, grid…) | Extend `tElement`, implement `assemble` + `report` | Priority list in ROADMAP Phase 7 |
+| New geometry (ring, catenary, tower, grid…) | Extend `tElement`, implement `assemble` + `report` | Priority order in ROADMAP Phases 12–13 (ring, catenary; grid done — Phase 7 item 3) |
 | New soil/conductor model | Extend `tMaterial`, implement `calcPropagationConstant` | One subtype per literature reference, named after it (ADR 0007) |
 | New output | Extend `tResult`, implement `alloc`/`get`/`set`; wire into `runSweep` and `mResultsWriter` | Use the legacy output-class inventory to prioritise (ROADMAP P7) |
 | Alternate geometry-factor kernel (mHEM 1-D) | Swap inside `mGeometry`; 2-D quadrature stays as test oracle | ROADMAP P1; ADR 0004 |
