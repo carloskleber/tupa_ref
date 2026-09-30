@@ -406,7 +406,10 @@ impulse/step, sine) are ported alongside when a case needs them.
    at I until t₂, linear decay to zero at t₃ (formula in theory.md §8);
    JSON `signal.waveform: "portela"` with English parameter names (peak,
    alpha = front-inclination factor, front/top-end/tail-end times); cite
-   Portela 1997 [1] as the usage context.
+   Portela 1997 [1] as the usage context and Portela's 1982 course text
+   [67] as the front law's source. Accept α < 0: [67] uses it for
+   subsequent strokes (convex front), which settles theory.md §8 open
+   question 4.
 4. **Multiple injections in the transient pipeline** — **S–M**. The
    harmonic side already handles simultaneous mixed sources (ADR 0016);
    remaining work is per-source spectra × per-source transfer functions,
@@ -518,7 +521,10 @@ pulled forward if a tower-footing case needs shield wires.
    at solve time* — captures stranding/steel-core effects the equivalent
    tube misses; extrapolation limits validated and flagged. (The legacy
    ACSR spreadsheet is candidate seed data; the C++ bundle/L-profile
-   models remain a possible catalogue kind later.)
+   models remain a possible catalogue kind later.) Where no measured
+   data exists, conductor subdivision (de Arizon & Dommel [73]) can
+   compute R(f), X(f) tables for stranded or non-circular cross-sections
+   offline.
 3. **Insulated conductor** — **M–L**. The legacy branch is an
    acknowledged placeholder (drops soil conduction, ignores the coating;
    flagged TODO in the legacy code) — do **not** port it; implement
@@ -534,7 +540,8 @@ pulled forward if a tower-footing case needs shield wires.
 1. **Mutual impedance between segments in different media** — **L**.
    No legacy implementation to port (unfinished body, ADR 0017); the
    candidate quasi-static transmission-coefficient route is in theory.md
-   §5 [35]; validate on `rod_air`-class cases. *Decided (2026-07-17 Q&A):
+   §5 [35], worked out for cross-medium potentials in Salari [66]
+   App. B; validate on `rod_air`-class cases. *Decided (2026-07-17 Q&A):
    strictly after P2 (Phase 10 item 2) — both touch the same interface
    machinery and P2 restores reference behaviour first.*
 2. **Lightning discharge channel** — **M–L**. The legacy element class
@@ -753,6 +760,10 @@ test.
   direct TL+FDTD time-domain route [48] confirms the same trade-off.
 - Rational-model/FDNE export for EMT programs [26, 27] — a future *output
   format*, not solver work; revisit when users ask for EMT integration.
+  The cheapest first step would write the port impedance matrix as
+  Touchstone Z-parameters [71]. External vector-fitting tools [69,70]
+  could then do the fitting and passivity enforcement, with nothing
+  in-repo.
 
 ---
 

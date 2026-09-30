@@ -447,10 +447,16 @@ segments in different media") ever be implemented, there is **no legacy
 implementation to port** (the Matlab's cross-media routine was left
 syntactically unfinished — ADR 0017): the theory must be derived fresh.
 The natural quasi-static candidate is a Fresnel-type *transmission*
-coefficient $\tau = 2W_1/(W_1 + W_2)$ applied to the direct term (the
-antenna-theory reflection/transmission kernel of Poljak & Doric [35] is
-the closest published analogue), validated against a `rod_air`-class case;
-anything beyond that is Sommerfeld territory (§10.1).
+coefficient $\tau = 2W_1/(W_1 + W_2)$ applied to the direct term,
+validated against a `rod_air`-class case. The antenna-theory
+reflection/transmission kernel of Poljak & Doric [35] is a published
+analogue. Closer still is Salari [66] Appendix B, from the same Portela
+line of work. It takes the full Fresnel coefficients to their quasi-static
+limit, which gives exactly this $\tau$, and uses it for the scalar potential
+that a segment in one medium produces in the other. That derivation adds a
+propagation factor $e^{-(\gamma_2 - \gamma_1)\eta}$ and carries its
+author's warning that the simplifications need case-by-case checking.
+Anything beyond that is Sommerfeld territory (§10.1).
 
 Even with $\Gamma(\omega)$, the image treatment is quasi-static and the HEM
 family is usually quoted as accurate from DC up to a few MHz [19,20]. That
@@ -616,7 +622,11 @@ any `tPortelaSoil` parameter set must state which reference frequency its
 `kr` assumes. **Decision (ADR 0007, accepted 2026-07-05): `tPortelaSoil`
 adopts the Lima–Portela form [31] with $\omega_0 = 2\pi \cdot 1$ MHz** —
 legacy Matlab `kr` values (at $\omega_0 = 1$ rad/s) must be converted before
-reuse. Per [ADR 0007](adr/0007-soil-dispersion-model.md), `tMaterial` admits
+reuse. Published parameter sets for this form do exist. Salari [66] §5.3
+gives, for 100 µS/m < σ₀ < 10 mS/m, a median pair $\alpha \approx 0.706$,
+$\Delta_i \approx 11.71$ mS/m and two "reasonably safe" pairs (0.806,
+9.23 mS/m; 0.856, 7.91 mS/m). Schroeder et al. [68] use the median pair.
+Per [ADR 0007](adr/0007-soil-dispersion-model.md), `tMaterial` admits
 several dispersive-soil subtypes side by side, each named after its original
 reference — `tPortelaSoil` (implemented first, matches the validation curves),
 `tLongmireSmithSoil` (the 13-term Debye expansion of Longmire & Smith [15], as
@@ -627,6 +637,10 @@ conservative* / *conservative* parameter sets — the default soil of the TAGS
 and PRTL-mHEM codes), etc. All must reduce to the constant-parameter
 (`tLinear`) medium as $\omega \to 0$. Cavka et al. [16] compare these models
 side by side and are the reference for cross-checking any implementation.
+Schroeder et al. [68] compare Portela, Alipio–Visacro and Longmire–Smith at
+the level of line overvoltages. Portela's form disperses most, cutting
+tower-footing impulse impedance by up to ~80 % in 4000 Ω·m soil. The choice
+of soil model moves GPR much more than insulator overvoltages.
 
 **`tVisacroAlipioSoil`** (ROADMAP §7 P5) implements the *mean* curve of the
 causal model in [14], parametrised by a single free quantity, the 100 Hz
@@ -685,13 +699,15 @@ impulse/step,
 Portela's concave model, sine) are ported on demand, not spawned in advance.
 First in that queue (ROADMAP Phase 9 item 3) is Portela's concave-front surge
 (legacy `impulso.m`), a piecewise model used in Portela's grounding
-studies [1]:
+studies [1], whose front law comes from his 1982 course text [67]:
 
 $$i(t) = I_{max}\,\frac{e^{\alpha t/t_1} - 1}{e^{\alpha} - 1} \quad (0 < t < t_1),
 \qquad i = I_{max} \quad (t_1 \le t < t_2),$$
 
-then a linear decay from $I_{max}$ at $t_2$ to zero at $t_3$ — a concave
-exponential front (inclination factor $\alpha$), flat top, straight tail;
+then a linear decay from $I_{max}$ at $t_2$ to zero at $t_3$ — an
+exponential front (inclination factor $\alpha$), flat top, straight tail.
+The front is concave for $\alpha > 0$, as in first negative strokes, and
+convex for $\alpha < 0$, as in subsequent strokes [67];
 $i = 0$ for $t \le 0$ and $t \ge t_3$, with $0 < t_1 \le t_2 < t_3$. As
 $\alpha \to 0$ the front degenerates to the linear ramp $t/t_1$ and the
 quotient above is $0/0$; implementations should evaluate it as
@@ -792,8 +808,12 @@ To be settled before, or in, the ADR 0015 amendment:
    it (it is not an analytic continuation). Either the scan itself is
    solved at $c + j\omega$ with the same $c$, or the loader rejects
    `transform: "nlt"` together with `transferFunction: "interpolated"`.
-4. *Portela waveform domain.* Whether $\alpha < 0$ (a convex front) is
-   accepted or rejected — the legacy behaviour is not recorded.
+4. *Portela waveform domain.* **Settled by the source:** Portela's course
+   text [67] (Vol. II §8.1) assigns $\alpha < 0$ to subsequent negative
+   strokes, so a convex front is a documented physical case and should be
+   accepted. The `expm1` form above handles both signs. What legacy
+   `impulso.m` does with $\alpha < 0$ is still unrecorded; that matters
+   only for a legacy-parity test.
 
 **Why frequency domain at all.** The frequency-domain route assumes
 linearity: no soil ionisation, arresters or corona. When those matter, the
@@ -804,8 +824,14 @@ is linear by design and stays in the frequency domain; the transfer
 functions it produces can instead be *exported* to EMT programs
 (ATP/EMTP/PSCAD) as rational models or frequency-dependent network
 equivalents — fitting topology, order and passivity issues are treated by
-Lima et al. [26] and Salarieh [27]. Such an export is a potential output
-format, not part of the solver.
+Lima et al. [26] and Salarieh [27], on top of vector fitting [69] and
+passivity enforcement [70]. Such an export is a potential output format,
+not part of the solver. Within Portela's own line of work, Salari [66]
+takes a middle road: a hybrid frequency–time program that couples HEM-type
+electrodes with arresters, switches, corona and soil ionisation, using
+step-response techniques. Nonlinearity therefore does not strictly force a
+move out of the frequency domain, though it does force more than TUPÃ's
+single linear solve.
 
 ---
 
@@ -949,7 +975,7 @@ relative to each:
 | FDTD–PEEC hybrid | Time | 1-D FDTD for the line + PEEC for tower and lightning channel | Models the lightning-channel↔tower coupling that HEM-class tools (TUPÃ included) neglect; relevant for tower-surge, not grounding, accuracy | [25] |
 | Full-wave MoM (NEC-4 class) | Frequency | Sommerfeld-integral treatment of the interface, sub-segment current expansion | The accuracy oracle above HEM: [20] and [23] use it as reference; no geometry-factor shortcut, so far costlier; NEC-2 tower studies [50] show the non-TEM effects (transient footing impedance, sub-TEM shield-wire coupling) EMT models compress | [20,23,50] |
 | EMT line-level analysis (multistory towers, LEMP-corrected) | Time (EMT programs) | Towers as TL/multistory circuit models calibrated from full-wave analyses [50]; grounding as macromodels; LEMP field-to-line coupling addable [52] | The consumer layer above TUPÃ for line lightning performance: component-coupling neglect is validated (< a few % on peaks, less than soil-parameter uncertainty [51]), but frequency-dependent grounding [51] and LEMP-induced voltages [52] must be represented — plain EMT underestimates insulator voltages by up to ~58 %; model choices swing outage rates by up to ~70 % [54]; nonuniform spans (wide river crossings, tall towers) break the cascaded-uniform-line recipe, which can go numerically unstable — HEM segments over the catenary handle them natively [58] | [50,51,52,54,58] |
-| Rational models / FDNE for EMT | s-domain → time | Vector fitting / matrix-pencil approximation of $Z_g(\omega)$, passivity-enforced, plugged into ATP/EMTP/PSCAD | A *consumer* of TUPÃ's output, not a competitor; effective length drives realization order and robustness; the route dates back to Heimbach & Grcev's rational-function EMTP incorporation [64], ~25–30 years before [26,27] | [26,27,64] |
+| Rational models / FDNE for EMT | s-domain → time | Vector fitting / matrix-pencil approximation of $Z_g(\omega)$, passivity-enforced, plugged into ATP/EMTP/PSCAD | A *consumer* of TUPÃ's output, not a competitor; effective length drives realization order and robustness; the route dates back to Heimbach & Grcev's rational-function EMTP incorporation [64], ~25–30 years before [26,27]; the fitting and passivity machinery is vector fitting [69] and its textbook extension [70] | [26,27,64,69,70] |
 
 Grcev & Arnautovski-Toseva [56] give the fundamental statement of the
 validity bounds that organise this table: the upper frequency of interest is
@@ -965,4 +991,9 @@ full-wave methods take over. In the time domain the oracle role passes to
 3-D FDTD, which handles inhomogeneous soil, nonlinearities and non-thin-wire
 structures directly — it validates the LEMP-corrected EMT method [52] and
 carries substation grid-plus-shielded-cable problems [53] that sit outside
-HEM scope altogether.
+HEM scope altogether. CIGRE TB 543 [72] gives the working rule for this
+layering. EMTP-type tools fail on non-TEM propagation, and the full-wave
+codes are too costly for whole networks. Numerical EM analysis is therefore
+best used to compute the impedances that circuit-theory tools need, and to
+supply reference cases for the faster codes. The first half of that rule is
+TUPÃ's role.

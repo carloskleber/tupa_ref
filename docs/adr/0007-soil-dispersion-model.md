@@ -80,6 +80,14 @@ passivity/DC-limit checks with `tPortelaSoil` in place of `tLinear` soil
 (illustrative `alpha0`/`kr`, since no tabulated Lima–Portela parameter set
 is available — ROADMAP §9 "Validation data").
 
+> **Update (2026-09-30).** Tabulated sets do exist: Salari's thesis
+> (references.md [66], §5.3) gives a median pair α ≈ 0.706,
+> Δᵢ (= `kr`) ≈ 11.71 mS/m, and two "reasonably safe" pairs (0.806,
+> 9.23 mS/m; 0.856, 7.91 mS/m), for 100 µS/m < σ₀ < 10 mS/m at
+> ω₀ = 2π·1 MHz, which is this ADR's form. Schroeder et al. [68] use the
+> median pair. The test's illustrative values could be replaced by the
+> median pair. Exposing the sets as named presets is not yet decided.
+
 **Exercised (ROADMAP §P5, 2026-07-16)**: `tVisacroAlipioSoil` is implemented
 alongside it, same `tMaterial%admittance` interface, *mean* parameter set of
 Alipio & Visacro [14] with `sigma0` (100 Hz conductivity) as the sole free

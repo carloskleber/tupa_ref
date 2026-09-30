@@ -573,6 +573,96 @@ below) as the sources of its dispersive-soil routines:
     against the paper (added 2026-09-30 from the code comment's
     "R.D. Jones 1977").
 
+## Portela-school lineage
+
+66. **Salari Filho, J. C.** — *Efeito das Descargas Atmosféricas no
+    Desempenho de Linhas de Transmissão — Modelagens nos Domínios do Tempo e
+    da Freqüência*, D.Sc. thesis, COPPE/UFRJ, Rio de Janeiro, Dec. 2006
+    (advisor C. Portela; in Portuguese). The thesis behind [4]: cylindrical
+    electrodes in the Portela formulation (it names [3] among the works
+    derived from it) combined with lumped linear and nonlinear circuit
+    elements (RLC, transformers, switches, arresters) in one hybrid
+    frequency–time program, plus corona on overhead cables, soil
+    ionisation and a lightning-channel model, applied to grounding systems
+    and 138–500 kV lines. Three parts matter for TUPÃ. §5.3 tabulates
+    parameter sets for the Lima–Portela soil form at $\omega_0 = 2\pi\cdot$
+    1 MHz, valid for 100 µS/m < σ₀ < 10 mS/m: median α ≈ 0.706,
+    Δᵢ ≈ 11.71 mS/m, and two "reasonably safe" pairs (0.806, 9.23 mS/m;
+    0.856, 7.91 mS/m). α and Δᵢ are treated as independent,
+    Weibull-distributed variables (after Portela & Tavares, 2001).
+    Appendix B derives the Fresnel reflection/transmission coefficients at
+    the plane interface and their quasi-static limits, and uses them for
+    cross-medium scalar potentials.
+67. **Portela, C.** — *Sobretensões e Coordenação de Isolamento*, course
+    text in three volumes, COPPE/UFRJ, 1982 (in Portuguese). Vol. II (ch. 8,
+    lightning) introduces the front law
+    $i = I\,(e^{\alpha t/T} - 1)/(e^{\alpha} - 1)$ that the legacy
+    `impulso.m` implements. α is positive for first negative downward
+    strokes and negative for subsequent strokes, so the legacy "concave"
+    waveform also covers convex fronts. Vol. II also works through
+    tower-top, mid-span and nearby-ground strokes with critical-current
+    tables. Vol. III (ch. 9) sets out insulation coordination as a
+    stress–strength risk integral.
+
+## Frequency-dependent soil models (addendum)
+
+68. **Schroeder, M. A. O.; Correia de Barros, M. T.; Lima, A. C. S.;
+    Afonso, M. M.; Moura, R. A. R.** — "Evaluation of the Impact of
+    Different Frequency Dependent Soil Models on Lightning Overvoltages",
+    *Electric Power Systems Research*, 2017 (article in press).
+    DOI: 10.1016/j.epsr.2017.09.020. Runs Portela (median set of [66]),
+    Alipio–Visacro [13] and Longmire–Smith [15] soils through one chain:
+    HEM-class tower-footing impedance, vector fitting [69], ATP. Portela's
+    form disperses most. It cuts impulse impedance by up to ~80 %
+    (4000 Ω·m, subsequent strokes), against 10–66 % for first strokes. GPR
+    is far more sensitive to the soil model than insulator overvoltages
+    are. All three models pass a Kramers–Kronig causality check. The paper
+    prints Δᵢ as "11.71 S/m", but [66] gives mS/m.
+
+## Rational macromodeling and EMT interchange
+
+69. **Gustavsen, B.; Semlyen, A.** — "Rational Approximation of Frequency
+    Domain Responses by Vector Fitting", *IEEE Trans. Power Delivery*,
+    vol. 14, no. 3, pp. 1052–1061, Jul. 1999. DOI: 10.1109/61.772353.
+    Vector fitting: iterative pole relocation from starting poles (complex
+    ones for resonant responses) to a pole–residue model of sampled
+    frequency data. This is the fitting step that FDNE export needs
+    [26,64], and the one [48] and [68] rely on.
+70. **Grivet-Talocia, S.; Gustavsen, B.** — *Passive Macromodeling: Theory
+    and Applications*, Wiley, 2016. ISBN 978-1-118-09491-4. Textbook
+    treatment of the rest of that route: causality and passivity
+    definitions, passivity assessment and enforcement, model-order
+    reduction, and circuit synthesis for time-domain solvers.
+71. **IBIS Open Forum** — *Touchstone® File Format Specification*,
+    version 2.1, ratified Jan. 2024. ASCII n-port network data (S, Y or Z
+    parameters per frequency, any port count). The standard interchange
+    file for sampled frequency responses, read by vector-fitting tools and
+    circuit simulators.
+
+## Numerical electromagnetic analysis guidelines
+
+72. **CIGRE WG C4.501 (convenor A. Ametani)** — *Guideline for Numerical
+    Electromagnetic Analysis Method and its Application to Surge
+    Phenomena*, Technical Brochure 543, June 2013. Sets out where EMTP-type
+    circuit/TL modelling fails (non-TEM propagation, tower and footing
+    frequency dependence, grounding electrodes) and surveys the full-wave
+    methods (FDTD, TLM, FEM-TD, MoM, PEEC), with benchmark cases for
+    towers, grounding rods and grids, substations and induced surges. Its
+    conclusion describes TUPÃ's role: use numerical EM analysis to compute
+    the impedances that circuit-theory tools need but lack, and as
+    reference cases to test the faster TL-based codes.
+
+## Conductor internal impedance (addendum)
+
+73. **de Arizon, P.; Dommel, H. W.** — "Computation of Cable Impedances
+    Based on Subdivision of Conductors", *IEEE/PES 1986 Summer Meeting*,
+    Mexico City, Jul. 1986, Paper 86 SM 399-0. Frequency-dependent R and L
+    of arbitrary cross-sections, found by splitting conductors into
+    circular, square or elemental subconductors. Checked against the exact
+    coaxial solution, then applied to pipe-type cables with magnetic pipes
+    and to stranded conductors in the power-line-carrier range. This is the
+    numerical route where analytic formulas [40,43] need axial symmetry.
+
 ## Related open-source implementations
 
 Companion codes of the same model family, useful as executable cross-checks
