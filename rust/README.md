@@ -52,16 +52,20 @@ cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test --r
 
 ## Conformance status
 
-Measured on 2026-09-30 (Linux, `rustc 1.94`). Tolerance and comparison rule:
-1e-6 relative on the row scale `max(1e-6, |re|, |im|)`, rows keyed by
-`(frequency_hz, quantity, id)` (`tests/conformance.rs`).
+Measured on 2026-09-30 (Linux, `rustc 1.94`; Phase 9 rows `rustc 1.97`).
+Tolerance and comparison rule: 1e-6 relative on the row scale
+`max(1e-6, |re|, |im|)`, rows keyed by `(frequency_hz, quantity, id)`
+(`tests/conformance.rs`). Transient fixtures (ADR 0015 amendment
+2026-09-30): rows by position, values within
+`1e-6 · max(|expected|, 1e-3 · series peak)`.
 
 | Case | Fixture | Result |
 | --- | --- | --- |
 | `portela1997` | `portela1997_expected.csv` | **match** (1e-6) |
 | `rod` | `rod_expected.csv` | **match** (1e-6) |
 | `grid` | `grid_expected.csv` | **match** (1e-6); fixture predates ADR 0020's FIFO order and lists electrodes in reverse declaration order — see below |
-| `portela1997_transient`, `silva2025_*_transient` | none | runs; internal consistency only |
+| `portela1997_transient_{interpolated,hann,hann_time,multi,nlt}` (ROADMAP Phase 9) | `*_expected.csv` (transient shape, Fortran output) | **match** — worst 1.5e-8 under the transient rule (below); `tests/conformance.rs::check_transient_case` |
+| `portela1997_transient`, `silva2025_*_transient` | none | vs fresh Fortran runs (2026-09-30, after Phase 9): 3e-12 and 2e-9 (`silva2025_rho100_transient`) under the transient rule |
 | `silva2025_*`, `grcev_*`, `lima_*`, `poljak_fig4`, `rod_air`, … | none | load, validate, assemble; sweeps run |
 | `portelaMesh` | none (structure-only) | 185 nodes / 200 electrodes, as pinned in `test_mesh_element.f90` |
 | `linha*`, `torre*` (ADR 0023: `catenary` element, `portela` waveform) | none | load, validate, assemble; vs fresh Fortran runs: `linha1` 3e-10, `linha4` 1e-5 (quadrature-tolerance level, same with zero sag) — see `common/README.md` |
@@ -77,16 +81,17 @@ item 9) still needs Fortran outputs for the non-golden cases.
 
 **Not yet covered**
 
-- No golden fixture exists for transient, voltage-source, `mesh`, `portela`
-  or `alipio-visacro` cases — Phase 8 item 1 (Fortran side). The Rust code
+- No golden fixture exists yet for `portela1997_transient` itself, or for
+  voltage-source, `mesh`, `portela` or `alipio-visacro` cases — Phase 8
+  item 1 (Fortran side); the Phase 9 transient fixtures above are the first
+  transient ones. The Rust code
   paths are exercised by ported unit/consistency tests (`tests/physics.rs`:
   DC limit vs Sunde, passivity, sweep vs manual loop, voltage-source
   superposition, transient vs low-frequency impedance, mesh topology) but
   not compared against Fortran numbers.
-- The Fortran `test_common_cases` compares rows by position. If
-  `grid_expected.csv` indeed is in reverse electrode order (it is, in the
-  checked-in file) that test needs the fixture regenerated — not checked
-  here, no Fortran toolchain in the session that wrote this port.
+- The Fortran `test_common_cases` compares rows by position, and fails on
+  `grid_expected.csv` (reverse electrode order; confirmed with gfortran 13
+  on 2026-09-30) — the fixture needs regenerating (Phase 8 item 1).
 - Bessel `I₀/I₁` is series + Hankel asymptotics, valid for the 45° arguments
   of the solid conductor; the tubular conductor (Phase 12 item 2) needs a
   general-phase implementation (ADR 0022).
@@ -96,3 +101,13 @@ item 9) still needs Fortran outputs for the non-golden cases.
 
 Each later contract change (schema, `common/` case, default numerics)
 carries a Rust item; lags are recorded in the conformance table above.
+
+- **ROADMAP Phase 9** (transient pipeline completion, ADR 0015 amendment
+  2026-09-30) — **implemented, no lag**: `signal.sources` and the `sine`
+  waveform, `window` (half-Hann, spectral/time), `transferFunction:
+  "interpolated"` (`transient::pchip_interpolate`, Matlab `pchip` port),
+  `transform: "nlt"` (`Study::run_sweep_damped`, `admittance_laplace`,
+  `calc_param_laplace`, `internal_impedance_laplace`). With `Re s > 0` the
+  internal-impedance Bessel argument has phase below 45°, where the
+  dropped `e^{-z}` companion of the asymptotic branch is even smaller
+  (ADR 0022 note still applies to the tubular conductor).

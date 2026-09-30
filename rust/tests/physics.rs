@@ -8,10 +8,13 @@ use tupa::ctes::PI;
 use tupa::element::{Catenary, Element, Line, MeshElement};
 use tupa::material::{Linear, Medium};
 use tupa::node::Node;
-use tupa::signal::new_double_exp_signal;
+use tupa::signal::{new_double_exp_signal, new_sine_signal, tail_taper};
 use tupa::structure::Structure;
 use tupa::study::{Source, Study, log_frequency_axis};
-use tupa::transient::{TransientSpec, transient_response};
+use tupa::transient::{
+    TransferFunction, Transform, TransientOptions, TransientSource, TransientSpec, Window,
+    WindowPlacement, hann_half_window, transient_response,
+};
 use tupa::{load_study, validate_study_references};
 
 fn common() -> PathBuf {
@@ -169,14 +172,19 @@ fn mixed_voltage_and_current_sources_superpose() {
 fn transient_tracks_low_frequency_impedance_and_antialias_option() {
     let mut study = portela_study(10);
     let spec = |aa: f64| TransientSpec {
-        signal: new_double_exp_signal(1.0e3, "f250_2500", false).unwrap(),
-        source_node: "Node_1".into(),
+        sources: vec![TransientSource {
+            node: "Node_1".into(),
+            signal: new_double_exp_signal(1.0e3, "f250_2500", false).unwrap(),
+        }],
         observe_nodes: vec!["Node_1".into()],
         observe_electrodes: vec!["Line_1_e1".into()],
         nyquist_hz: 1.0e4,
         fft_points: 1024,
         freq_zero_hz: 1.0e-6,
-        antialias_start: aa,
+        options: TransientOptions {
+            antialias_start: aa,
+            ..Default::default()
+        },
     };
     let base = transient_response(&mut study, &spec(1.0)).unwrap();
     assert_eq!(base.t.len(), 1024);
@@ -188,13 +196,12 @@ fn transient_tracks_low_frequency_impedance_and_antialias_option() {
     let zin = study.input_impedance("Node_1").unwrap();
     assert!(zin.iter().all(|z| z.re >= -1e-9 * z.norm().max(1.0)));
     let z_low = zin[1].norm();
-    let ipeak = base
-        .injected_current
+    let ipeak = base.injected_currents[0]
         .iter()
         .enumerate()
         .fold((0, f64::MIN), |m, (i, &v)| if v > m.1 { (i, v) } else { m })
         .0;
-    let ratio = base.node_responses[0][ipeak] / base.injected_current[ipeak];
+    let ratio = base.node_responses[0][ipeak] / base.injected_currents[0][ipeak];
     assert!((ratio - z_low).abs() < 0.25 * z_low, "{ratio} vs {z_low}");
 
     let half = transient_response(&mut study, &spec(0.25)).unwrap();
@@ -214,6 +221,154 @@ fn transient_tracks_low_frequency_impedance_and_antialias_option() {
     let mut bad = spec(1.0);
     bad.fft_points = 1000;
     assert!(transient_response(&mut study, &bad).is_err());
+}
+
+/// ROADMAP Phase 9 (ADR 0015 amendment 2026-09-30): ports of the Phase 9
+/// blocks of `fortran/test/test_transient.f90`.
+fn slow_surge_spec(n: usize, observe: &[&str]) -> TransientSpec {
+    TransientSpec {
+        sources: vec![TransientSource {
+            node: "Node_1".into(),
+            signal: new_double_exp_signal(1.0e3, "f250_2500", false).unwrap(),
+        }],
+        observe_nodes: observe.iter().map(|s| s.to_string()).collect(),
+        observe_electrodes: vec![],
+        nyquist_hz: 1.0e4,
+        fft_points: n,
+        freq_zero_hz: 1.0e-6,
+        options: TransientOptions::default(),
+    }
+}
+
+fn max_abs_diff(a: &[Vec<f64>], b: &[Vec<f64>]) -> f64 {
+    a.iter()
+        .zip(b)
+        .flat_map(|(x, y)| x.iter().zip(y).map(|(p, q)| (p - q).abs()))
+        .fold(0.0, f64::max)
+}
+
+fn max_abs(a: &[Vec<f64>]) -> f64 {
+    a.iter().flatten().fold(0.0_f64, |m, v| m.max(v.abs()))
+}
+
+#[test]
+fn phase9_interpolated_transfer_function_tracks_full_solve() {
+    let mut study = portela_study(10);
+    let full =
+        transient_response(&mut study, &slow_surge_spec(1024, &["Node_1", "Node_2"])).unwrap();
+    let mut spec = slow_surge_spec(1024, &["Node_1", "Node_2"]);
+    spec.options.transfer_function = TransferFunction::Interpolated;
+    spec.options.scan_freq_hz = log_frequency_axis(1.0e-6, 1.0e4, 101).unwrap();
+    let interp = transient_response(&mut study, &spec).unwrap();
+    let peak = max_abs(&full.node_responses);
+    assert!(max_abs_diff(&interp.node_responses, &full.node_responses) < 1e-4 * peak);
+    // a scan axis that does not reach Nyquist is rejected (no extrapolation)
+    spec.options.scan_freq_hz = log_frequency_axis(1.0e-6, 5.0e3, 101).unwrap();
+    assert!(transient_response(&mut study, &spec).is_err());
+    spec.options.scan_freq_hz = log_frequency_axis(1.0e-6, 1.0e4, 101).unwrap();
+    spec.options.transform = Transform::Nlt;
+    assert!(transient_response(&mut study, &spec).is_err());
+}
+
+#[test]
+fn phase9_multiple_injections_superpose() {
+    let mut study = portela_study(10);
+    let obs = ["Node_1", "Node_2"];
+    let full = transient_response(&mut study, &slow_surge_spec(1024, &obs)).unwrap();
+    let half = new_double_exp_signal(0.5e3, "f250_2500", false).unwrap();
+    let mut spec = slow_surge_spec(1024, &obs);
+    spec.sources = vec![
+        TransientSource {
+            node: "Node_1".into(),
+            signal: half.clone(),
+        },
+        TransientSource {
+            node: "Node_1".into(),
+            signal: half.clone(),
+        },
+    ];
+    let two = transient_response(&mut study, &spec).unwrap();
+    assert_eq!(two.injected_currents.len(), 2);
+    assert!(
+        max_abs_diff(&two.node_responses, &full.node_responses)
+            < 1e-12 * max_abs(&full.node_responses)
+    );
+
+    let sine = new_sine_signal(200.0, 2.0e3, 30.0).unwrap();
+    spec.sources = vec![
+        TransientSource {
+            node: "Node_1".into(),
+            signal: half.clone(),
+        },
+        TransientSource {
+            node: "Node_2".into(),
+            signal: sine.clone(),
+        },
+    ];
+    let both = transient_response(&mut study, &spec).unwrap();
+    spec.sources = vec![TransientSource {
+        node: "Node_1".into(),
+        signal: half,
+    }];
+    let a = transient_response(&mut study, &spec).unwrap();
+    spec.sources = vec![TransientSource {
+        node: "Node_2".into(),
+        signal: sine,
+    }];
+    let b = transient_response(&mut study, &spec).unwrap();
+    let sum: Vec<Vec<f64>> = a
+        .node_responses
+        .iter()
+        .zip(&b.node_responses)
+        .map(|(x, y)| x.iter().zip(y).map(|(p, q)| p + q).collect())
+        .collect();
+    assert!(max_abs_diff(&both.node_responses, &sum) < 1e-10 * max_abs(&both.node_responses));
+}
+
+#[test]
+fn phase9_window_placements() {
+    let mut study = portela_study(10);
+    let mut spec = slow_surge_spec(1024, &["Node_1"]);
+    spec.options.window = Window::Hann;
+    spec.options.window_placement = WindowPlacement::Time;
+    let r = transient_response(&mut study, &spec).unwrap();
+    let wave = spec.sources[0].signal.waveform(&r.t);
+    let (taper, w) = (tail_taper(1024), hann_half_window(1024).unwrap());
+    for k in 0..1024 {
+        assert!((r.injected_currents[0][k] - wave[k] * taper[k] * w[k]).abs() < 1e-12 * 1e3);
+    }
+    spec.options.window_placement = WindowPlacement::Spectral;
+    let hann = transient_response(&mut study, &spec).unwrap();
+    let mut spec2 = slow_surge_spec(1024, &["Node_1"]);
+    spec2.options.antialias_start = 1e-12;
+    let tukey = transient_response(&mut study, &spec2).unwrap();
+    assert!(
+        max_abs_diff(&hann.node_responses, &tukey.node_responses)
+            < 1e-8 * max_abs(&hann.node_responses)
+    );
+}
+
+#[test]
+fn phase9_nlt_beats_fft_on_a_short_record() {
+    let mut study = portela_study(10);
+    let long = transient_response(&mut study, &slow_surge_spec(4096, &["Node_1"])).unwrap();
+    let fft = transient_response(&mut study, &slow_surge_spec(256, &["Node_1"])).unwrap();
+    let mut spec = slow_surge_spec(256, &["Node_1"]);
+    spec.options.transform = Transform::Nlt;
+    let nlt = transient_response(&mut study, &spec).unwrap();
+    let n = 128;
+    let peak = long.node_responses[0][..n]
+        .iter()
+        .fold(0.0_f64, |m, v| m.max(v.abs()));
+    let err = |r: &[f64]| {
+        (0..n)
+            .map(|k| (r[k] - long.node_responses[0][k]).abs())
+            .fold(0.0, f64::max)
+            / peak
+    };
+    let (e_nlt, e_fft) = (err(&nlt.node_responses[0]), err(&fft.node_responses[0]));
+    assert!(e_nlt < 1e-4, "NLT error {e_nlt}");
+    assert!(e_nlt < e_fft, "NLT {e_nlt} vs FFT {e_fft}");
 }
 
 fn mesh_structure(rows_x: usize, rows_y: usize, segments: usize, id: &str) -> Structure {

@@ -99,7 +99,7 @@ module mImpedance
   integer, parameter :: igauss(7) = [2, 4, 6, 8, 10, 12, 14]
   !! Indices in xgk/wgk that correspond to the 7-point Gauss rule
 
-  public :: geometryFactor2D, inverseDistanceIntegrand, lowerLimit, upperLimit, TWODQ, internalImpedance
+  public :: geometryFactor2D, inverseDistanceIntegrand, lowerLimit, upperLimit, TWODQ, internalImpedance, internalImpedanceLaplace
   public :: setQuadEpsRel, getQuadEpsRel
 
 contains
@@ -171,6 +171,38 @@ contains
     zPerLength = sqrt(cmplx(0.0d0, omega, kind=8) * mur * MU0 / sigma) / (2.0d0 * PI * radius) * ratio
     Zint = zPerLength * length
   end function internalImpedance
+
+  complex(8) function internalImpedanceLaplace(radius, length, s, sigma, mur) result(Zint)
+    !! `internalImpedance` at a complex frequency s = c + jω (jω -> s in
+    !! both square roots), for the Numerical Laplace Transform driver
+    !! (ROADMAP Phase 9 item 5). ZBESI takes any complex argument; with
+    !! Re(s) >= 0, arg(rho) lies in [0, π/4], so the |rho| > 500 cut-off
+    !! (ratio -> 1) also bounds the unscaled I0/I1 below overflow.
+    real(8), intent(in) :: radius, length
+    complex(8), intent(in) :: s
+    !! Complex frequency s = c + jω (1/s)
+    real(8), intent(in) :: sigma, mur
+    complex(8) :: rho, ratio, zPerLength
+    real(8) :: cyr(2), cyi(2)
+    integer :: nz, ierr
+    character(len=8) :: ierrStr
+
+    rho = radius * sqrt(s * mur * MU0 * sigma)
+
+    if (abs(rho) > 500.0d0) then
+      ratio = cmplx(1.0d0, 0.0d0, kind=8)
+    else
+      call zbesi(real(rho, kind=8), aimag(rho), 0.0d0, 1, 2, cyr, cyi, nz, ierr)
+      if (ierr /= 0 .and. ierr /= 3) then
+        write(ierrStr, '(I0)') ierr
+        call raiseError("internalImpedanceLaplace: ZBESI failed with IERR=" // trim(ierrStr))
+      end if
+      ratio = cmplx(cyr(1), cyi(1), kind=8) / cmplx(cyr(2), cyi(2), kind=8)
+    end if
+
+    zPerLength = sqrt(s * mur * MU0 / sigma) / (2.0d0 * PI * radius) * ratio
+    Zint = zPerLength * length
+  end function internalImpedanceLaplace
 
   ! =====================================================================
   ! Public entry point for mutual impedance

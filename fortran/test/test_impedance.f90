@@ -260,6 +260,29 @@ program test_impedance
                "Result: " // trim(adjustl(real_to_str(result))))
 
   ! Final summary
+  ! ROADMAP Phase 9 item 5: internalImpedanceLaplace(j*omega) must equal
+  ! internalImpedance(omega); at s = c + j*omega (c > 0) it stays finite
+  ! and conjugate-symmetric.
+  call test_init("internalImpedanceLaplace consistency")
+  block
+    real(8) :: om, errMax
+    complex(8) :: zs
+    integer :: ik
+    errMax = 0.0d0
+    do ik = 0, 8
+      om = 2.0d0 * 3.141592653589793d0 * 10.0d0 ** ik
+      errMax = max(errMax, abs(internalImpedanceLaplace(0.007d0, 1.0d0, cmplx(0.0d0, om, kind=8), 5.96d7, 1.0d0) &
+                               - internalImpedance(0.007d0, 1.0d0, om, 5.96d7, 1.0d0)) &
+                           / abs(internalImpedance(0.007d0, 1.0d0, om, 5.96d7, 1.0d0)))
+    end do
+    call test_ok("Zint(s = j*omega) matches Zint(omega) to 1e-12 (1 Hz .. 100 MHz)", errMax < 1.0d-12, "")
+    zs = internalImpedanceLaplace(0.007d0, 1.0d0, cmplx(3.0d4, 1.0d5, kind=8), 5.96d7, 1.0d0)
+    call test_ok("Zint(c + j*omega) is finite", .not. (ieee_is_nan(real(zs)) .or. ieee_is_nan(aimag(zs))), "")
+    call test_ok("Zint(conjg(s)) = conjg(Zint(s))", &
+                 abs(internalImpedanceLaplace(0.007d0, 1.0d0, cmplx(3.0d4, -1.0d5, kind=8), 5.96d7, 1.0d0) &
+                     - conjg(zs)) < 1.0d-12 * abs(zs), "")
+  end block
+
   call test_summary()
 
 contains

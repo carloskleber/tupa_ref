@@ -122,6 +122,26 @@ impl Mesh {
         }
     }
 
+    /// `calc_param_w` at a complex frequency `s = c + jω` (every `jω → s`),
+    /// for the Numerical Laplace Transform (ROADMAP Phase 9 item 5)
+    pub fn calc_param_laplace(
+        &mut self,
+        s: Complex64,
+        mu_air: f64,
+        w_air: Complex64,
+        mu_soil: f64,
+        w_soil: Complex64,
+    ) {
+        self.medium = MediumConstants {
+            c_e_air: 1.0 / (FOUR_PI * w_air),
+            c_e_soil: 1.0 / (FOUR_PI * w_soil),
+            c_m_air: s * (mu_air / FOUR_PI),
+            c_m_soil: s * (mu_soil / FOUR_PI),
+            prop_air: (s * mu_air * w_air).sqrt(),
+            prop_soil: (s * mu_soil * w_soil).sqrt(),
+        }
+    }
+
     fn medium_for(&self, pos: u8) -> (Complex64, Complex64, Complex64, f64) {
         if pos == AIR {
             (

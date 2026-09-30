@@ -178,7 +178,18 @@ function load_source(s)
     return Source(node, 0.0im, false)
 end
 
+# ROADMAP Phase 9 signal fields (ADR 0015 amendment 2026-09-30) that this
+# port does not implement yet: rejected rather than silently ignored, so a
+# case never runs as a plain-FFT transient by mistake (julia/README.md
+# conformance table).
+const PHASE9_SIGNAL_FIELDS = ("sources", "window", "transform", "nltDamping", "transferFunction")
+
 function load_signal(s)
+    for key in PHASE9_SIGNAL_FIELDS
+        field(s, key) === nothing ||
+            raise_error("mTupa: signal.$key (ROADMAP Phase 9) is not implemented in the Julia port yet " *
+                        "(follow-along lag, see julia/README.md)")
+    end
     imax = field(s, "imax") === nothing ? nothing : json_real(s, "imax")
     wf = json_str(s, "waveform")
     signal = if wf == "heidler"

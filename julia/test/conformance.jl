@@ -39,5 +39,5 @@ end
 
 @testset "every golden fixture has a test" begin
     names = sort([replace(f, "_expected.csv" => "") for f in readdir(COMMON) if endswith(f, "_expected.csv")])
-    @test names == ["grid", "portela1997", "rod"]
+    @test names == sort(["grid", "portela1997", "rod", PHASE9_LAG...])
 end

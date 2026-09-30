@@ -230,6 +230,20 @@ program test_signal
     call test_ok("alpha -> 0 converges to the ramp (expm1 form)", abs(ip(2) - 0.25_dp) < 1.0d-12, "")
   end block
 
+  ! ROADMAP Phase 9 item 4: switched-on sine
+  call test_init("tSineSignal")
+  block
+    type(tSineSignal) :: sn
+    real(dp) :: ts(4), is(4)
+    sn = newSineSignal(10.0_dp, 50.0_dp, 90.0_dp)
+    ts = [-1.0d-3, 0.0_dp, 10.0d-3, 5.0d-3]
+    is = sn%waveform(ts)
+    call test_ok("zero before t = 0", is(1) == 0.0_dp, "")
+    call test_ok("phase 90 deg starts at the crest", abs(is(2) - 10.0_dp) < 1.0d-12, "")
+    call test_ok("half period later: trough", abs(is(3) + 10.0_dp) < 1.0d-12, "")
+    call test_ok("quarter period: zero crossing", abs(is(4)) < 1.0d-12, "")
+  end block
+
   call test_summary()
 
 end program test_signal

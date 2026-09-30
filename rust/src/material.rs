@@ -74,7 +74,22 @@ impl Linear {
     }
 }
 
+impl Linear {
+    /// `W(s) = σ + sε` at a complex frequency `s = c + jω` (NLT, ROADMAP
+    /// Phase 9 item 5)
+    pub fn admittance_laplace(&self, s: Complex64) -> Complex64 {
+        self.sigma + s * (self.epsilonr * EPSILON0)
+    }
+}
+
 impl PortelaSoil {
+    /// `W(s) = σ₀ + kr·(s/ω₀)^α₀ / sin(πα₀/2)`: analytic continuation of
+    /// `admittance` (principal branch), equal to it on `s = jω`
+    pub fn admittance_laplace(&self, s: Complex64) -> Complex64 {
+        let omega0 = 2.0 * PI * 1.0e6;
+        self.sigma0 + self.kr / (0.5 * PI * self.alpha0).sin() * (s / omega0).powf(self.alpha0)
+    }
+
     /// `W(ω) = σ₀ + kr·[cot(πα₀/2) + j]·(ω/ω₀)^α₀` (ADR 0007)
     pub fn admittance(&self, omega: f64) -> Complex64 {
         let omega0 = 2.0 * PI * 1.0e6;
@@ -86,6 +101,18 @@ impl PortelaSoil {
 }
 
 impl AlipioVisacroSoil {
+    /// `W(s) = σ₀ + σ₀h(s/ω₀)^ξ / cos(πξ/2) + sε₀ε∞`: analytic continuation
+    /// of `admittance` (principal branch), equal to it on `s = jω`
+    pub fn admittance_laplace(&self, s: Complex64) -> Complex64 {
+        const XI: f64 = 0.54;
+        const EPSR_INF: f64 = 12.0;
+        let omega0 = 2.0 * PI * 1.0e6;
+        let h = 1.26 * (1.0e3 * self.sigma0).powf(-0.73);
+        self.sigma0
+            + self.sigma0 * h / (0.5 * PI * XI).cos() * (s / omega0).powf(XI)
+            + s * (EPSILON0 * EPSR_INF)
+    }
+
     /// `W(ω) = σ₀ + Δσ(f)[1 + j tan(πξ/2)] + jωε₀ε∞` (theory.md §7, mean set)
     pub fn admittance(&self, omega: f64) -> Complex64 {
         const F0: f64 = 1.0e6;
@@ -120,6 +147,15 @@ impl Medium {
         }
     }
 
+    /// Complex immittance `W(s)` at `s = c + jω` (NLT, ROADMAP Phase 9 item 5)
+    pub fn admittance_laplace(&self, s: Complex64) -> Complex64 {
+        match self {
+            Medium::Linear(m) => m.admittance_laplace(s),
+            Medium::Portela(m) => m.admittance_laplace(s),
+            Medium::AlipioVisacro(m) => m.admittance_laplace(s),
+        }
+    }
+
     /// `γ = √(jωμ₀μrW(ω))`, `Re γ ≥ 0`
     pub fn propagation_constant(&self, omega: f64) -> Complex64 {
         (Complex64::new(0.0, omega) * self.mur() * MU0 * self.admittance(omega)).sqrt()
@@ -144,6 +180,37 @@ impl Medium {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn laplace_admittance_continues_the_harmonic_one() {
+        let media = [
+            Medium::Linear(Linear::new("s", 10.0, 1.0, 1e-3)),
+            Medium::Portela(PortelaSoil {
+                id: "s".into(),
+                mur: 1.0,
+                sigma0: 1e-3,
+                alpha0: 0.706,
+                kr: 1.95e-3,
+            }),
+            Medium::AlipioVisacro(AlipioVisacroSoil {
+                id: "s".into(),
+                mur: 1.0,
+                sigma0: 1e-3,
+            }),
+        ];
+        for m in &media {
+            for k in 0..=8 {
+                let om = 2.0 * PI * 10f64.powi(k);
+                let w = m.admittance(om);
+                let wl = m.admittance_laplace(Complex64::new(0.0, om));
+                assert!((wl - w).norm() / w.norm() < 1e-12, "{m:?} at {om}");
+                let s = Complex64::new(3e4, om);
+                let a = m.admittance_laplace(s.conj());
+                let b = m.admittance_laplace(s).conj();
+                assert!((a - b).norm() / b.norm() < 1e-14);
+            }
+        }
+    }
 
     #[test]
     fn linear_low_frequency_limit_is_sigma() {

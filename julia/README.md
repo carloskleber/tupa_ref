@@ -139,6 +139,7 @@ rows keyed by `(frequency_hz, quantity, id)` (`test/conformance.jl`, same as
 | `portela1997` | `portela1997_expected.csv` | 5e-17 — **match** |
 | `rod` | `rod_expected.csv` | 1e-17 — **match** |
 | `grid` | `grid_expected.csv` | 6e-8 — **match** (fixture in pre-ADR 0020 electrode order; keyed comparison) |
+| `portela1997_transient_{interpolated,hann,hann_time,multi,nlt}` | `*_expected.csv` (ROADMAP Phase 9) | **lag** — not implemented; the loader rejects the Phase 9 `signal` fields (below) |
 
 **Cross-check on every runnable `common/` case** (harmonic: same row rule;
 transient: max |Δ| over the series peak), against fresh runs of the
@@ -213,6 +214,23 @@ See ROADMAP Phase 8J for the remaining items.
 Like the Rust port (ROADMAP Phase 8 item 10): each contract change (schema,
 `common/` case, default numerics) carries a Julia item; lags are recorded in
 the conformance table above.
+
+- **ROADMAP Phase 9** (ADR 0015 amendment 2026-09-30) — **lagging.** The
+  session that implemented Phase 9 in Fortran and Rust had no Julia
+  toolchain (the Julia download and package hosts were not reachable), so
+  the port does not implement `signal.sources`, the `sine` waveform,
+  `window`, `transferFunction` or `transform`/`nltDamping`. So that a
+  Phase 9 case can never silently run as a plain-FFT transient,
+  `load_signal` (`src/JsonParser.jl`) raises a `TupaError` naming the field
+  when any of `sources`, `window`, `transform`, `nltDamping` or
+  `transferFunction` is present; `test/runtests.jl` lists the five Phase 9
+  cases in `PHASE9_LAG` (the fixture guard accepts them, and
+  `test/physics.jl` checks the loader refuses them). These test edits were
+  made without running Julia — run `Pkg.test()` before relying on them.
+  Porting guide: `rust/src/transient.rs` (same structure as the Fortran
+  `mTransient`, ~300 lines), plus the `admittance_laplace`/
+  `calc_param_laplace`/`internal_impedance_laplace` counterparts; remove
+  names from `PHASE9_LAG` as their fixtures pass.
 
 ## History
 

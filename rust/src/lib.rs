@@ -119,15 +119,16 @@ pub fn run_from_file(filename: &str, opts: &RunOptions) -> Result<()> {
         if !run_sweep {
             case.study.report();
         }
+        let source_nodes: Vec<String> = spec.sources.iter().map(|s| s.node.clone()).collect();
         let csv = results_writer::transient_csv(
-            &spec.source_node,
+            &source_nodes,
             &spec.observe_nodes,
             &spec.observe_electrodes,
             &result,
         );
         let json = results_writer::transient_json(
             &case.study.title,
-            &spec.source_node,
+            &source_nodes,
             &spec.observe_nodes,
             &spec.observe_electrodes,
             &result,

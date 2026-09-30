@@ -53,8 +53,10 @@ anchors of [docs/theory.md](docs/theory.md) §9 within stated tolerances —
 DC grounding resistance (Sunde), the Portela 1997 harmonic-impedance case,
 internal-consistency checks, and cross-code agreement with the open-source
 TAGS/PRTL-mHEM solvers. Current status: the end-to-end frequency-sweep and
-time-domain pipeline are wired and green (ROADMAP Phases 0–7; Phase 8, the Rust
-port, implemented — harmonic conformance met on the golden fixtures); six comparisons against published papers' own figures — Silva et
+time-domain pipeline are wired and green (ROADMAP Phases 0–7 and 9 — the
+latter adds scan-fed transients, windows, multiple injections and the
+Numerical Laplace Transform; Phase 8, the Rust port, implemented — harmonic
+conformance met on the golden fixtures, Phase 9 transient fixtures matched); six comparisons against published papers' own figures — Silva et
 al. 2025, Grcev et al. 2018, Lima et al. 2020 and Poljak & Doric 2006 —
 mostly agree within ±10-20% (closer for some cases, see
 [docs/validation/](docs/validation/README.md)). The formal anchors needing

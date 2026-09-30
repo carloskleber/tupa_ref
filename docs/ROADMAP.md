@@ -30,12 +30,12 @@ implementation**; usability as an engineering tool is secondary.
 | Geometry layer | `Geometry.f90`: mean/image distances, direct+image geometry factors (`g`, closed-form `g_self`), direction cosines; quadrature cache |
 | Impedance fill | ADR 0009 interface: `calcZSelf`/`calcZMutual` apply all theory factors internally; solid-conductor Bessel internal impedance (SLATEC `ZBESI`) |
 | Solver | Augmented `Zeq` assembly + `ZGESV` (ADR 0003); multi-RHS variant for superposition (ADR 0016) |
-| Sources | Current injections at named nodes (ADR 0010); ideal voltage sources via unit-injection superposition, mixable with current sources (ADR 0016) |
+| Sources | Current injections at named nodes (ADR 0010); ideal voltage sources via unit-injection superposition, mixable with current sources (ADR 0016); several simultaneous transient injections, each with its own waveform (Phase 9 item 4) |
 | Materials | `tLinear`, `tPortelaSoil` (ADR 0007), `tVisacroAlipioSoil` (mean set, theory.md §7); air hardcoded to vacuum (ADR 0019) |
 | Sweep & results | `runSweep` + `tResult` storage, `inputImpedance`/`maxVoltageMagnitude`; CSV/JSON writers (ADR 0012) with `outputs` filtering |
-| Time domain | `mSignal` (Heidler — legacy 6-term [38] and standard parametrised form [37, 39]; double-exp ± Jones; Portela concave front), tail taper, in-repo FFT (ADR 0014), transfer-function transient driver (`mTransient`) |
-| JSON I/O | json-fortran parser (ADR 0006, superseded-in-place 2026-08-01); schema v1: structure + `sources`/`frequencies`/`outputs` (ADR 0013) + `signal` (ADR 0015) + voltage sources/Heidler terms (ADR 0016/0015 amendment) + `mesh` composite element (ADR 0020) + optional `signal.antialiasStart` (ADR 0021) + `catenary` element and `portela` waveform (ADR 0023); pre-run reference validation (`validateStudyReferences`) and CLI verbosity levels |
-| Cases & tests | `common/` regression fixtures (golden) plus ten cases imported from the legacy Matlab case library (`linha*.json`, `torre*.json`, ADR 0023), 15 test programs, all green under `fpm test --profile release` |
+| Time domain | `mSignal` (Heidler — legacy 6-term [38] and standard parametrised form [37, 39]; double-exp ± Jones; Portela concave front; switched-on sine), tail taper, in-repo FFT (ADR 0014), transfer-function transient driver (`mTransient`) with opt-in scan-fed (pchip-interpolated) transfer function, half-Hann window (spectral or time placement), multiple injections and Numerical Laplace Transform (Phase 9, ADR 0015 amendment 2026-09-30) |
+| JSON I/O | json-fortran parser (ADR 0006, superseded-in-place 2026-08-01); schema v1: structure + `sources`/`frequencies`/`outputs` (ADR 0013) + `signal` (ADR 0015) + voltage sources/Heidler terms (ADR 0016/0015 amendment) + `mesh` composite element (ADR 0020) + optional `signal.antialiasStart` (ADR 0021) + `catenary` element and `portela` waveform (ADR 0023) + `signal.sources`/`window`/`transferFunction`/`transform`/`nltDamping` and the `sine` waveform (ADR 0015 amendment 2026-09-30); pre-run reference validation (`validateStudyReferences`) and CLI verbosity levels |
+| Cases & tests | `common/` regression fixtures (golden; three harmonic, five transient since Phase 9) plus ten cases imported from the legacy Matlab case library (`linha*.json`, `torre*.json`, ADR 0023), 15 test programs under `fpm test --profile release` — green except two known failures (re-run 2026-09-30, gfortran 13): the `grid_expected.csv` order drift (Phase 8 item 1) and `test_impedance`'s coincident-segment divergence check, which `-ffast-math` defeats |
 | Validation | [`docs/validation/`](validation/README.md): digitized published-curve comparisons — Grcev et al. 2018 Fig. 12 (6 cases), Lima et al. 2020 Figs. 6/7, Poljak & Doric 2006 Fig. 4, Silva et al. 2025 Figs. 3/4 (harmonic + transient) — accepted as the release-bar oracle (§4) |
 | GUI | Python/PySide6 view-only module (`gui/`, ADR 0011): study tree, 3-D view, results/transient plots |
 | Other implementations | **Julia port (`julia/`, contributed 2026-09-29, realigned 2026-09-30, Phase 8J)** — module-by-module mirror of the Fortran code, golden fixtures met at 1e-6 and every runnable `common/` case within 1e-6 of Rust/Fortran (bar two round-off rows Rust shares); **Rust port (`rust/`, 2026-09-30, [ADR 0022](adr/0022-rust-implementation.md))** — harmonic conformance met on the three golden fixtures at 1e-6, transient path implemented, Phase 8 item 1 (Fortran fixture widening) still open |
@@ -186,11 +186,11 @@ Where the former Phase 7 items went:
 
 | Former Phase 7 item | Now |
 | --- | --- |
-| Transient driver fed by the harmonic scan | Phase 9 item 1 |
-| Windowing (Hanning first) | Phase 9 item 2 |
+| Transient driver fed by the harmonic scan | Phase 9 item 1 — done 2026-09-30 |
+| Windowing (Hanning first) | Phase 9 item 2 — done 2026-09-30 |
 | Portela concave-front signal | Phase 9 item 3 — done 2026-09-30 |
-| Multiple injections (transient) | Phase 9 item 4 |
-| Numerical Laplace Transform (§7 P4) | Phase 9 item 5 |
+| Multiple injections (transient) | Phase 9 item 4 — done 2026-09-30 |
+| Numerical Laplace Transform (§7 P4) | Phase 9 item 5 — done 2026-09-30 |
 | GPR, touch and step voltage (§7 P7) | Phase 11 items 1–2 |
 | `tCircumference` (grounding rings) | Phase 12 item 1 |
 | Tubular conductor | Phase 12 item 2 |
@@ -280,7 +280,7 @@ features):
 
 **Items** (numbered for citation; effort in brackets):
 
-1. **Contract freeze and fixture widening** (Fortran side) — **S–M**. **Status: open** (no Fortran toolchain was available when the Rust port was written; the Rust tree targets the three existing fixtures, [ADR 0022](adr/0022-rust-implementation.md)). A finding for this item: `grid_expected.csv` predates the FIFO order fix of ADR 0020 (electrodes listed `Line_4…Line_1`), so the positional comparison of `test_common_cases.f90` should be re-run and the fixture regenerated if it fails.
+1. **Contract freeze and fixture widening** (Fortran side) — **S–M**. **Status: open** (no Fortran toolchain was available when the Rust port was written; the Rust tree targets the three existing fixtures, [ADR 0022](adr/0022-rust-implementation.md)). A finding for this item: `grid_expected.csv` predates the FIFO order fix of ADR 0020 (electrodes listed `Line_4…Line_1`), so the positional comparison of `test_common_cases.f90` should be re-run and the fixture regenerated if it fails (re-run 2026-09-30 with gfortran 13: it still fails). Phase 9 added the transient-fixture harness this item needs (`compareTransientCase` in `test_common_cases.f90`, `check_transient_case` in `rust/tests/conformance.rs`; tolerance rule in the ADR 0015 amendment 2026-09-30) and five transient fixtures; `portela1997_transient` itself is still to be added.
    Only three cases carry golden fixtures today (`portela1997`, `rod`,
    `grid` — all harmonic, all `linear` soil, current sources only), so
    "passes every `common/` case" is currently a weak bar. Add
@@ -346,8 +346,9 @@ features):
     carries a Rust item, per the ADR 0002 order (theory → schema/case →
     implementations). A phase closes when Rust passes its new or changed
     fixtures, or the lag is recorded in a conformance table in
-    `rust/README.md`. First instances: Phase 10 items 1–2 (P1 kernel and
-    Γ(ω) images, which regenerate the fixtures).
+    `rust/README.md`. First applied to Phase 9 (2026-09-30: Rust passes
+    the five new transient fixtures); next, Phase 10 items 1–2 (P1 kernel
+    and Γ(ω) images, which regenerate the fixtures).
 
 **Risks.**
 
@@ -436,8 +437,11 @@ Layout and status: [julia/README.md](../julia/README.md).
    this is a confirmation, not new work.
 9. **Follow-along rule** — policy, as Phase 8 item 10: every contract
    change carries a Julia item; lags go into the `julia/README.md`
-   conformance table. First instances: Phase 10 items 1–2 (P1 kernel,
-   Γ(ω) images).
+   conformance table. First instance: Phase 9 — **lagging** (no Julia
+   toolchain in the session that implemented it); the loader rejects the
+   Phase 9 `signal` fields with an explicit error instead of ignoring them,
+   and the five Phase 9 fixtures are listed as lag in `julia/test/`
+   (`PHASE9_LAG`). Next: Phase 10 items 1–2 (P1 kernel, Γ(ω) images).
 
 **Optional, not required for conformance:** multi-threading over
 frequencies (`Threads.@threads`, with one BLAS thread per task — the
@@ -450,15 +454,28 @@ conformance tag (items 2 and 6), item 5's writeup refreshed and item 7's
 report including Julia; then README.md and common/README.md describe
 three conforming implementations.
 
-### Phase 9 — Transient pipeline completion
+### Phase 9 — Transient pipeline completion — **done 2026-09-30**
 
 All five items touch `mTransient`/`mSignal` and the `signal` block; items
-1, 2 and 4 share one ADR 0015 amendment. Defaults stay as today, so no
-golden fixture changes. Remaining legacy waveforms (single exponential,
-impulse/step, sine) are ported alongside when a case needs them.
+1, 2, 4 and 5 landed together under one ADR 0015 amendment
+([ADR 0015, amendment 2026-09-30](adr/0015-time-domain-signal-schema.md#amendment-2026-09-30--transient-pipeline-completion-roadmap-phase-9)),
+which also settles theory.md §8 open questions 1–3. Defaults stay as
+before, so no golden fixture changes. Of the remaining legacy waveforms
+the sine came along with item 4; single exponential and impulse/step are
+ported when a case needs them. Follow-along: Rust implements the whole
+phase and reproduces its fixtures (worst 1.5e-8 under the fixture rule);
+Julia lags and rejects the new fields explicitly (julia/README.md
+conformance table). Checks and measured tolerances:
+[validation/phase9-transient-options.md](validation/phase9-transient-options.md).
 
 1. **Transient driver fed by the harmonic scan** (interpolated transfer
-   function) — **S**. Today `transientResponse` solves the system at
+   function) — **S** — **done 2026-09-30** (`signal.transferFunction:
+   "interpolated"`; `mTransient::pchipInterpolate`, a port of Matlab
+   `pchip`; loader rejects a scan axis that does not span
+   [`freqZeroHz`, `nyquistHz`]; within 1.7e-5 (driving point) / 2.7e-5
+   (remote node) of peak of the per-bin solve on the
+   `silva2025_*_transient` cases, 12–15× faster; fixture
+   `portela1997_transient_interpolated`). Today `transientResponse` solves the system at
    every FFT bin (N/2 + 1 solves), so the transient dominates run time
    even where the harmonic sweep itself is fast. The original Matlab
    already ships the remedy as its default mode (`TODA_FREQ` off): solve
@@ -475,7 +492,11 @@ impulse/step, sine) are ported alongside when a case needs them.
    comparing both paths on the `silva2025_*_transient` cases; needs an
    interpolation routine (pchip, componentwise on Re/Im, matching the
    Matlab).
-2. **Windowing, Hanning first** — **S**. *Decided (2026-08-02): both
+2. **Windowing, Hanning first** — **S** — **done 2026-09-30**
+   (`signal.window: { "type": "hann", "placement": "spectral" | "time" }`,
+   falling half of a Hann window; spectral Hann = the ADR 0021 Tukey
+   filter in the s → 0 limit, the two fields multiply; fixtures
+   `portela1997_transient_hann`, `_hann_time`). *Decided (2026-08-02): both
    placements, selectable in the file* — a `signal.window` option choosing
    the window function and where it acts: (a) spectral data window applied
    to the one-sided H·X product before the inverse transform (Gibbs
@@ -496,14 +517,27 @@ impulse/step, sine) are ported alongside when a case needs them.
    [67] as the front law's source. Accept α < 0: [67] uses it for
    subsequent strokes (convex front), which settles theory.md §8 open
    question 4.
-4. **Multiple injections in the transient pipeline** — **S–M**. The
+4. **Multiple injections in the transient pipeline** — **S–M** — **done
+   2026-09-30** (`signal.sources[]`, each a node plus a full waveform;
+   new `sine` waveform; one unit-current sweep per source, Σ_k H_k·X_k;
+   results JSON gains `sources[]`, CSV sums per node; fixture
+   `portela1997_transient_multi`, a differential ±30 kA impulse plus a
+   sine). Current injections only — voltage sources in the transient
+   and the multi-RHS per-frequency solve are left open. The
    harmonic side already handles simultaneous mixed sources (ADR 0016);
    remaining work is per-source spectra × per-source transfer functions,
    superposed (linear), and the schema (e.g. three-phase sine emulating
    line voltage plus an impulse injection). Survey note: the legacy also
    supports a *differential* (±1 two-node) injection pattern worth
    carrying along.
-5. **Numerical Laplace Transform option** (§7 P4) — **M**. *Opt-in
+5. **Numerical Laplace Transform option** (§7 P4) — **M** — **done
+   2026-09-30** (`signal.transform: "nlt"`, `nltDamping` default
+   ln(N²)/T; Laplace-domain `admittanceLaplace`/`calcParamLaplace`/
+   `internalImpedanceLaplace`, the real-ω path untouched; rejected together
+   with `"interpolated"`; 6–10× closer than the FFT to a long-record
+   reference over the first half of a short record, degrading towards
+   the record end as e^{ct} — theory.md §8; fixture
+   `portela1997_transient_nlt`). *Opt-in
    first: `signal.transform: "fft"` (default) `| "nlt"`; flip the default
    only after P3 cross-validation (Phase 10 item 5), keeping golden
    fixtures stable.* Driver-only change (theory.md §8); refs: Gómez &
@@ -513,7 +547,11 @@ impulse/step, sine) are ported alongside when a case needs them.
 **Exit criteria.** Scan-fed and full transients agree on the
 `silva2025_*_transient` cases within a tolerance stated in the amendment;
 one new transient golden fixture per new option; existing fixtures
-unchanged.
+unchanged. **Met 2026-09-30:** stated tolerance 1e-4 of the series peak,
+measured ≤ 2.7e-5; five new fixtures; the three harmonic fixtures pass as
+before (`grid` keeps its pre-existing Phase 8 item 1 drift) and existing
+transient outputs are unchanged (byte-identical, bar last-digit round-off
+on a few near-zero samples of `portela1997_transient`).
 
 ### Phase 10 — Reference kernel, image model and performance
 
@@ -716,7 +754,7 @@ shielded-wire segment.
 - **Next engineering steps**: Phase 8 item 1 (Fortran-side fixture
   widening and the v0.6.0 conformance tag — it closes Milestone 8b and
   gives the Julia port a sharper target), then Phase 8 item 9 (report);
-  on the Fortran side, in parallel, Phase 9 items 1–3.
+  Phase 8J follow-along for Phase 9 (Julia); then Phase 10.
 
 ---
 
@@ -753,8 +791,8 @@ There is **no hosted CI** (ADR 0018): the gate is a local
 | Soil dispersion model | **Implemented** — ADR 0007 (`tPortelaSoil`, ω₀ = 2π·1 MHz), Phase 4; `tVisacroAlipioSoil` mean set (§7 P5) |
 | Voltage-source handling | **Implemented** — current-injection equivalents (ADR 0010) by unit-injection superposition (ADR 0016), Phase 7 item 2 |
 | Impedance-fill interface | **Implemented** — theory factors inside `calcZ*` (ADR 0009) |
-| FFT dependency | **Implemented** — in-repo double-precision radix-2 FFT (ADR 0014); NLT proposed on top (§7 P4) |
-| JSON schema v1 | **Implemented (Fortran, GUI)** — ADR 0013 + 0015 (+ 0016/0020/0021 additions); parser migrated to json-fortran (ADR 0006 update); Rust reader implemented (`rust/src/json.rs`, ADR 0022) |
+| FFT dependency | **Implemented** — in-repo double-precision radix-2 FFT (ADR 0014); opt-in NLT on top (§7 P4, Phase 9 item 5) |
+| JSON schema v1 | **Implemented (Fortran, GUI)** — ADR 0013 + 0015 (+ 0016/0020/0021 additions, 0015 Phase 9 amendment); parser migrated to json-fortran (ADR 0006 update); Rust reader implemented (`rust/src/json.rs`, ADR 0022) |
 | Reduced `Z_g` solver | Deferred optimisation (ADR 0003) |
 | Rust port dependencies and conformance tolerance | **Decided** — [ADR 0022](adr/0022-rust-implementation.md): in-repo GK 7/15 and FFT ports, in-repo LU (not `faer`), series + Hankel Bessel subset; 1e-6 relative kept |
 | GUI module | **Decided** — Python/PySide6/Qt3D, view-only v1 (ADR 0011) |
@@ -799,7 +837,7 @@ and compare input impedance over the sweep — the executable oracle the
 0.1.0 bar needs (§4). Compare physical outputs only (conventions differ
 internally — theory.md §9.6, ADR 0017 finding 5).
 
-### P4 — Numerical Laplace Transform for the time domain (medium effort) — Phase 9 item 5
+### P4 — Numerical Laplace Transform for the time domain (medium effort) — Phase 9 item 5 — **done 2026-09-30**
 
 NLT (`s = c + jω`, damping `c ≈ ln(N²)/T`, window filter — Gómez & Uribe
 [17]) as TAGS and PRTL use. Physics kernels untouched (already complex);

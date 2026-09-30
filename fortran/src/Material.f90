@@ -41,6 +41,12 @@ module mMaterial
     !! quantity that differs between material models — every model shares
     !! the same γ = √(jωμW(ω)) relation, computed once by
     !! `calcPropagationConstant` below.
+    procedure(admittanceLaplace_interface), deferred :: admittanceLaplace
+    !! W(s) at a complex frequency s = c + jω (the analytic continuation of
+    !! `admittance`, jω -> s, principal branch): used only by the Numerical
+    !! Laplace Transform driver (ROADMAP Phase 9 item 5, theory.md §8).
+    !! W(jω) equals `admittance(ω)` to round-off; the real-ω path keeps
+    !! calling `admittance` so harmonic results stay bit-identical.
     procedure :: calcPropagationConstant => calcPropagationConstant_base
     !! Compute and store `propagationConstant` for the given ω, via `admittance`.
     procedure(print_interface), deferred :: report
@@ -57,6 +63,18 @@ module mMaterial
       complex(8) :: w
       !! W(ω) = σ(ω) + jωε(ω) (S/m)
     end function admittance_interface
+  end interface
+
+  abstract interface
+    function admittanceLaplace_interface(this, s) result(w)
+      !! Interface for the complex immittance W(s) at a complex frequency s.
+      import :: tMaterial
+      class(tMaterial), intent(in) :: this
+      complex(8), intent(in) :: s
+      !! Complex frequency s = c + jω (1/s), Re(s) >= 0
+      complex(8) :: w
+      !! W(s) = σ(s) + s·ε(s) (S/m)
+    end function admittanceLaplace_interface
   end interface
 
   abstract interface
@@ -83,6 +101,7 @@ module mMaterial
     !! Electrical conductivity σ (S/m)
   contains
     procedure :: admittance => admittance_linear
+    procedure :: admittanceLaplace => admittanceLaplace_linear
     procedure :: report     => report_linear
   end type tLinear
 
@@ -102,6 +121,7 @@ module mMaterial
     !! reuse (ADR 0007), never copied verbatim.
   contains
     procedure :: admittance => admittance_freq
+    procedure :: admittanceLaplace => admittanceLaplace_freq
     procedure :: report     => report_freq
   end type tPortelaSoil
 
@@ -116,6 +136,7 @@ module mMaterial
     !! Low-frequency (100 Hz) conductivity σ₀ (S/m)
   contains
     procedure :: admittance => admittance_alipio
+    procedure :: admittanceLaplace => admittanceLaplace_alipio
     procedure :: report     => report_alipio
   end type tVisacroAlipioSoil
 
@@ -271,6 +292,57 @@ contains
     w = cmplx(this%sigma0 + dsigma, &
               omega * EPSILON0 * EPSR_INF + dsigma * tan(0.5d0 * PI * XI), kind=8)
   end function admittance_alipio
+
+  ! ------------------------------------------------------------------
+  ! admittanceLaplace implementations: W(s), the analytic continuation of
+  ! W(omega) with j*omega -> s (principal branch of s**alpha, cut on the
+  ! negative real axis, so W(conjg(s)) = conjg(W(s)) and the NLT's
+  ! conjugate-symmetric spectrum reconstruction stays valid).
+  ! ------------------------------------------------------------------
+
+  function admittanceLaplace_linear(this, s) result(w)
+    !! W(s) = σ + s·ε for a constant-parameter medium.
+    class(tLinear), intent(in) :: this
+    complex(8), intent(in) :: s
+    complex(8) :: w
+
+    w = this%sigma + s * (this%epsilonr * EPSILON0)
+  end function admittanceLaplace_linear
+
+  function admittanceLaplace_freq(this, s) result(w)
+    !! Lima–Portela soil at complex s. Since cot(πα₀/2) + j =
+    !! e^{jπα₀/2}/sin(πα₀/2) and (jω/ω₀)^α₀ = (ω/ω₀)^α₀·e^{jπα₀/2},
+    !!
+    !!     W(s) = σ₀ + kr·(s/ω₀)^α₀ / sin(πα₀/2),
+    !!
+    !! which reduces to `admittance_freq` on s = jω.
+    class(tPortelaSoil), intent(in) :: this
+    complex(8), intent(in) :: s
+    complex(8) :: w
+    real(8), parameter :: OMEGA0 = 2.0d0 * PI * 1.0d6
+
+    w = this%sigma0 + this%kr / sin(0.5d0 * PI * this%alpha0) * (s / OMEGA0) ** this%alpha0
+  end function admittanceLaplace_freq
+
+  function admittanceLaplace_alipio(this, s) result(w)
+    !! Alipio–Visacro soil (mean set) at complex s. Since 1 + j·tan(πξ/2) =
+    !! e^{jπξ/2}/cos(πξ/2),
+    !!
+    !!     W(s) = σ₀ + σ₀·h·(s/ω₀)^ξ / cos(πξ/2) + s·ε₀·ε∞,  ω₀ = 2π·f₀,
+    !!
+    !! which reduces to `admittance_alipio` on s = jω.
+    class(tVisacroAlipioSoil), intent(in) :: this
+    complex(8), intent(in) :: s
+    complex(8) :: w
+    real(8), parameter :: OMEGA0 = 2.0d0 * PI * 1.0d6
+    real(8), parameter :: XI = 0.54d0
+    real(8), parameter :: EPSR_INF = 12.0d0
+    real(8) :: h
+
+    h = 1.26d0 * (1.0d3 * this%sigma0) ** (-0.73d0)
+    w = this%sigma0 + this%sigma0 * h / cos(0.5d0 * PI * XI) * (s / OMEGA0) ** XI &
+      + s * (EPSILON0 * EPSR_INF)
+  end function admittanceLaplace_alipio
 
   ! ------------------------------------------------------------------
   ! report implementations

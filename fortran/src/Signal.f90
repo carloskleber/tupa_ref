@@ -10,17 +10,21 @@ module mSignal
   !! user-parametrised Heidler construction (`newHeidlerSignalTerms`,
   !! Heidler 1985 / IEC 62305-1 — references.md) alongside the legacy
   !! fixed 6-term set. Phase 9 item 3 adds Portela's concave-front surge
-  !! (`tPortelaSignal`, legacy `sinais.Portela`/`impulso.m`). The Matlab
-  !! reference ships a few more waveforms (single exponential,
-  !! impulse/step, sine) — ported "as needed" per ROADMAP.md Phase 6 item 1;
+  !! (`tPortelaSignal`, legacy `sinais.Portela`/`impulso.m`). Phase 9 item 4
+  !! adds a switched-on sine (`tSineSignal`) for multi-source runs such as
+  !! a three-phase line voltage emulation, and `tSignalSlot`, a wrapper
+  !! that lets one source list hold waveforms of different types. The
+  !! Matlab reference ships a few more waveforms (single exponential,
+  !! impulse/step) — ported "as needed" per ROADMAP.md Phase 6 item 1;
   !! not duplicated here until a case needs them.
   use mCtes, only: dp, PI
   use mError, only: raiseError
   implicit none
   private
 
-  public :: tSignal, tHeidlerSignal, tDoubleExpSignal, tPortelaSignal
-  public :: newHeidlerSignal, newHeidlerSignalTerms, newDoubleExpSignal, newPortelaSignal, tailTaper
+  public :: tSignal, tHeidlerSignal, tDoubleExpSignal, tPortelaSignal, tSineSignal, tSignalSlot
+  public :: newHeidlerSignal, newHeidlerSignalTerms, newDoubleExpSignal, newPortelaSignal, newSineSignal
+  public :: tailTaper
 
   type, abstract :: tSignal
     !! Abstract base for a time-domain excitation waveform.
@@ -97,6 +101,26 @@ module mSignal
   contains
     procedure :: waveform => portelaWaveform
   end type tPortelaSignal
+
+  type, extends(tSignal) :: tSineSignal
+    !! Sine switched on at t = 0 (ROADMAP Phase 9 item 4):
+    !! i(t) = imax·sin(2π·f·t + φ) for t >= 0, zero before. With the phase
+    !! angle φ the switching instant sits anywhere on the wave, so three
+    !! sources 120° apart emulate a three-phase line voltage.
+    real(dp) :: frequencyHz
+    !! Frequency f (Hz)
+    real(dp) :: phaseDeg
+    !! Phase angle φ at t = 0 (degrees)
+  contains
+    procedure :: waveform => sineWaveform
+  end type tSineSignal
+
+  type :: tSignalSlot
+    !! One entry of a heterogeneous source list (`signal.sources`, ROADMAP
+    !! Phase 9 item 4): a polymorphic waveform, so each source can have its
+    !! own waveform type.
+    class(tSignal), allocatable :: sig
+  end type tSignalSlot
 
 contains
 
@@ -203,6 +227,21 @@ contains
     sig%tTailEnd = tTailEnd
   end function newPortelaSignal
 
+  function newSineSignal(imax, frequencyHz, phaseDeg) result(sig)
+    !! Switched-on sine (ROADMAP Phase 9 item 4) of amplitude `imax` (A),
+    !! frequency `frequencyHz` (> 0) and phase `phaseDeg` (degrees) at t = 0.
+    real(dp), intent(in) :: imax, frequencyHz, phaseDeg
+    type(tSineSignal) :: sig
+
+    if (frequencyHz <= 0.0_dp) then
+      call raiseError("newSineSignal: frequencyHz must be > 0")
+      return
+    end if
+    sig%imax        = imax
+    sig%frequencyHz = frequencyHz
+    sig%phaseDeg    = phaseDeg
+  end function newSineSignal
+
   ! =====================================================================
   ! Waveform evaluation
   ! =====================================================================
@@ -286,6 +325,15 @@ contains
       end if
     end do
   end function portelaWaveform
+
+  function sineWaveform(this, t) result(i)
+    class(tSineSignal), intent(in) :: this
+    real(dp), intent(in) :: t(:)
+    real(dp) :: i(size(t))
+
+    i = merge(this%imax * sin(2.0_dp * PI * this%frequencyHz * t + this%phaseDeg * PI / 180.0_dp), &
+              0.0_dp, t >= 0.0_dp)
+  end function sineWaveform
 
   elemental function expm1(x) result(y)
     !! exp(x) - 1 without cancellation for small |x| (Kahan's u - 1 = x·(u - 1)/log u

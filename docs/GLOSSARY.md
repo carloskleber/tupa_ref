@@ -72,7 +72,8 @@ entries.
   ROADMAP Phase 14 item 2).
 - **NLT (Numerical Laplace Transform)** — time-domain route solving at
   damped complex frequencies $s = c + j\omega$ with data windows [17];
-  planned replacement for the plain FFT drive (ROADMAP P4).
+  opt-in alternative to the plain FFT drive (`signal.transform: "nlt"`,
+  ROADMAP P4 / Phase 9 item 5, theory.md §8).
 - **Thin-wire approximation** — conductors represented by axial line
   sources with field points on the surface; requires segment length large
   vs radius and small vs wavelength (theory.md §4.1).

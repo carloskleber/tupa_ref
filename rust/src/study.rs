@@ -6,7 +6,7 @@ use crate::ctes::{MU0, PI, ZERO};
 use crate::electrode::Electrode;
 use crate::error::{Result, TupaError};
 use crate::geometry::{GeometryMatrices, GeometryOptions, build_geometry_matrices};
-use crate::impedance::internal_impedance;
+use crate::impedance::{internal_impedance, internal_impedance_laplace};
 use crate::linalg::{CMatrix, solve_in_place};
 use crate::mesh::{AIR, Mesh, SOIL};
 use crate::result::ResultSet;
@@ -162,26 +162,49 @@ impl Study {
     }
 
     /// Fill the impedance matrices at `omega` and return the assembled mesh.
-    fn fill(&mut self, omega: f64) -> Result<()> {
+    /// A nonzero `damping` c fills at the complex frequency `s = c + jω`
+    /// instead (Numerical Laplace Transform, ROADMAP Phase 9 item 5); zero
+    /// keeps the real-ω path exactly.
+    fn fill(&mut self, omega: f64, damping: f64) -> Result<()> {
         let mu_air = self.structure.air.mur * MU0;
         let mu_soil = self.structure.soil.mur() * MU0;
-        let w_air = self.structure.air.admittance(omega);
-        let w_soil = self.structure.soil.admittance(omega);
+        let laplace = damping != 0.0;
+        let s = Complex64::new(damping, omega);
 
         let prep = self.prepared.as_mut().expect("prepared");
-        prep.mesh
-            .calc_param_w(omega, mu_air, w_air, mu_soil, w_soil);
+        if laplace {
+            let w_air = self.structure.air.admittance_laplace(s);
+            let w_soil = self.structure.soil.admittance_laplace(s);
+            prep.mesh
+                .calc_param_laplace(s, mu_air, w_air, mu_soil, w_soil);
+        } else {
+            let w_air = self.structure.air.admittance(omega);
+            let w_soil = self.structure.soil.admittance(omega);
+            prep.mesh
+                .calc_param_w(omega, mu_air, w_air, mu_soil, w_soil);
+        }
         let n = prep.geom.n;
         for i in 0..n {
             for j in i..n {
                 let ij = prep.geom.idx(i, j);
                 if i == j {
-                    let zint = Self::segment_internal_impedance(
-                        &self.structure.electrodes[i],
-                        prep.radius[i],
-                        prep.length[i],
-                        omega,
-                    );
+                    let zint = if laplace {
+                        let e = &self.structure.electrodes[i];
+                        internal_impedance_laplace(
+                            prep.radius[i],
+                            prep.length[i],
+                            s,
+                            e.material.sigma,
+                            e.material.mur,
+                        )
+                    } else {
+                        Self::segment_internal_impedance(
+                            &self.structure.electrodes[i],
+                            prep.radius[i],
+                            prep.length[i],
+                            omega,
+                        )
+                    };
                     prep.mesh.calc_z_self(
                         i,
                         prep.pos[i],
@@ -218,8 +241,19 @@ impl Study {
     /// `is_voltage`, which adds ideal voltage sources by unit-injection
     /// superposition (ADR 0016).
     pub fn run(&mut self, omega: f64, sources: &[Source]) -> Result<RunOutput> {
+        self.run_damped(omega, sources, 0.0)
+    }
+
+    /// `run` at the complex frequency `s = damping + jω` (`damping = 0` is
+    /// `run`); used by the Numerical Laplace Transform driver.
+    pub fn run_damped(
+        &mut self,
+        omega: f64,
+        sources: &[Source],
+        damping: f64,
+    ) -> Result<RunOutput> {
         self.prepare()?;
-        self.fill(omega)?;
+        self.fill(omega, damping)?;
 
         let mut pos = Vec::with_capacity(sources.len());
         for s in sources {
@@ -247,6 +281,17 @@ impl Study {
 
     /// Sweep over `freq_hz`, storing all node voltages and electrode currents.
     pub fn run_sweep(&mut self, freq_hz: &[f64], sources: &[Source]) -> Result<()> {
+        self.run_sweep_damped(freq_hz, sources, 0.0)
+    }
+
+    /// `run_sweep` with every point solved at `s = damping + 2πj·f`; the
+    /// stored axis stays real (Numerical Laplace Transform driver).
+    pub fn run_sweep_damped(
+        &mut self,
+        freq_hz: &[f64],
+        sources: &[Source],
+        damping: f64,
+    ) -> Result<()> {
         self.prepare()?;
         let omega: Vec<f64> = freq_hz.iter().map(|f| 2.0 * PI * f).collect();
         let node_ids: Vec<String> = self.structure.nodes.iter().map(|n| n.id.clone()).collect();
@@ -268,7 +313,7 @@ impl Study {
             if verbosity_level() == VERB_VERBOSE {
                 println!(" f = {} Hz", format_engineering(freq_hz[k]));
             }
-            let out = self.run(w, sources)?;
+            let out = self.run_damped(w, sources, damping)?;
             for i in 0..nno {
                 volt.set(i, k, out.voltage[i]);
             }

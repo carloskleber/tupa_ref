@@ -199,6 +199,26 @@ contains
     mesh%propSoil = sqrt(cmplx(0.0d0, omega, kind=8) * muSoil * Wsoil)
   end subroutine calcParamW
 
+  subroutine calcParamLaplace(mesh, s, muAir, Wair, muSoil, Wsoil)
+    !! `calcParamW` at a complex frequency s = c + jω (every jω -> s), for
+    !! the Numerical Laplace Transform driver (ROADMAP Phase 9 item 5,
+    !! theory.md §8). Kept separate so the real-ω path stays bit-identical.
+    complex(8), intent(in), value :: s
+    !! Complex frequency s = c + jω (1/s)
+    real(8), intent(in), value :: muAir, muSoil
+    !! Air/soil permeability (H/m)
+    complex(8), intent(in), value :: Wair, Wsoil
+    !! Air/soil complex immittance W(s) (S/m)
+    type(tMesh), intent(inout) :: mesh
+
+    mesh%cEAir  = 1.0d0 / (FOUR_PI * Wair)
+    mesh%cESoil = 1.0d0 / (FOUR_PI * Wsoil)
+    mesh%cMAir  = s * (muAir / FOUR_PI)
+    mesh%cMSoil = s * (muSoil / FOUR_PI)
+    mesh%propAir  = sqrt(s * muAir  * Wair)
+    mesh%propSoil = sqrt(s * muSoil * Wsoil)
+  end subroutine calcParamLaplace
+
   ! =====================================================================
   ! Impedance matrix element setting
   ! =====================================================================

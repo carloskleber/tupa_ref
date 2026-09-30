@@ -106,7 +106,8 @@ load JSON ──► build tStudy ──► structure%assembleStructure()
                                     ▼
               writeResultsCsv / writeResultsJson (ADR 0012)
                                     ▼
-              (Phase 6) FFT/NLT ↔ time domain                    ✗ absent
+              mTransient: FFT or NLT ↔ time domain (Phase 6, Phase 9;
+              scan-fed H(f), windows, multi-source — ADR 0015)
 ```
 
 Assembly uses inversion of control: `tStructure` iterates its element list

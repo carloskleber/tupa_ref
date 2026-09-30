@@ -163,7 +163,16 @@ end
 @testset "every common/*.json loads, validates and assembles (test_validation)" begin
     cases = filter(endswith(".json"), readdir(COMMON))
     @test length(cases) >= 25
-    for f in cases
+    for f in filter(f -> replace(f, ".json" => "") in PHASE9_LAG, cases)
+        # Phase 9 cases: the loader must refuse them explicitly (lag)
+        err = try
+            load_study(joinpath(COMMON, f)); nothing
+        catch e
+            e
+        end
+        @test err isa TupaError && occursin("ROADMAP Phase 9", err.msg)
+    end
+    for f in filter(f -> !(replace(f, ".json" => "") in PHASE9_LAG), cases)
         c = validate_study_references!(load_study(joinpath(COMMON, f)))
         @test !isempty(c.study.structure.electrodes)
     end

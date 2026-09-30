@@ -208,6 +208,26 @@ pub fn internal_impedance(radius: f64, length: f64, omega: f64, sigma: f64, mur:
     per_length * length
 }
 
+/// `internal_impedance` at a complex frequency `s = c + jω` (`jω → s`), for
+/// the Numerical Laplace Transform (ROADMAP Phase 9 item 5). With
+/// `Re s ≥ 0`, `arg ρ ∈ [0, π/4]`, inside the Bessel routines' domain.
+pub fn internal_impedance_laplace(
+    radius: f64,
+    length: f64,
+    s: Complex64,
+    sigma: f64,
+    mur: f64,
+) -> Complex64 {
+    let rho = radius * (s * mur * MU0 * sigma).sqrt();
+    let ratio = if rho.norm() > 500.0 {
+        Complex64::new(1.0, 0.0)
+    } else {
+        i0_over_i1(rho)
+    };
+    let per_length = (s * mur * MU0 / sigma).sqrt() / (2.0 * PI * radius) * ratio;
+    per_length * length
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -241,6 +261,20 @@ mod tests {
         // ∬ dx dy /√((x-y)²+1) = 2(asinh(1) - √2 + 1)
         let exact = 2.0 * (1.0_f64.asinh() - 2.0_f64.sqrt() + 1.0);
         assert!((g - exact).abs() < 1e-7, "{g} vs {exact}");
+    }
+
+    #[test]
+    fn internal_impedance_laplace_continues_the_harmonic_one() {
+        for k in 0..=8 {
+            let om = 2.0 * PI * 10f64.powi(k);
+            let a = internal_impedance(0.007, 1.0, om, 5.96e7, 1.0);
+            let b = internal_impedance_laplace(0.007, 1.0, Complex64::new(0.0, om), 5.96e7, 1.0);
+            assert!((a - b).norm() / a.norm() < 1e-12);
+        }
+        let s = Complex64::new(3e4, 1e5);
+        let z = internal_impedance_laplace(0.007, 1.0, s, 5.96e7, 1.0);
+        let zc = internal_impedance_laplace(0.007, 1.0, s.conj(), 5.96e7, 1.0);
+        assert!(z.re.is_finite() && (zc - z.conj()).norm() < 1e-12 * z.norm());
     }
 
     #[test]

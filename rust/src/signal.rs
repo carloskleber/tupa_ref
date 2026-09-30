@@ -58,6 +58,18 @@ pub struct PortelaSignal {
     pub t_tail_end: f64,
 }
 
+/// Sine switched on at `t = 0`: `imax·sin(2πft + φ)` for `t ≥ 0`, zero before
+/// (ROADMAP Phase 9 item 4).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SineSignal {
+    /// Amplitude (A)
+    pub imax: f64,
+    /// Frequency (Hz)
+    pub frequency_hz: f64,
+    /// Phase angle at `t = 0` (degrees)
+    pub phase_deg: f64,
+}
+
 /// A source waveform.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Signal {
@@ -67,6 +79,8 @@ pub enum Signal {
     DoubleExp(DoubleExpSignal),
     /// Portela concave-front surge
     Portela(PortelaSignal),
+    /// Switched-on sine
+    Sine(SineSignal),
 }
 
 /// Legacy 6-term Heidler set of De Conti & Visacro [38] (MCS_FST#1), rescaled
@@ -171,6 +185,35 @@ pub fn new_portela_signal(
     }))
 }
 
+/// Switched-on sine (ROADMAP Phase 9 item 4); `frequency_hz > 0`.
+pub fn new_sine_signal(imax: f64, frequency_hz: f64, phase_deg: f64) -> Result<Signal> {
+    if frequency_hz <= 0.0 {
+        return Err(TupaError::new("newSineSignal: frequencyHz must be > 0"));
+    }
+    Ok(Signal::Sine(SineSignal {
+        imax,
+        frequency_hz,
+        phase_deg,
+    }))
+}
+
+impl SineSignal {
+    fn waveform(&self, t: &[f64]) -> Vec<f64> {
+        t.iter()
+            .map(|&tk| {
+                if tk >= 0.0 {
+                    self.imax
+                        * (2.0 * std::f64::consts::PI * self.frequency_hz * tk
+                            + self.phase_deg * std::f64::consts::PI / 180.0)
+                            .sin()
+                } else {
+                    0.0
+                }
+            })
+            .collect()
+    }
+}
+
 impl Signal {
     /// Waveform samples at times `t` (s); zero for `t ≤ 0`.
     pub fn waveform(&self, t: &[f64]) -> Vec<f64> {
@@ -178,6 +221,7 @@ impl Signal {
             Signal::Heidler(h) => h.waveform(t),
             Signal::DoubleExp(d) => d.waveform(t),
             Signal::Portela(p) => p.waveform(t),
+            Signal::Sine(s) => s.waveform(t),
         }
     }
 }
@@ -347,6 +391,17 @@ mod tests {
         assert_eq!(ramp.waveform(&[0.5e-6])[0], 0.25);
         assert!((tiny.waveform(&[0.5e-6])[0] - 0.25).abs() < 1e-12);
         assert!(new_portela_signal(1.0, 2.0, 2e-6, 1e-6, 100e-6).is_err());
+    }
+
+    #[test]
+    fn sine_switched_on_at_zero() {
+        let s = new_sine_signal(10.0, 50.0, 90.0).unwrap();
+        let v = s.waveform(&[-1e-3, 0.0, 10e-3, 5e-3]);
+        assert_eq!(v[0], 0.0);
+        assert!((v[1] - 10.0).abs() < 1e-12);
+        assert!((v[2] + 10.0).abs() < 1e-12);
+        assert!(v[3].abs() < 1e-12);
+        assert!(new_sine_signal(1.0, 0.0, 0.0).is_err());
     }
 
     #[test]

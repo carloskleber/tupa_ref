@@ -19,7 +19,7 @@ module mStudy
   use mResult
   use mGeometry, only: buildGeometryMatrices
   use mGeometryCache, only: geomCacheStats
-  use mImpedance, only: internalImpedance
+  use mImpedance, only: internalImpedance, internalImpedanceLaplace
   use mError, only: raiseError
   use mCtes, only: newl, PI, EPSILON0, MU0, ZERO_CPLX
   use mVerbosity
@@ -50,6 +50,10 @@ module mStudy
     !! Transverse (leakage) electrode currents I_trans(ω) across the last `runSweep` call
     real(8), allocatable :: sweepFreqHz(:)
     !! Frequency axis (Hz) of the last `runSweep` call
+    real(8) :: sweepDamping = 0.0d0
+    !! Damping c (1/s) of the last `runSweep` call: results were solved at
+    !! s = c + jω (0 = ordinary harmonic sweep; > 0 only for the Numerical
+    !! Laplace Transform driver, ROADMAP Phase 9 item 5)
     character(256), allocatable :: sweepSourceIds(:)
     !! Source node IDs of the last `runSweep` call (for `inputImpedance`)
     complex(8), allocatable :: sweepSourceCurrents(:)
@@ -177,11 +181,26 @@ contains
     end select
   end function segmentInternalImpedance
 
+  complex(8) function segmentInternalImpedanceLaplace(this, i, sLap) result(zint)
+    !! `segmentInternalImpedance` at a complex frequency s = c + jω.
+    class(tStudy), intent(in) :: this
+    integer(4), intent(in) :: i
+    complex(8), intent(in) :: sLap
+
+    select type (mat => this%structure%electrodes(i)%material)
+    type is (tLinear)
+      zint = internalImpedanceLaplace(this%geomRadius(i), this%geomLength(i), sLap, mat%sigma, mat%mur)
+    class default
+      call raiseError("tStudy%run: internal impedance requires a tLinear conductor material")
+      zint = ZERO_CPLX
+    end select
+  end function segmentInternalImpedanceLaplace
+
   ! =====================================================================
   ! Study execution and reporting
   ! =====================================================================
 
-  subroutine run(this, omega, sourceNodeIds, sourceCurrents, sourceIsVoltage)
+  subroutine run(this, omega, sourceNodeIds, sourceCurrents, sourceIsVoltage, damping)
     !! Solve the study at one angular frequency ω, injecting the given
     !! sources at the given nodes (ADR 0010: current-injection sources).
     !!
@@ -201,6 +220,12 @@ contains
     !! unit-injection superposition (ADR 0016 — the solver kernel sees only
     !! currents, per ADR 0010). The effective injected currents of every
     !! source are left in `this%lastSourceCurrents`.
+    !!
+    !! With a nonzero `damping` c the system is solved at the complex
+    !! frequency s = c + jω instead of jω (Numerical Laplace Transform,
+    !! ROADMAP Phase 9 item 5, theory.md §8): media immittances come from
+    !! `admittanceLaplace` and every jω factor becomes s. Absent or zero,
+    !! the real-ω path runs exactly as before.
     class(tStudy), intent(inout) :: this
     real(8), intent(in) :: omega
     !! Angular frequency ω (rad/s) for this solve
@@ -212,12 +237,18 @@ contains
     logical, intent(in), optional :: sourceIsVoltage(:)
     !! Marks entries of `sourceCurrents` as voltage sources (default: all
     !! current sources)
+    real(8), intent(in), optional :: damping
+    !! Damping c (1/s) of the complex frequency s = c + jω (default 0)
     integer(4) :: nseg, i, j, k
     integer(4), allocatable :: sourcePos(:)
-    complex(8) :: zint
+    complex(8) :: zint, sLap
     real(8) :: muAir, muSoil
     integer(4) :: info
-    logical :: anyVoltage
+    logical :: anyVoltage, laplace
+
+    laplace = .false.
+    if (present(damping)) laplace = damping /= 0.0d0
+    if (laplace) sLap = cmplx(damping, omega, kind=8)
 
     if (.not. this%prepared) call prepareStudy(this)
 
@@ -228,14 +259,23 @@ contains
     ! whichever concrete model (tLinear, tPortelaSoil, ...) is stored, so any
     ! dispersive soil (ROADMAP Phase 4, ADR 0007) works here without a
     ! type-specific branch.
-    call calcParamW(this%mesh, omega, muAir, this%structure%air%admittance(omega), &
-                     muSoil, this%structure%soil%admittance(omega))
+    if (laplace) then
+      call calcParamLaplace(this%mesh, sLap, muAir, this%structure%air%admittanceLaplace(sLap), &
+                             muSoil, this%structure%soil%admittanceLaplace(sLap))
+    else
+      call calcParamW(this%mesh, omega, muAir, this%structure%air%admittance(omega), &
+                       muSoil, this%structure%soil%admittance(omega))
+    end if
 
     nseg = this%structure%getElectrodeCount()
     do i = 1, nseg
       do j = i, nseg
         if (i == j) then
-          zint = segmentInternalImpedance(this, i, omega)
+          if (laplace) then
+            zint = segmentInternalImpedanceLaplace(this, i, sLap)
+          else
+            zint = segmentInternalImpedance(this, i, omega)
+          end if
           call calcZSelf(this%mesh, i, this%geomPos(i), &
             this%geomRbar(i,i), this%geomRbari(i,i), this%geomLength(i), &
             zint, this%geomG(i,i), this%geomGi(i,i), this%geomCosThetaI(i,i))
@@ -396,7 +436,7 @@ contains
     end do
   end function logFrequencyAxis
 
-  subroutine runSweep(this, freqHz, sourceNodeIds, sourceCurrents, sourceIsVoltage)
+  subroutine runSweep(this, freqHz, sourceNodeIds, sourceCurrents, sourceIsVoltage, damping)
     !! Solve the study once per frequency in `freqHz` (ROADMAP.md Phase 3
     !! items 1-2), storing node voltages and electrode currents in
     !! `this%voltageResults`/`longCurrentResults`/`transCurrentResults`,
@@ -405,7 +445,8 @@ contains
     !! sources, ADR 0016). Geometry factors are cached after the first
     !! `run` call (theory.md §4.1), so only the per-frequency fill+solve
     !! repeats. Use `logFrequencyAxis` to build a default log-spaced axis,
-    !! or pass any user-chosen `freqHz`.
+    !! or pass any user-chosen `freqHz`. A nonzero `damping` c solves every
+    !! point at s = c + 2πj·f (see `run`); the stored axis stays real f.
     class(tStudy), intent(inout) :: this
     real(8), intent(in) :: freqHz(:)
     !! Frequency axis (Hz), in the order results are stored
@@ -417,6 +458,8 @@ contains
     logical, intent(in), optional :: sourceIsVoltage(:)
     !! Marks entries of `sourceCurrents` as voltage sources (default: all
     !! current sources)
+    real(8), intent(in), optional :: damping
+    !! Damping c (1/s) of the complex frequency s = c + jω (default 0)
     real(8), allocatable :: omegaAxis(:)
     character(256), allocatable :: nodeIds(:), electrodeIds(:)
     integer(4) :: nf, nno, nseg, i, k
@@ -447,7 +490,7 @@ contains
 
     do k = 1, nf
       if (verbosityLevel() .eq. VERB_VERBOSE) write(*, '("f = ",EN0.1E2," Hz")') freqHz(k)
-      call this%run(omegaAxis(k), sourceNodeIds, sourceCurrents, sourceIsVoltage)
+      call this%run(omegaAxis(k), sourceNodeIds, sourceCurrents, sourceIsVoltage, damping)
 
       do i = 1, nno
         call this%voltageResults%set(i, k, this%mesh%voltage(i))
@@ -460,6 +503,8 @@ contains
     end do
 
     this%sweepFreqHz = freqHz
+    this%sweepDamping = 0.0d0
+    if (present(damping)) this%sweepDamping = damping
     this%sweepSourceIds = sourceNodeIds
     this%sweepSourceCurrents = sourceCurrents
   end subroutine runSweep

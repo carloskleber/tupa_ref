@@ -8,6 +8,10 @@
 using Test, Tupa
 
 const COMMON = normpath(joinpath(@__DIR__, "..", "..", "common"))
+# ROADMAP Phase 9 cases/fixtures not yet ported (follow-along lag, julia/README.md)
+const PHASE9_LAG = ["portela1997_transient_hann", "portela1997_transient_hann_time",
+                    "portela1997_transient_interpolated", "portela1997_transient_multi",
+                    "portela1997_transient_nlt"]
 
 set_verbosity(VERB_QUIET)
 

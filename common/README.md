@@ -18,6 +18,10 @@ when it reproduces every case within the stated tolerance.
 | `rod_air.json` | Two collinear rods sharing `Node_2` at the air-soil interface (z=0): 10 m above ground down to a 5 m buried rod, same soil/material, 1∠0° A at `Node_1` (top), 10 Hz-1 MHz | none yet — runs NaN-free since the ADR 0019 fix; fixture still to be generated (see below) |
 | `grid.json` | Small buried grounding grid, one square mesh (4 nodes/edges), 1∠0° A at `Node_A`, 100 Hz-100 kHz | `grid_expected.csv` |
 | `portela1997_transient.json` | Same geometry/soil as `portela1997.json`, but a `signal` block (ADR 0015) instead of `sources`/`frequencies`: transient GPR under a 1.2/50 µs, 30 kA double-exponential surge | none (internal-consistency check only, theory.md §9.2 data gap — see `test_transient.f90`) |
+| `portela1997_transient_interpolated.json` | ROADMAP Phase 9 item 1: as `portela1997_transient.json`, `transferFunction: "interpolated"` — H(f) solved on the case's `frequencies` axis (100 Hz–1 MHz, 20/decade, 81 points; `freqZeroHz: 100`) and pchip-interpolated onto the 513 FFT bins | `portela1997_transient_interpolated_expected.csv` (transient shape) |
+| `portela1997_transient_hann.json`, `portela1997_transient_hann_time.json` | ROADMAP Phase 9 item 2: as `portela1997_transient.json`, with a half-Hann `window` in the `"spectral"` and the `"time"` placement | `portela1997_transient_hann_expected.csv`, `portela1997_transient_hann_time_expected.csv` |
+| `portela1997_transient_multi.json` | ROADMAP Phase 9 item 4: three injections via `signal.sources` — the legacy differential pattern (+30 kA at `Node_1`, −30 kA at `Node_2`, 1.2/50 µs) plus a 1 kA, 5 kHz sine at `Node_1`; observes both ends of the conductor | `portela1997_transient_multi_expected.csv` |
+| `portela1997_transient_nlt.json` | ROADMAP Phase 9 item 5: Numerical Laplace Transform (`transform: "nlt"`, default damping ln(N²)/T) on the same conductor under a slow 250/2500 µs, 1 kA surge, `nyquistHz: 1e5`, 512 samples — a well-resolved case; the fast `portela1997_transient` front is band-edge-limited and NLT output there is usable only over about half the record (docs/validation/phase9-transient-options.md) | `portela1997_transient_nlt_expected.csv` |
 | `silva2025_rho{100,300,1000,2400}.json` | Silva et al. 2025 (SBAI, references.md [36]) PEEC-vs-HEM base case: buried horizontal electrode, 60 m, 7 mm radius, 0.5 m depth, `alipio-visacro` dispersive soil (theory.md §7) at ρ0 = 100/300/1000/2400 Ω·m, 1∠0° A at `Node_1`, 128 log-spaced points 100 Hz–4 MHz (`pointsPerDecade: 27.6`, ADR 0013's `round(ppd·log10(fmax/fmin))+1` formula) — matches the paper's 2⁷ frequency samples. For comparison against the paper's Fig. 3 (\|Z(ω)\|); no tabulated digitised curve exists yet, so there is no `_expected.csv` (internal passivity/plausibility check only) | none yet |
 | `silva2025_rho{100,300,1000,2400}_transient.json` | Same geometry/soil as the files above, but a `signal` block (ADR 0015): GPR at `Node_1` under De Conti & Visacro [38]'s **MCS_FST#2** double-peaked first-stroke current (7 `terms`, physical amplitudes, no `imax` rescale), `nyquistHz: 4e6`, `fftPoints: 4096`. For comparison against the paper's Fig. 4 (GPR(t)) — see [`docs/validation/silva2025-fig4.md`](../docs/validation/silva2025-fig4.md), including why MCS_FST#2 rather than the legacy 6-term MCS_FST#1 | none yet (plausibility check only, same caveat as the frequency-domain files above) |
 | `grcev_fig12_l{10,100}_rho{30,300,3000}.json` | Grcev et al. 2018 (IEEE TPWRD, references.md [23]) §IX-B case: buried horizontal electrode, ℓ = 10 or 100 m, 7 mm radius, 0.5 m depth, homogeneous non-dispersive soil (ρ1 = 30/300/3000 Ω·m, εr = 10), 0.25 m segments (theory.md §4.1 λ/10 bound at 10 MHz), 1∠0° A at `Node_1`, 101 log-spaced points 100 Hz–10 MHz (`pointsPerDecade: 20`). For comparison against the paper's Fig. 12 (rigorous full-wave model's \|Z(ω)\|, not a circuit-model approximation) — see [`docs/validation/grcev-fig12.md`](../docs/validation/grcev-fig12.md) | none yet (plausibility check only, same caveat as the Silva files above) |
@@ -53,7 +57,11 @@ edit `tFront` to run those. `linha0`'s first signal is the legacy linear
 
 Run times are the CPU time of the whole CLI run (sweep plus transient),
 release build, single-threaded (AMD Ryzen 5 8500G). The transient solves every FFT bin
-(`fftPoints/2 + 1` frequencies) until ROADMAP Phase 9 item 1 lands. There
+(`fftPoints/2 + 1` frequencies); since ROADMAP Phase 9 item 1 the
+`frequencies` axis can serve as the scan grid instead
+(`signal.transferFunction: "interpolated"`, see the schema notes), after
+raising `frequencies.min` to or below `freqZeroHz` and `max` to or above
+`nyquistHz`. There
 is no `_expected.csv` for these cases: no legacy output files survive to
 compare against. Legacy features with no counterpart yet (field points,
 path voltages, impedance-matrix outputs, the `torre*` cases' Γ(ω) images)
@@ -104,7 +112,7 @@ which costs roughly 1-2 s per pair regardless of touching/singularity at
 today's tolerances (ROADMAP §6 "Quadrature tolerances", §7 P1) — a bigger
 grid is worth adding once the P1 mHEM single-integral kernel lands.
 
-## Schema (v1 — [ADR 0006](../docs/adr/0006-json-io.md) format, `sources`/`frequencies`/`outputs` frozen by [ADR 0013](../docs/adr/0013-input-schema-sources-frequencies-outputs.md), `signal` added by [ADR 0015](../docs/adr/0015-time-domain-signal-schema.md), voltage sources and Heidler `terms` by [ADR 0016](../docs/adr/0016-voltage-sources-by-superposition.md)/0015 amendment, `"mesh"` element by [ADR 0020](../docs/adr/0020-grid-mesh-element.md), `signal.antialiasStart` by [ADR 0021](../docs/adr/0021-transient-antialias-filter.md), `"catenary"` element and `"portela"` waveform by [ADR 0023](../docs/adr/0023-legacy-case-import.md))
+## Schema (v1 — [ADR 0006](../docs/adr/0006-json-io.md) format, `sources`/`frequencies`/`outputs` frozen by [ADR 0013](../docs/adr/0013-input-schema-sources-frequencies-outputs.md), `signal` added by [ADR 0015](../docs/adr/0015-time-domain-signal-schema.md), voltage sources and Heidler `terms` by [ADR 0016](../docs/adr/0016-voltage-sources-by-superposition.md)/0015 amendment, `"mesh"` element by [ADR 0020](../docs/adr/0020-grid-mesh-element.md), `signal.antialiasStart` by [ADR 0021](../docs/adr/0021-transient-antialias-filter.md), `"catenary"` element and `"portela"` waveform by [ADR 0023](../docs/adr/0023-legacy-case-import.md), `signal.sources`/`window`/`transferFunction`/`transform`/`nltDamping` and the `"sine"` waveform by the ADR 0015 amendment of 2026-09-30)
 
 ```json
 {
@@ -242,6 +250,39 @@ Semantics:
   `portela1997_transient.json`, `0.85` lowers the `Node_1` GPR peak by
   about 3.4%), so it is never on by default.
   See `portela1997_transient.json` for a worked example.
+- **`signal` — ROADMAP Phase 9 fields** (ADR 0015 amendment 2026-09-30),
+  all optional; absent, a case runs exactly as before:
+  - `sources`: array of `{ "node": ..., "waveform": ..., <waveform fields> }`,
+    several simultaneous current injections, each with its own waveform;
+    replaces `sourceNode` and the top-level waveform fields (both at once
+    is an error). Responses superpose (one unit-current sweep per source).
+    New waveform `"sine"`: `imax`, `frequencyHz`, optional `phaseDeg`
+    (default 0), switched on at t = 0. See `portela1997_transient_multi.json`.
+  - `window`: `{ "type": "none" | "hann", "placement": "spectral" | "time" }`
+    (placement default `"spectral"`), the falling half of a Hann window over
+    the one-sided spectrum or over the sampled excitation; multiplies with
+    `antialiasStart`.
+  - `transferFunction`: `"full"` (default) or `"interpolated"` — solve only
+    the case's `frequencies` axis and pchip-interpolate H(f) onto the FFT
+    bins. The axis must span [`freqZeroHz`, `nyquistHz`] (a log axis cannot
+    start at the default `freqZeroHz` of 1e-6 Hz cheaply, so set
+    `freqZeroHz` to the axis minimum, e.g. 100 Hz — below a few kHz the
+    grounding response is quasi-static). If `sources` is also present the
+    same axis still drives the harmonic sweep.
+  - `transform`: `"fft"` (default) or `"nlt"` (Numerical Laplace
+    Transform, s = c + jω); `nltDamping` sets c (1/s), default ln(N²)/T.
+    `"nlt"` cannot be combined with `"interpolated"`. NLT output is reliable
+    over the early part of the record only (theory.md §8).
+- **Transient results with several sources**: the results JSON adds a
+  `sources` array (`[{ "node", "current": [...] }]`, input order) after
+  `injectedCurrent`, which, like `sourceNode`, keeps describing the first
+  source; the CSV has one `injectedCurrent` row per distinct source node,
+  holding the net current injected there.
+- **Transient golden fixtures** (`*_expected.csv` in the
+  `time_s,quantity,id,value` shape): rows are compared by position with
+  identical text fields, and values pass when
+  |fresh − expected| ≤ 1e-6 · max(|expected|, 1e-3 · peak), peak being the
+  largest |expected| of that (quantity, id) series.
 
 ## Parser (ADR 0006)
 
