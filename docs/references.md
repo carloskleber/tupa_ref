@@ -560,6 +560,19 @@ below) as the sources of its dispersive-soil routines:
     route of [26,27]. A distinct paper from the same author pair's later
     journal article [18] despite the similar author order and topic.
 
+## Excitation waveforms (addendum)
+
+65. **Jones, R. D.** — "On the Use of Tailored Return-Stroke Current
+    Representations to Simplify the Analysis of Lightning Effects on
+    Systems", *IEEE Trans. Electromagnetic Compatibility*, vol. EMC-19,
+    no. 2, pp. 95–96, May 1977. The source the legacy
+    `sinais.DuplaExpJones` cites for its zero-initial-slope variant of the
+    double-exponential surge (front exponential replaced by
+    $e^{-(\alpha t)^2}$), ported as `mSignal`'s `tDoubleExpSignal` with
+    `jones = .true.` (theory.md §8). Bibliographic details to be checked
+    against the paper (added 2026-09-30 from the code comment's
+    "R.D. Jones 1977").
+
 ## Related open-source implementations
 
 Companion codes of the same model family, useful as executable cross-checks
@@ -603,8 +616,8 @@ Companion codes of the same model family, useful as executable cross-checks
     only the ideal-image limits. The user manual (WIP) lives with it.
   - known shared defect: the legacy self geometry factor (Matlab, ported
     verbatim to C++) is half the correct value and carries a `1`-for-`l`
-    typo in its log argument — see theory.md §4.2 and ROADMAP
-    gap 8. The model itself is fully specified by the public references
+    typo in its log argument — see theory.md §4.2 and ADR 0017
+    finding 2. The model itself is fully specified by the public references
     above.
 - TUPÃ's geometry-factor separation (theory.md §4.1, from [3], 2003) and the
   mHEM [11] are the same optimisation, arrived at independently; TAGS's

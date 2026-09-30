@@ -3,7 +3,8 @@
 This document states the electromagnetic model implemented by TUPÃ: the Hybrid
 Electromagnetic Model (HEM), an application of the Method of Moments (MoM) to
 lightning and grounding-system transients. It is the normative reference for
-every implementation (Fortran, and future Python/Rust): where code and this
+every implementation (Fortran, and the planned Rust port — ROADMAP Phase 8;
+Python is reserved for the GUI, ADR 0011): where code and this
 document disagree, one of them has a bug — and the discrepancy must be resolved
 before the code is merged.
 
@@ -69,6 +70,14 @@ TUPÃ adopts **one** convention set; every routine must conform to it.
   decays with distance ($\alpha > 0$ in any lossy medium) and delays the phase.
 - **Geometry**: right-handed Cartesian axes, `z` up. The air–soil interface is
   the plane `z = 0`; air occupies `z > 0`, soil `z < 0`.
+- **Segments and the interface**: each segment belongs wholly to one medium,
+  assigned by the sign of its midpoint `z` (the Fortran `prepareStudy`
+  takes midpoint $z \le 0$ as soil). Hence a node may lie on `z = 0` (e.g.
+  the air/soil junction of `common/rod_air.json`), but a segment must not
+  lie *in* the plane `z = 0` — its image coincides with itself, a degenerate
+  image distance (§5) — and a conductor crossing the interface must be split
+  there, so that no single segment spans both media. The `mesh` element
+  enforces the first rule (ADR 0020); the `line` element does not yet.
 - **Segment end currents**: both $I_1$ and $I_2$ are positive **into** the
   segment (from the node toward the segment). Hence
 
@@ -189,6 +198,12 @@ propagation factors. This is the decisive optimisation over the plain HEM
 (where the full integrals are redone per frequency, cf. [5]) and bounds the
 segment length: the approximation requires segments short compared to the
 wavelength in the medium (in practice $\lesssim \lambda/10$, a few metres for soil at 1 MHz).
+Lima et al. [11] locate where the separation starts to fail for their
+20 × 20 m and 40 × 40 m grids in 1000 Ω·m soil: mHEM and full HEM agree
+below ~4 MHz, then diverge steeply, which they attribute to the
+non-uniformity of $\exp(-\gamma R)$ over the segment pair. TUPÃ's
+reproduction of those curves shows the same onset
+([validation/lima-fig7.md](validation/lima-fig7.md)).
 
 The same separation was published independently by Lima et al. [11] as the
 **modified HEM (mHEM)**, with error analysis and validation against the full
@@ -219,11 +234,18 @@ overvoltage peaks within 5 % of a fine-mesh reference, with speedups above
 the fine structure of the current distribution. Segment length is therefore
 an accuracy/cost knob bounded below by the thin-wire condition and above by
 $\lambda/10$; the project default stays $\lambda/10$, with coarsening per
-[19] as a documented option for large studies.
+[19] as a documented option for large studies. The error of coarsening has
+a known sign: Silva's segmentation study for the pulse basis [49, §5.3]
+(10 $r_0$ segments as the converged reference) finds that coarser
+discretisations systematically *underestimate* $|Z(\omega)|$ and GPR — a
+candidate cause of the mostly negative mid-band knee error in
+[validation/silva2025-fig3.md](validation/silva2025-fig3.md).
 
 ### 4.2 Evaluating the geometry factor
 
-- **Single-integral (mHEM) form** — preferred. The inner integral over a
+- **Single-integral (mHEM) form** — the planned default (ROADMAP §7 P1;
+  not yet implemented: today the 2-D quadrature below is the production
+  path, with the parallel closed form as fast path). The inner integral over a
   straight segment $b$ has a closed form: for a field point $p$ on segment
   $a$, with $r_1, r_2$ the distances from $p$ to the two ends of $b$,
 
@@ -305,8 +327,8 @@ $\lambda/10$; the project default stays $\lambda/10$, with coarsening per
   $r_0 - h + l \ln\left(\frac{1+h}{r_0}\right)$ — half the correct value,
   with a literal `1` (one metre, dimensionally inconsistent) where $l$
   belongs in the log argument, so it is exact only for $l = 1$ m even after
-  doubling — and the C++ port carries the same expression verbatim (see the
-  ROADMAP, gap 8).
+  doubling — and the C++ port carries the same expression verbatim (see
+  [ADR 0017](adr/0017-legacy-reinspection-findings.md) finding 2).
 
 ### 4.3 Self impedances
 
@@ -431,7 +453,18 @@ the closest published analogue), validated against a `rod_air`-class case;
 anything beyond that is Sommerfeld territory (§10.1).
 
 Even with $\Gamma(\omega)$, the image treatment is quasi-static and the HEM
-family is regarded as accurate from DC up to a few MHz [19,20]. Kuhar,
+family is usually quoted as accurate from DC up to a few MHz [19,20]. That
+figure stands in for electrical size, not for an absolute frequency: the
+quasi-static premise needs system dimensions under ~λ/10 in the soil at the
+highest frequency of interest [56] (§10.1). A single 2 m vertical rod in
+5400 Ω·m, $\varepsilon_r = 10$ soil (Poljak & Doric [35]) stays within
+±10 % of the antenna-theory reference up to 100 MHz
+([validation/poljak-fig4.md](validation/poljak-fig4.md)). That result is
+*not* evidence for the ideal-image limit in general: at 100 MHz in that
+soil $\sigma/\omega\varepsilon \approx 0.003$, so
+$\Gamma_t \approx (\varepsilon_r - 1)/(\varepsilon_r + 1) \approx 0.82$
+rather than the $+1$ used today — which makes it the natural regression
+case for P2, where $\Gamma(\omega)$ and the ideal limit differ most. Kuhar,
 Arnautovski-Toševa & Grčev [20] push this ceiling by replacing the
 quasi-static images with **complex images** (the finitely conducting earth
 replaced by a perfect conductor at a complex depth), recovering agreement
@@ -493,15 +526,31 @@ converted to equivalent current injections by unit-injection superposition
 in the study layer (ADR 0010/0016) — the kernel only ever sees the
 $\mathbf{i}_e$ right-hand side above.
 
-**Reduced form.** Eliminating $\mathbf{i}_1, \mathbf{i}_2$ yields the nodal admittance relation used
-when only $\mathbf{u}$ is needed and $n_n \ll n_s$:
+**Reduced form.** Rows 1 and 2 give
+$\mathbf{i}_1 - \mathbf{i}_2 = -2 Z_\ell^{-1}\mathbf{A}\mathbf{u}$ and
+$\mathbf{i}_1 + \mathbf{i}_2 = -Z_t^{-1}\mathbf{B}\mathbf{u}$; substituting
+into the KCL row eliminates $\mathbf{i}_1, \mathbf{i}_2$ and yields the
+nodal admittance relation used when only $\mathbf{u}$ is needed and
+$n_n \ll n_s$:
 
-$$\mathbf{u} = Z_g \mathbf{i}_e, \quad Z_g = \left[ (\mathbf{D}-\mathbf{C}) Z_\ell^{-1} \mathbf{A} + \frac{1}{2} (\mathbf{C}-\mathbf{D}) Z_t^{-1} \mathbf{B} \right]^{-1}$$
+$$\mathbf{u} = Z_g \mathbf{i}_e, \quad Z_g = \left[ (\mathbf{D}-\mathbf{C}) Z_\ell^{-1} \mathbf{A} - \frac{1}{2} (\mathbf{C}+\mathbf{D}) Z_t^{-1} \mathbf{B} \right]^{-1} = \left[ \mathbf{A}^T Z_\ell^{-1} \mathbf{A} + \mathbf{B}^T Z_t^{-1} \mathbf{B} \right]^{-1}$$
 $$\mathbf{i}_1 = -\left( Z_\ell^{-1}\mathbf{A} + \frac{1}{2} Z_t^{-1}\mathbf{B} \right) \mathbf{u}$$
-$$\mathbf{i}_2 = \left(-Z_\ell^{-1}\mathbf{A} + \frac{1}{2} Z_t^{-1}\mathbf{B} \right) \mathbf{u}$$
+$$\mathbf{i}_2 = \left( Z_\ell^{-1}\mathbf{A} - \frac{1}{2} Z_t^{-1}\mathbf{B} \right) \mathbf{u}$$
+
+The second form of $Z_g$ follows from $\mathbf{D}-\mathbf{C} = \mathbf{A}^T$
+and $-\frac{1}{2}(\mathbf{C}+\mathbf{D}) = \mathbf{B}^T$; it is a
+congruence, so $Z_g$ is symmetric whenever $Z_\ell$ and $Z_t$ are
+(reciprocity). For a single segment it reduces to the expected
+π-equivalent: series admittance $1/Z_\ell$ between the two nodes plus
+$(u_1+u_2)/(4Z_t)$ leaking at each. (Corrected 2026-09-30: earlier
+versions printed $\mathbf{i}_2$ in the out-of-segment convention of [1]
+and a non-symmetric $Z_g$ bracket, $+\frac{1}{2}(\mathbf{C}-\mathbf{D})Z_t^{-1}\mathbf{B}$;
+the forms above reproduce the augmented solve to round-off on random test
+systems.)
 
 This trades one $(n_n+2n_s)^2$ solve for two $n_s \times n_s$ solves plus a $n_n \times n_n$ solve
-(cf. [1] eqs. 50–56, [4]). Both forms must give identical results — a useful
+(cf. [1] eqs. 50–56, in its own $\mathbf{i}_2$ convention — see the sign
+caveat below — and [4]). Both forms must give identical results — a useful
 consistency test. The legacy Matlab reference exposes exactly this check as
 switchable solver methods: the reduced form (backslash and explicit-inverse
 variants), the augmented form (with LU and GMRES-fallback variants), and
@@ -552,8 +601,10 @@ $$W(\omega) = \sigma_0 + \Delta\sigma \cdot \left[ 1 + j \tan\left(\frac{\pi \al
 with $\sigma_0$ the low-frequency conductivity, $\alpha \in (0,1)$ the dispersion exponent
 and $\Delta\sigma$ the dispersion magnitude at the reference frequency $\omega_0$ (commonly
 $2\pi \cdot 1\, \text{MHz}$). The parameters `alpha0` and `kr` carried by `tPortelaSoil` correspond
-to this model (`kr` scaling the dispersive parcel, $\tan(\pi\alpha/2)$ tying the
-imaginary part). **Reference-frequency caveat**: the legacy Matlab codes this
+to this model, with $\tan(\pi\alpha/2)$ tying the imaginary part — but
+`kr` is **not** $\Delta\sigma$: the implemented Lima–Portela form (decision
+below; `Material.f90::admittance_freq`) takes `kr` $= \Delta_i$, i.e.
+$\Delta\sigma = k_r \cot(\pi\alpha_0/2)$. **Reference-frequency caveat**: the legacy Matlab codes this
 model as $W = \sigma_0 + k_r[1 + j\tan(\pi\alpha/2)]\,\omega^\alpha$
 (source: Portela [30]), i.e. $\omega_0 = 1$ rad/s — `kr` is the dispersive
 magnitude at $\omega = 1$ rad/s, *not* at 1 MHz. A second legacy routine
@@ -577,7 +628,7 @@ and PRTL-mHEM codes), etc. All must reduce to the constant-parameter
 (`tLinear`) medium as $\omega \to 0$. Cavka et al. [16] compare these models
 side by side and are the reference for cross-checking any implementation.
 
-**`tVisacroAlipioSoil`** (ROADMAP §P5) implements the *mean* curve of the
+**`tVisacroAlipioSoil`** (ROADMAP §7 P5) implements the *mean* curve of the
 causal model in [14], parametrised by a single free quantity, the 100 Hz
 conductivity $\sigma_0$. The model gives $\rho(f) = \sigma_0^{-1}[1 +
 h(f/f_0)^\xi]^{-1}$ and, via the same Hilbert-transform (minimum-phase)
@@ -628,7 +679,8 @@ double-precision transform, not SLATEC's `CFFTF`/`CFFTB` (single precision
 only) or stdlib (no FFT module in the pinned version) — see
 [ADR 0014](adr/0014-fft-implementation.md). Heidler [37,38,39] and
 double-exponential (plain and Jones-corrected) excitation waveforms are
-implemented; the Matlab reference's remaining waveforms (single exponential,
+implemented (the legacy Jones variant [65] replaces the front term
+$e^{-\alpha t}$ by $e^{-(\alpha t)^2}$, giving zero initial $di/dt$); the Matlab reference's remaining waveforms (single exponential,
 impulse/step,
 Portela's concave model, sine) are ported on demand, not spawned in advance.
 First in that queue (ROADMAP Phase 7) is Portela's concave-front surge
@@ -639,7 +691,15 @@ $$i(t) = I_{max}\,\frac{e^{\alpha t/t_1} - 1}{e^{\alpha} - 1} \quad (0 < t < t_1
 \qquad i = I_{max} \quad (t_1 \le t < t_2),$$
 
 then a linear decay from $I_{max}$ at $t_2$ to zero at $t_3$ — a concave
-exponential front (inclination factor $\alpha$), flat top, straight tail.
+exponential front (inclination factor $\alpha$), flat top, straight tail;
+$i = 0$ for $t \le 0$ and $t \ge t_3$, with $0 < t_1 \le t_2 < t_3$. As
+$\alpha \to 0$ the front degenerates to the linear ramp $t/t_1$ and the
+quotient above is $0/0$; implementations should evaluate it as
+$\mathrm{expm1}(\alpha t/t_1)/\mathrm{expm1}(\alpha)$, which is also the
+accurate form for small $\alpha$. The slope jumps at $t_1$, $t_2$ and $t_3$
+make the spectrum decay only as $1/\omega^2$ — unlike the smooth,
+zero-initial-slope Heidler function — so truncation at the Nyquist bound
+rings more visibly (see the windowing item below).
 
 **Optional band-edge filter (ADR 0021).** Cutting the one-sided spectrum off
 abruptly at the Nyquist bound leaves ringing in $v(t)$ whenever the
@@ -695,7 +755,45 @@ frequency-domain routine already takes a complex constant, supporting NLT
 only changes the sweep driver, not the physics kernels. Note the two sweep
 modes serve different purposes and use different axes: *harmonic response*
 (log-spaced, real $\omega$) and *transient* (linearly spaced $s_k$, as the
-IFFT/NLT grid requires).
+IFFT/NLT grid requires). With the planned scan-fed transient the two
+roles split: the *solve* axis may be the log-spaced harmonic scan, while
+the *synthesis* axis stays the linear FFT/NLT grid.
+
+**Open questions on the planned transient items (review 2026-09-30).**
+To be settled before, or in, the ADR 0015 amendment:
+
+1. *Band-edge filter vs. `signal.window`.* ADR 0021 (on the
+   `merge-acslima` branch, not yet on main) adds an opt-in Tukey taper,
+   `signal.antialiasStart` $= s$, on the one-sided $H \cdot X$ product —
+   the same placement as window option (a) above. With $s \to 0$ the Tukey
+   taper is exactly the Hann window $\tfrac12[1 + \cos(\pi f/f_{max})]$
+   that option (a) plans first and that the NLT uses [17], but ADR 0021
+   admits only $s \in (0, 1]$. One spectral-window family (Hann = Tukey
+   with $s = 0$) behind one schema field would avoid two fields for one
+   mechanism. Naming: the taper suppresses band-edge *truncation* (Gibbs)
+   ringing; time-domain *aliasing* (wrap-around from frequency sampling)
+   is governed by the record length and, under NLT, by the damping $c$ —
+   "anti-alias" is a misnomer.
+2. *Interpolating delayed transfer functions.* Componentwise pchip on
+   $\mathrm{Re}\,H$, $\mathrm{Im}\,H$ is safe for smooth driving-point
+   quantities ($Z_{in}$, GPR at the injection node — all the
+   `silva2025_*_transient` validation cases), but a transfer function to a
+   remote node or segment carries a delay factor $\sim e^{-j\omega\tau}$:
+   on a log-spaced scan the step $\Delta f$ grows with $f$, the phase wraps
+   between samples once $\Delta f\,\tau_{max} \gtrsim 1/2$, and the
+   interpolant dips in magnitude. Options: a sampling criterion
+   $\Delta f\,\tau_{max} \ll 1$ enforced by the loader ($\tau_{max}$ from
+   the largest source-to-observer distance and the soil phase velocity at
+   $f_{Nyq}$); interpolation of $|H|$ and unwrapped phase; or
+   de-embedding a known delay before interpolating. Needs a remote-node
+   test case either way.
+3. *NLT with an interpolated transfer function.* NLT needs $H$ at
+   $s_k = c + j\omega_k$; pchip over a real-$\omega$ scan cannot supply
+   it (it is not an analytic continuation). Either the scan itself is
+   solved at $c + j\omega$ with the same $c$, or the loader rejects
+   `transform: "nlt"` together with `transferFunction: "interpolated"`.
+4. *Portela waveform domain.* Whether $\alpha < 0$ (a convex front) is
+   accepted or rejected — the legacy behaviour is not recorded.
 
 **Why frequency domain at all.** The frequency-domain route assumes
 linearity: no soil ionisation, arresters or corona. When those matter, the
@@ -718,16 +816,20 @@ Every implementation must reproduce, within stated tolerance:
 1. **DC limit, buried horizontal conductor** (length $l$, radius $r_0$, depth
    $h$, soil $\sigma$): grounding resistance from the classical image formula (Sunde/Dwight form)
 
-   $$R = \frac{1}{2\pi \sigma l} \left[ \ln\left(\frac{2l}{r_0}\right) + \ln\left(\frac{2l}{2h}\right) - 2 + \ldots \right]$$
+   $$R = \frac{1}{2\pi \sigma l} \left[ \ln\left(\frac{2l}{r_0}\right) + \ln\left(\frac{l}{h}\right) - 2 + \frac{2h}{l} - \frac{h^2}{l^2} + \ldots \right]$$
 
-   — the low-frequency asymptote of the full model.
+   (Dwight's series with wire length $l$ and depth $h$; valid for
+   $r_0 \ll h \ll l$) — the low-frequency asymptote of the full model.
+   The Phase 2 test (`test_solve.f90`) compares $|Z_{in}(10\,\text{Hz})|$
+   with the three-term truncation (through $-2$) at 15 % tolerance.
 2. **Portela 1997 [2]** application curves: harmonic input impedance of a 10 m
    buried conductor, 0.5 m depth, $\sigma = 0.01\, \text{S/m}$, $\varepsilon_r \approx 10$, from 100 Hz to 1 MHz
    (project reference test; 5 % tolerance). **Data caveat** (author,
    2026-07-05): no tabulated reference data exists — only the published
-   equations and figures — so until further validation references are
-   supplied, the executable oracle for this case is the cross-code check
-   (item 6); status in [BENCHMARKS.md](BENCHMARKS.md).
+   equations and figures — so this case remains unmatched; the only
+   executable oracle for it is the cross-code check (item 6). The release
+   bar it was meant to carry is now met by item 7 (ADR 0018 postscript,
+   2026-08-02); status in [BENCHMARKS.md](BENCHMARKS.md).
 3. **Visacro & Soares 2005 [5]**: formulation reference only — the paper
    carries no data usable for quantitative comparison (author, 2026-07-05);
    dropped as a data anchor. The underlying thesis [55] does document an
@@ -748,6 +850,27 @@ Every implementation must reproduce, within stated tolerance:
    conventions (a valid convention set paired with its solver, but different
    from §2), and its "immittance" system uses unknowns $(\mathbf{u}, I_\ell, I_t)$
    in a symmetric block layout rather than §6's $(\mathbf{u}, \mathbf{i}_1, \mathbf{i}_2)$.
+   Still desirable as an independent oracle (ROADMAP §7 P3), but no longer
+   release-blocking.
+7. **Published-curve comparisons** ([validation/](validation/README.md)) —
+   the executable oracle accepted for the release bar (ADR 0018 postscript,
+   2026-08-02; first public release v0.5.0). Digitized figures, harmonic
+   and transient: Grcev et al. [23] Fig. 12 (horizontal electrodes, 10 and
+   100 m, 30–3000 Ω·m, against the paper's full-wave MoM); Lima et al. [11]
+   Figs. 6 and 7 (counterpoise and square grids, 1000 Ω·m); Poljak &
+   Doric [35] Fig. 4 (2 m vertical rod, 5400 Ω·m, to 100 MHz); Silva et
+   al. [36] Figs. 3 and 4 (60 m electrode, Alipio–Visacro soil [14];
+   transient GPR under the De Conti & Visacro double-peaked first-stroke
+   current [38]). **Tolerance policy**: a digitized curve carries reading
+   error of its own, largest on steep slopes and resonance nulls, so no
+   single fixed tolerance applies; each writeup reports its point-by-point
+   deviation and names its outliers. Current state: about ±7 % (Lima
+   Fig. 7, below 4 MHz); ±10 % (Poljak); ±11.5 % excluding the
+   slope-sensitive points on one resonance and two knees (Grcev); up to
+   ~14 % on a mid-band knee (Silva Fig. 3, §4.1); about 5 % on the GPR
+   humps (Silva Fig. 4); a systematic −13 to −17 % offset for Lima Fig. 6,
+   whose geometry the paper only partly states. The 5 % of item 2 applies
+   to tabulated data only.
 
 ---
 
@@ -767,13 +890,13 @@ came out of this comparison.
 | Coupling integrals | Full Green's-function integrals, re-evaluated per frequency | Frequency-independent geometry factor $g$, $\exp(-\gamma\bar R)$ at midpoint distance (§4.1); $g$ via 1-D mHEM integral (§4.2, planned) or 2-D quadrature | Selectable: double, single, mHEM, midpoint-only | mHEM (1-D integral, precomputed $P$, $P_i$) | n/a — line by TL theory; grounding external |
 | Half-space interface | Not treated (homogeneous medium assumed) | Images; ideal signs $\pm 1$ today, $\Gamma_t(\omega)$ planned (§5) | Images with complex $\Gamma_\ell$, $\Gamma_t$ as free parameters | Images with $\Gamma_t(\omega)$ applied to both $Z_t$ and $Z_\ell$ | Earth return at TL level (line above lossy ground) |
 | Cross-media coupling (air↔soil segments) | n/a | Neglected (§5) | Neglected | Neglected | n/a |
-| Soil dispersion | n/a (σ, ε constants) | `tPortelaSoil` [1]; `tVisacroAlipioSoil` [13,14], `tLongmireSmithSoil` [15,16] planned (§7) | Alipio–Visacro [14] and Smith–Longmire [16] built in | Visacro–Alipio [13] | Delegated to the imported grounding data |
+| Soil dispersion | n/a (σ, ε constants) | `tPortelaSoil` [1,31] and `tVisacroAlipioSoil` [14] (mean set) implemented; `tLongmireSmithSoil` [15,16] planned (§7) | Alipio–Visacro [14] and Smith–Longmire [16] built in | Visacro–Alipio [13] | Delegated to the imported grounding data |
 | Conductor internal impedance | None (PEC wires) | Solid Bessel (§4.3); tubular planned | None (neglected) | Solid + tubular Bessel | Tubular Bessel |
 | Linear solve | Dense matrix inversion | Dense LU (`ZGESV`), full $Z_{\text{eq}}$; reduced $Z_g$ as consistency check (§6) | Dense LU; immittance or admittance path | Dense inversion of $Y_g$ | Dense (Mathematica `Inverse`) |
 | Time domain | Out of scope (harmonic) | FFT↔IFFT (§8); NLT planned | NLT with damping + window filters [17] | NLT (damped $s_k$ grid) + separate harmonic mode | NLT (`nILT`) |
 | Frequency axis | Single frequency | Log-spaced sweep (harmonic); linear grid for transients (§8) | Linear (example-defined, incl. log for harmonic studies) | Log (harmonic) / linear (transient) | Linear (NLT grid) |
-| Parallelism | n/a | OpenMP on matrix fill (frequency loop under evaluation, plan §7 P6) | OpenMP over the frequency loop, single-threaded BLAS | None (NumPy internal) | None |
-| Validation anchors | Analytic canonical cases | §9: Sunde DC, Portela [2], Visacro & Soares [5], Grcev [18], cross-code | Grcev [18], Visacro & Soares, Alipio, Sunjerga examples | Published line/grounding cases | Four 138 kV test cases [12] |
+| Parallelism | n/a | None yet: fill-loop OpenMP deferred until `mImpedance` is reentrant (ROADMAP Phase 3 item 4); frequency-loop parallelism under evaluation (ROADMAP §7 P6) | OpenMP over the frequency loop, single-threaded BLAS | None (NumPy internal) | None |
+| Validation anchors | Analytic canonical cases | §9: Sunde DC; published curves of Grcev [23], Lima [11], Poljak [35], Silva [36] (release oracle); Portela [2] and Grcev [18] pending data or cross-code check | Grcev [18], Visacro & Soares, Alipio, Sunjerga examples | Published line/grounding cases | Four 138 kV test cases [12] |
 
 Premises shared by TUPÃ, TAGS and PRTL-mHEM (and inherited from [1,5] —
 the HEM family reading of Harrington's framework, derived at thesis length
