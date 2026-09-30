@@ -84,7 +84,8 @@ not yet run) are still open — see [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 The first implementation is **modern Fortran** (2008+, built with FPM) —
 partly because the original numerical core was already Fortran, cleaned up
 and modernised ([ADR 0001](docs/adr/0001-modern-fortran-reference-implementation.md)).
-A prototype native Julia port, contributed by acslima, lives in
+A native Julia port — contributed by acslima as a prototype and since
+realigned module by module with the Fortran code — lives in
 [julia/](julia/README.md). A Rust implementation — no LAPACK/SLATEC needed, just `cargo` — lives in
 [rust/](rust/README.md) (ROADMAP Phase 8, [ADR 0022](docs/adr/0022-rust-implementation.md));
 Python is reserved for the GUI. All map the same object model

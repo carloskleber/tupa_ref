@@ -2,7 +2,7 @@
 
 Reference electromagnetic transient solver (HEM / Method of Moments).
 Fortran implementation first; object model and test cases shared with the
-contributed Julia prototype and the Rust implementation (Phase 8, `rust/`; see
+Julia port (Phase 8J, `julia/`) and the Rust implementation (Phase 8, `rust/`; see
 [ADR 0002](adr/0002-language-agnostic-object-model.md)).
 
 This roadmap supersedes the earlier `implementation-plan.md` /
@@ -38,7 +38,7 @@ implementation**; usability as an engineering tool is secondary.
 | Cases & tests | `common/` regression fixtures (golden), 15 test programs, all green under `fpm test --profile release` |
 | Validation | [`docs/validation/`](validation/README.md): digitized published-curve comparisons — Grcev et al. 2018 Fig. 12 (6 cases), Lima et al. 2020 Figs. 6/7, Poljak & Doric 2006 Fig. 4, Silva et al. 2025 Figs. 3/4 (harmonic + transient) — accepted as the release-bar oracle (§4) |
 | GUI | Python/PySide6 view-only module (`gui/`, ADR 0011): study tree, 3-D view, results/transient plots |
-| Other implementations | Julia prototype port (`julia/`, contributed 2026-09-29, §4) — harmonic + transient, not yet conforming; **Rust port (`rust/`, 2026-09-30, [ADR 0022](adr/0022-rust-implementation.md))** — harmonic conformance met on the three golden fixtures at 1e-6, transient path implemented, Phase 8 item 1 (Fortran fixture widening) still open |
+| Other implementations | **Julia port (`julia/`, contributed 2026-09-29, realigned 2026-09-30, Phase 8J)** — module-by-module mirror of the Fortran code, golden fixtures met at 1e-6 and every runnable `common/` case within 1e-6 of Rust/Fortran (bar two round-off rows Rust shares); **Rust port (`rust/`, 2026-09-30, [ADR 0022](adr/0022-rust-implementation.md))** — harmonic conformance met on the three golden fixtures at 1e-6, transient path implemented, Phase 8 item 1 (Fortran fixture widening) still open |
 
 The original gap analysis (nine numbered gaps between this repository and
 the legacy pipeline) is fully resolved as of Phases 0–6; the historically
@@ -367,6 +367,86 @@ sits in the contract surface (validation, IDs, writers, filtering) and in
 matching numerics to 1e-6, not in the physics core — the Julia prototype
 covers that core in a few hundred lines.
 
+### Phase 8J — Julia port as a third conforming implementation — **in progress (items 1–4 done)**
+
+**Goal.** Bring the contributed Julia prototype (§4) to the same bar as
+Phase 8: the public contract implemented module by module after the
+Fortran code, every golden fixture reproduced at 1e-6, CLI and output
+files interchangeable with Fortran/Rust. It runs off the critical path
+and alongside Phase 8 (it shares item 1's fixtures and item 9's report).
+Its niche is interactive and scripted use (REPL, notebooks, parameter
+studies); the design choices lean on the Fortran code where the Rust port
+had to re-implement libraries: LAPACK `zgetrf`/`zgetrs` (= `ZGESV`),
+AMOS Bessel functions (`SpecialFunctions`, = SLATEC `ZBESI`), `JSON`.
+Layout and status: [julia/README.md](../julia/README.md).
+
+**Items:**
+
+1. **Module-by-module realignment** — **M**. **Status: done 2026-09-30.**
+   One file per Fortran module (`julia/src/`), line-by-line ports of
+   `dqag_k15`/`TWODQ`, the closed-form parallel pairs, the congruence
+   cache, the radix-2 FFT (ADR 0014), voltage sources by superposition
+   (ADR 0016), `validateStudyReferences`, the CSV/JSON writers with
+   `outputs` filtering (ADR 0012/0013/0015) and the CLI options
+   (`--epsrel`, `--no-cache`, `--dump-structure`, `--output-dir`). Mesh
+   bar IDs, the tidy transient CSV and μ₀ now match the other codes.
+   `JSON3` (deprecated upstream) replaced by `JSON`; `FFTW` dropped;
+   `Plots` demoted to an optional extension (`--plot`); a precompile
+   workload brings a CLI run of a small case to ~0.8 s.
+2. **Harmonic conformance (Milestone 8J-a)** — **S**. **Status: met
+   2026-09-30** — `julia/test/conformance.jl` (keyed rows, 1e-6,
+   passivity): `portela1997` and `rod` to ~1e-17, `grid` to 6e-8.
+3. **Ported unit and physics tests** — **S**. **Status: done** —
+   `julia/test/unit.jl`, `physics.jl` (the Rust ports of `test_geometry`,
+   `test_impedance`, `test_fft`, `test_signal`, `test_solve`,
+   `test_sweep`, `test_transient`, `test_mesh_element`,
+   `test_validation`); 166 checks, ~3 s.
+4. **Cross-check on every runnable case** — **S**. **Status: done
+   2026-09-30** — all 28 runnable `common/` outputs (22 sweeps, 6
+   transients) within 1e-6 of fresh Rust and Fortran runs, most identical
+   to the printed digit; the only exceptions are two round-off rows of
+   `portelaMesh` (~1e-12 A free-end currents at 10 MHz, 1.9e-6 vs Fortran),
+   which Rust fails the same way (1.2e-6). Assembly dumps byte-identical
+   to Rust. Table in `julia/README.md`. Finding for Phase 8 item 1: the
+   1e-6 row floor is an absolute 1e-12 tolerance on near-zero currents —
+   a `portelaMesh` fixture would need a larger floor or those rows
+   filtered.
+5. **Validation writeup refresh** — **S**. **Status: open.** The Julia
+   figures in [validation/tupa-vs-mhem.md](validation/tupa-vs-mhem.md) and
+   `validation/julia-grcev-l10-results.csv` were measured with the
+   prototype (fixed 64×64 midpoint rule, ~0.09 % from Fortran). Re-run
+   `docs/validation/run_all.sh` (it calls
+   `julia/comparison/run_tupa_grcev_l10.jl`, already ported to the new
+   API), regenerate the metrics and restate the Fortran–Julia row (now
+   expected ≲ 1e-6) and the transient paragraph.
+6. **Transient and widened-fixture conformance (Milestone 8J-b)** — **S**,
+   blocked on Phase 8 item 1. When the transient, voltage-source, `mesh`
+   and dispersive-soil fixtures land, add them to
+   `julia/test/conformance.jl` (its "every golden fixture has a test"
+   guard fails until then) and to the README table.
+7. **Three-way report** — **S**, with Phase 8 item 9: add the Julia column
+   to `docs/validation/fortran-vs-rust.md` (all runnable cases and the
+   wall-time table); run `benchmarks/cross-impl/bench.py` with all three
+   (its `run_julia.jl` now writes the standard result files).
+8. **GUI check** — **S**. Open Julia sweep and transient result files in
+   the GUI (ADR 0011); they are byte-compatible with the Rust files, so
+   this is a confirmation, not new work.
+9. **Follow-along rule** — policy, as Phase 8 item 10: every contract
+   change carries a Julia item; lags go into the `julia/README.md`
+   conformance table. First instances: Phase 10 items 1–2 (P1 kernel,
+   Γ(ω) images).
+
+**Optional, not required for conformance:** multi-threading over
+frequencies (`Threads.@threads`, with one BLAS thread per task — the
+Julia form of Phase 10 item 4/§7 P6); registering the package or shipping
+a `juliac`/PackageCompiler binary (DISTRIBUTION.md); a
+Documenter.jl API page from the existing docstrings.
+
+**Exit criteria.** `Pkg.test()` green on every golden fixture at the
+conformance tag (items 2 and 6), item 5's writeup refreshed and item 7's
+report including Julia; then README.md and common/README.md describe
+three conforming implementations.
+
 ### Phase 9 — Transient pipeline completion
 
 All five items touch `mTransient`/`mSignal` and the `signal` block; items
@@ -433,7 +513,7 @@ unchanged.
 
 The §7 proposals that change default numerics or unblock larger cases,
 grouped so the golden fixtures are regenerated once (rule 5). Each of
-items 1–2 has a Rust counterpart under the Phase 8 follow-along rule.
+items 1–2 has Rust and Julia counterparts under the Phase 8/8J follow-along rule.
 
 1. **mHEM single-integral kernel** (§7 P1) — **S**. 1-D form of
    theory.md §4.2 as the default for `g(a,b)`; the 2-D Gauss–Kronrod path
@@ -608,12 +688,15 @@ shielded-wire segment.
   validation driver with PDF output. What it established: the object
   model and schema port cleanly (ADR 0002), and a different quadrature
   rule alone costs ~0.09 % — which fixed the Phase 8 quadrature decision.
-  It is **not yet conforming**: fixed 64×64 midpoint quadrature for the
-  geometry factors, no voltage sources (ADR 0016), no `outputs` filtering
-  (ADR 0013), no results JSON/CSV for sweeps. Closing those gaps is
-  contributor-owned and off the critical path; once conforming, the Julia
-  port joins the Phase 8 item 10 conformance table as a third
-  implementation.
+  As contributed it was **not conforming**: fixed 64×64 midpoint
+  quadrature for the geometry factors, no voltage sources (ADR 0016), no
+  `outputs` filtering (ADR 0013), no results JSON/CSV for sweeps.
+- **Milestone 8J-a — Julia harmonic conformance** (**met** 2026-09-30):
+  Phase 8J items 1–4 realigned the port module by module with the Fortran
+  code; the three golden fixtures pass at 1e-6 and every runnable
+  `common/` case is within 1e-6 of Fortran and Rust (bar two round-off
+  rows of `portelaMesh` that Rust shares). **Milestone 8J-b**
+  (transient and widened fixtures) waits on Phase 8 item 1, like 8b.
 - **Milestone 8a — Rust harmonic conformance** (**met** 2026-09-30 on the
   three existing golden fixtures; item 1's widened fixtures would
   strengthen it): Phase 8 items 2–7.
@@ -632,14 +715,14 @@ shielded-wire segment.
 
 | Layer | Where | What |
 | --- | --- | --- |
-| Unit | `fortran/test/` (Rust: `rust/tests/`, Phase 8) | quadrature vs closed forms; sign/decay pins; Bessel `Z_int` vs tables; dispersion DC limit; waveforms |
+| Unit | `fortran/test/` (Rust: `rust/tests/`, Phase 8; Julia: `julia/test/`, Phase 8J) | quadrature vs closed forms; sign/decay pins; Bessel `Z_int` vs tables; dispersion DC limit; waveforms |
 | Integration | `fortran/test/` | end-to-end DC resistance; sweep/transient consistency; reciprocity, passivity; voltage-source superposition |
 | Reference | `common/` | JSON in → CSV out, golden diff at 1e-6; shared across languages (fixture coverage widened by Phase 8 item 1) |
 | Published curves | `docs/validation/` | digitized-figure comparisons (Grcev, Lima, Poljak, Silva) with regenerable plots + per-case xlsx data |
 | Benchmarks | `benchmarks/` (proposed) | TAGS and PRTL-mHEM as git submodules; cross-code runs per [BENCHMARKS.md](BENCHMARKS.md) |
 
 There is **no hosted CI** (ADR 0018): the gate is a local
-`fpm build && fpm test` before merging (for `rust/`, the Phase 8 cargo gate). Practical caveats:
+`fpm build && fpm test` before merging (for `rust/`, the Phase 8 cargo gate; for `julia/`, `Pkg.test()`). Practical caveats:
 
 - **Run the slow suites under `--profile release`** (as `build.sh` builds):
   in the debug profile the quadrature-heavy suites are effectively

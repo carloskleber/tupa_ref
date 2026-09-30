@@ -56,7 +56,9 @@ Add the filter as an **opt-in** feature:
   symmetry of the rebuilt full spectrum is preserved) to every observe
   point's transfer-function × excitation product.
 - The Julia implementation (`julia/`) reads the same JSON field
-  (`transient_response(...; antialias_start=)`) with the same default.
+  (`TransientSpec.antialias_start`, filter `tukey_antialias_filter`; named
+  `transient_response(...; antialias_start=)` before the 2026-09-30
+  realignment) with the same default.
   A single shared parameter and default keeps the two implementations
   interchangeable, as ADR 0002 requires.
 - The filter stays separate from `tailTaper`: they address different
@@ -75,5 +77,5 @@ Add the filter as an **opt-in** feature:
 - Tests: `fortran/test/test_transient.f90` covers the filter shape (unity
   pass band, monotone taper, zero at Nyquist, `s = 1` identity), that
   `antialiasStart = 1` reproduces the unfiltered response, and that a real
-  taper changes it while keeping it finite; `julia/test/runtests.jl`
-  mirrors these.
+  taper changes it while keeping it finite; `julia/test/unit.jl` and
+  `julia/test/physics.jl` mirror these.

@@ -22,7 +22,7 @@ Change the set with `--cases` (any name in `common/`, without `.json`).
 | Python ≥ 3.9 | driver | plots also need `pip install numpy matplotlib` (without them you still get `timings.csv` and `summary.md`; re-plot later with `--plots-only`) |
 | Rust (`cargo`, https://rustup.rs) | Rust | built by the script (`cargo build --release`) |
 | `gfortran`, `fpm` ≥ 0.10, LAPACK/BLAS, git | Fortran | the script calls `fortran/build.sh`, which fetches the SLATEC submodule and builds everything — see [fortran/README.md](../../fortran/README.md) |
-| Julia ≥ 1.10 (https://julialang.org/downloads) | Julia | the script runs `Pkg.instantiate()` for `julia/` (first run downloads packages, incl. Plots) |
+| Julia ≥ 1.10 (https://julialang.org/downloads) | Julia | the script runs `Pkg.instantiate()` for `julia/` (first run downloads its few packages) |
 
 Any implementation that is missing is skipped with a message; the others run.
 
@@ -69,10 +69,10 @@ alone also work natively: `py benchmarks\cross-impl\bench.py --impl rust julia`.
 - **Wall time** = from process launch to exit, measured by the driver,
   including JSON parsing, assembly, solve and writing result files. It is
   the number a user sees, and it is what the bar chart shows.
-- **Julia** pays start-up and JIT compilation in every process (loading
-  `Plots` alone takes seconds), so its wall time is dominated by that for
-  small cases. `run_julia.jl` therefore also times, in-process, `load` (read
-  + assemble), `cold` (first solve, includes JIT) and `warm` (a second solve
+- **Julia** pays start-up and JIT compilation in every process, so its
+  wall time is dominated by that for small cases. `run_julia.jl` therefore
+  also times, in-process, `load` (read + assemble + validate), `cold` (first
+  solve, includes JIT) and `warm` (a second solve
   of a freshly loaded study, no JIT). The *warm* value is the fair
   per-solve figure for long-lived Julia sessions; report both.
 - Cases of a few milliseconds are dominated by process start; compare the
@@ -82,29 +82,32 @@ alone also work natively: `py benchmarks\cross-impl\bench.py --impl rust julia`.
   single-threaded). For a quiet measurement close other programs and, if
   you care about OpenMP effects, compare `OMP_NUM_THREADS=1` with the
   default: `OMP_NUM_THREADS=1 python3 benchmarks/cross-impl/bench.py ...`.
-- The Julia port uses a fixed 64×64 midpoint quadrature and Fortran/Rust an
-  adaptive Gauss–Kronrod rule, so they do different amounts of work per
-  segment pair; speed ratios are between *implementations as shipped*, not
-  between languages on identical algorithms.
+- All three use the same algorithms (adaptive Gauss–Kronrod 7/15 geometry
+  factors with the same tolerances and congruence cache, dense LU, radix-2
+  FFT), so speed ratios compare languages and linear-algebra back ends
+  (Fortran and Julia call LAPACK `zgetrf`/`zgetrs`; Rust has its own LU).
 
 ## Expected deviations
 
-Fortran and Rust agree to ~1e-6 (golden-fixture tolerance). Julia differs
-by ≲ 0.1–0.2 % in \|Z\| because of its quadrature
-([docs/validation/tupa-vs-mhem.md](../../docs/validation/tupa-vs-mhem.md));
-the `silva2025_*` and `lima_fig6` cases have no published Julia figures, so
-larger deviations there are worth a look, not necessarily a bug.
+Fortran, Rust and Julia agree to ~1e-6 (golden-fixture tolerance) on
+every case — measured case by case in the conformance tables of
+[rust/README.md](../../rust/README.md) and
+[julia/README.md](../../julia/README.md). A larger deviation is a bug in one
+of them. (Before its 2026-09-30 realignment the Julia port differed by
+≲ 0.1–0.2 % in \|Z\| because of its quadrature.)
 
 ## Notes
 
-- Julia's harmonic driver (`run_julia.jl`) writes `*_results.json` with
-  `frequencies` and `derived.inputImpedance` only; transients write the tidy
-  CSV for the first observed node. The plots read exactly those.
+- `run_julia.jl` writes the same result files as the Julia CLI (and as
+  the Fortran/Rust executables): `*_results.{csv,json}` and
+  `*_transient_results.{csv,json}`. The plots read `derived.inputImpedance`
+  and the tidy transient CSV of the first observed node.
 - A failing run (non-zero exit) is recorded in `summary.md` and does not
   stop the benchmark.
 - Run status of this script: verified end to end with Rust (and with a
   second executable standing in for Fortran to exercise the multi-
-  implementation plots). The Fortran build step and `run_julia.jl` were
-  **not** executed by the author of this script (no Julia, and no working
-  fpm/SLATEC build in that environment) — if either fails on your machine,
-  the error text is in `summary.md` / the console; please report it.
+  implementation plots). The Fortran build step was **not** executed by the
+  author of this script (no working fpm/SLATEC build in that environment);
+  `run_julia.jl` was rewritten for the realigned Julia port on 2026-09-30.
+  If either fails on your machine, the error text is in `summary.md` / the
+  console; please report it.

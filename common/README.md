@@ -48,9 +48,9 @@ fixtures are **regression
 physics oracle — no tabulated Portela 1997 curve data exists yet
 (theory.md §9.2) and no cross-code harness exists yet (ROADMAP §7 P3). They
 pin today's numerics for this implementation and, per ADR 0002, are the
-conformance target future Python ports — and the Rust port in
-[`rust/`](../rust/README.md), which matches all three at 1e-6 — must
-reproduce within tolerance. `fortran/test/test_common_cases.f90` diffs a fresh run against
+conformance target future Python ports — and the Rust and Julia ports in
+[`rust/`](../rust/README.md) and [`julia/`](../julia/README.md), which
+match all three at 1e-6 — must reproduce within tolerance. `fortran/test/test_common_cases.f90` diffs a fresh run against
 each fixture (relative tolerance 1e-6) and re-checks passivity
 independently of the fixture. `grid.json` is deliberately kept to a single
 4-electrode mesh (not a larger multi-cell grid): every non-parallel

@@ -10,6 +10,15 @@ mHEM results were contributed by acslima, who ran the prototype with inputs
 aligned to the `common/` cases; the prototype itself is not vendored here,
 only its tabulated output.
 
+> **Note (2026-09-30).** The Julia figures below were measured with the
+> *contributed prototype* of the port (fixed 64×64 midpoint rule for the
+> geometry factors). The realigned port (ROADMAP Phase 8J) uses the Fortran
+> adaptive quadrature and reproduces the Fortran results to within 1e-6
+> (identical to the printed digit on these three cases,
+> [julia/README.md](../../julia/README.md#conformance-status)), so the
+> Fortran rows now describe both codes. Regenerating this writeup with the
+> realigned port is Phase 8J item 5.
+
 ## Scope
 
 Matched inputs for all three codes (`common/grcev_fig12_l10_rho*.json`):
