@@ -29,7 +29,7 @@ program test_transient
   real(dp), parameter :: length = 10.0d0, r0 = 0.007d0, depth = 0.5d0
   real(dp), parameter :: sigmaSoil = 0.01d0, epsrSoil = 10.0d0
   type(tDoubleExpSignal) :: surge
-  real(dp), allocatable :: t(:), injectedCurrent(:), response(:,:)
+  real(dp), allocatable :: t(:), injectedCurrent(:), response(:,:), responseAa(:,:), antialias(:)
   complex(dp), allocatable :: zin(:)
   real(dp) :: imax, nyquistHz, freqZeroHz, ratioAtPeak, zinLowFreqMag
   integer(4), parameter :: nSamples = 1024
@@ -52,6 +52,24 @@ program test_transient
   freqZeroHz = 1.0d-6
 
   ! ----------------------------------------------------------------
+  ! Tukey anti-aliasing response: flat to taperStart, cosine to zero at fmax
+  ! ----------------------------------------------------------------
+  call test_init("Tukey anti-aliasing filter")
+
+  antialias = tukeyAntialiasFilter(101, 0.85_dp)
+  call test_ok("filter has one value per one-sided bin", size(antialias) == 101, "")
+  call test_ok("pass band is unity at DC", abs(antialias(1) - 1.0_dp) < 1.0d-15, "")
+  call test_ok("taper starts at 0.85 fmax", abs(antialias(86) - 1.0_dp) < 1.0d-15, "")
+  call test_ok("first bin above 0.85 fmax is attenuated", antialias(87) < 1.0_dp, "")
+  call test_ok("taper is point-symmetric about its midpoint (bins 93/94)", &
+               abs(antialias(93) + antialias(94) - 1.0_dp) < 1.0d-14, "")
+  call test_ok("filter is zero at fmax", abs(antialias(101)) < 1.0d-15, "")
+  call test_ok("filter is monotonically non-increasing", &
+               all(antialias(2:) <= antialias(:size(antialias) - 1)), "")
+  antialias = tukeyAntialiasFilter(101, 1.0_dp)
+  call test_ok("taperStart = 1 is the identity", all(antialias == 1.0_dp), "")
+
+  ! ----------------------------------------------------------------
   ! Pipeline runs end to end and produces finite, well-shaped output
   ! ----------------------------------------------------------------
   call test_init("transientResponse: runs end to end")
@@ -65,6 +83,23 @@ program test_transient
   call test_ok("no NaNs in the response", .not. any(ieee_is_nan(response)), "transient response contains NaN")
   call test_ok("time axis starts at 0", abs(t(1)) < 1.0d-12, "")
   call test_ok("time axis is increasing", all(t(2:) > t(:nSamples - 1)), "")
+
+  ! ----------------------------------------------------------------
+  ! Anti-aliasing is opt-in: taperStart = 1 reproduces the unfiltered
+  ! response exactly, a real taper changes it but keeps it finite
+  ! ----------------------------------------------------------------
+  call test_init("transientResponse: antialiasStart option")
+
+  call transientResponse(study, surge, "Node_1", ["Node_1"], nyquistHz, nSamples, freqZeroHz, &
+                          t, injectedCurrent, responseAa, antialiasStart=1.0_dp)
+  call test_ok("antialiasStart = 1 matches the default (no filter)", &
+               maxval(abs(responseAa - response)) <= 1.0d-12 * maxval(abs(response)), "")
+
+  call transientResponse(study, surge, "Node_1", ["Node_1"], nyquistHz, nSamples, freqZeroHz, &
+                          t, injectedCurrent, responseAa, antialiasStart=0.25_dp)
+  call test_ok("antialiasStart = 0.25 gives a finite response", .not. any(ieee_is_nan(responseAa)), "")
+  call test_ok("antialiasStart = 0.25 changes the response", &
+               maxval(abs(responseAa - response)) > 0.0_dp, "")
 
   ! ----------------------------------------------------------------
   ! Low-frequency scaling: response near the injected current's peak

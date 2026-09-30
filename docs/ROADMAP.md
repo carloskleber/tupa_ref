@@ -33,7 +33,7 @@ implementation**; usability as an engineering tool is secondary.
 | Materials | `tLinear`, `tPortelaSoil` (ADR 0007), `tVisacroAlipioSoil` (mean set, theory.md §7); air hardcoded to vacuum (ADR 0019) |
 | Sweep & results | `runSweep` + `tResult` storage, `inputImpedance`/`maxVoltageMagnitude`; CSV/JSON writers (ADR 0012) with `outputs` filtering |
 | Time domain | `mSignal` (Heidler — legacy 6-term [38] and standard parametrised form [37, 39]; double-exp ± Jones), tail taper, in-repo FFT (ADR 0014), transfer-function transient driver (`mTransient`) |
-| JSON I/O | json-fortran parser (ADR 0006, superseded-in-place 2026-08-01); schema v1: structure + `sources`/`frequencies`/`outputs` (ADR 0013) + `signal` (ADR 0015) + voltage sources/Heidler terms (ADR 0016/0015 amendment) + `mesh` composite element (ADR 0020); pre-run reference validation (`validateStudyReferences`) and CLI verbosity levels |
+| JSON I/O | json-fortran parser (ADR 0006, superseded-in-place 2026-08-01); schema v1: structure + `sources`/`frequencies`/`outputs` (ADR 0013) + `signal` (ADR 0015) + voltage sources/Heidler terms (ADR 0016/0015 amendment) + `mesh` composite element (ADR 0020) + optional `signal.antialiasStart` (ADR 0021); pre-run reference validation (`validateStudyReferences`) and CLI verbosity levels |
 | Cases & tests | `common/` regression fixtures (golden), 15 test programs, all green under `fpm test --profile release` |
 | Validation | [`docs/validation/`](validation/README.md): digitized published-curve comparisons — Grcev et al. 2018 Fig. 12 (6 cases), Lima et al. 2020 Figs. 6/7, Poljak & Doric 2006 Fig. 4, Silva et al. 2025 Figs. 3/4 (harmonic + transient) — accepted as the release-bar oracle (§4) |
 | GUI | Python/PySide6 view-only module (`gui/`, ADR 0011): study tree, 3-D view, results/transient plots |
@@ -309,6 +309,17 @@ shielded-wire segment.
 Rust port following the object model; must pass every `common/` case.
 Originally Python was proposed, but for now Python is dedicated to the GUI
 side (ADR 0011).
+
+A compact native **Julia port** (`julia/`, contributed by acslima) already
+reads the shared `common/` JSON and solves harmonic and transient studies
+(lines and meshes, linear/Portela/Alipio-Visacro soils, internal impedance,
+`signal.antialiasStart`). It is a prototype, not yet a conforming second
+implementation: it uses a fixed 64×64 midpoint quadrature for the geometry
+factors, does not yet write results JSON/CSV for frequency sweeps, and lacks
+voltage sources (ADR 0016) and `outputs` filtering (ADR 0013). Its
+frequency-domain agreement with the Fortran solver on the Grcev Fig. 12
+10 m cases is documented in
+[validation/tupa-vs-mhem.md](validation/tupa-vs-mhem.md).
 
 ---
 

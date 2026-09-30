@@ -58,7 +58,7 @@ contains
   subroutine loadStudy(filename, study, sourceNodeIds, sourceCurrents, sourceIsVoltage, freqHz, &
                         outputNodeIds, outputElectrodeIds, outputQuantities, &
                         signal, signalSourceNode, signalObserveNodeIds, signalObserveElectrodeIds, &
-                        signalNyquistHz, signalFftPoints, signalFreqZeroHz)
+                        signalNyquistHz, signalFftPoints, signalFreqZeroHz, signalAntialiasStart)
     !! Parse a JSON study file and populate all fields of a tStudy object.
     !!
     !! Performs the following steps:
@@ -115,6 +115,9 @@ contains
     !! "signal.fftPoints" — number of time/FFT samples (power of two)
     real(8), intent(out), optional :: signalFreqZeroHz
     !! "signal.freqZeroHz", default 1.0e-6 if absent from the JSON
+    real(8), intent(out), optional :: signalAntialiasStart
+    !! "signal.antialiasStart" (ADR 0021), in (0, 1]; default 1.0 (no
+    !! anti-aliasing filter) if absent from the JSON
 
     type(tJsonValue), target  :: root
     !! Root of the parsed JSON tree (must be TARGET for child pointers)
@@ -372,6 +375,17 @@ contains
             signalFreqZeroHz = 1.0d-6
           end if
         end if
+        if (present(signalAntialiasStart)) then
+          if (json_has(signal_obj, "antialiasStart")) then
+            signalAntialiasStart = json_real(signal_obj, "antialiasStart")
+            if (signalAntialiasStart <= 0.0d0 .or. signalAntialiasStart > 1.0d0) then
+              call raiseError("mTupa: signal.antialiasStart must be in (0, 1]")
+              return
+            end if
+          else
+            signalAntialiasStart = 1.0d0
+          end if
+        end if
       end block
     end if
   end subroutine loadStudy
@@ -543,7 +557,7 @@ contains
     class(tSignal), allocatable :: signal
     character(len=256) :: signalSourceNode
     character(len=256), allocatable :: signalObserveNodeIds(:), signalObserveElectrodeIds(:)
-    real(8) :: signalNyquistHz, signalFreqZeroHz
+    real(8) :: signalNyquistHz, signalFreqZeroHz, signalAntialiasStart
     integer :: signalFftPoints
     real(8), allocatable :: t(:), injectedCurrent(:), nodeResponses(:,:), i1Responses(:,:), i2Responses(:,:)
     logical :: ranSweep, ranTransient
@@ -564,7 +578,7 @@ contains
                    signalObserveNodeIds=signalObserveNodeIds, &
                    signalObserveElectrodeIds=signalObserveElectrodeIds, &
                    signalNyquistHz=signalNyquistHz, signalFftPoints=signalFftPoints, &
-                   signalFreqZeroHz=signalFreqZeroHz)
+                   signalFreqZeroHz=signalFreqZeroHz, signalAntialiasStart=signalAntialiasStart)
 
     call validateStudyReferences(study, sourceNodeIds=sourceNodeIds, signal=signal, &
                                   signalSourceNode=signalSourceNode, &
@@ -593,10 +607,12 @@ contains
       if (allocated(signalObserveElectrodeIds)) then
         call transientResponse(study, signal, trim(signalSourceNode), signalObserveNodeIds, &
           signalNyquistHz, signalFftPoints, signalFreqZeroHz, t, injectedCurrent, nodeResponses, &
-          observeElectrodeIds=signalObserveElectrodeIds, i1Responses=i1Responses, i2Responses=i2Responses)
+          observeElectrodeIds=signalObserveElectrodeIds, i1Responses=i1Responses, i2Responses=i2Responses, &
+          antialiasStart=signalAntialiasStart)
       else
         call transientResponse(study, signal, trim(signalSourceNode), signalObserveNodeIds, &
-          signalNyquistHz, signalFftPoints, signalFreqZeroHz, t, injectedCurrent, nodeResponses)
+          signalNyquistHz, signalFftPoints, signalFreqZeroHz, t, injectedCurrent, nodeResponses, &
+          antialiasStart=signalAntialiasStart)
       end if
       if (.not. ranSweep) call study%report()
 

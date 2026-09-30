@@ -9,3 +9,8 @@ gui/.pytest_cache/
 fortran/*results.*
 fortran/perf.data
 fortran/gmon.out
+.DS_Store
+.venv/
+julia/Manifest.toml
+*_transient_plot.png
+docs/figures/*.pdf

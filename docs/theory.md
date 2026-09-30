@@ -641,6 +641,16 @@ $$i(t) = I_{max}\,\frac{e^{\alpha t/t_1} - 1}{e^{\alpha} - 1} \quad (0 < t < t_1
 then a linear decay from $I_{max}$ at $t_2$ to zero at $t_3$ — a concave
 exponential front (inclination factor $\alpha$), flat top, straight tail.
 
+**Optional band-edge filter (ADR 0021).** Cutting the one-sided spectrum off
+abruptly at the Nyquist bound leaves ringing in $v(t)$ whenever the
+response still has content there. An optional Tukey (raised-cosine) filter
+can multiply each product $H(\omega)\,I(\omega)$ before the inverse
+transform: with $x = f/f_{max}$ and a start fraction $s\in(0,1]$,
+$W(x) = 1$ for $x \le s$ and $W(x) = \tfrac12\left[1 + \cos\frac{\pi (x - s)}{1 - s}\right]$
+for $s < x \le 1$, reaching zero at $f_{max}$. It is off by default, since it
+departs from the legacy pipeline and lowers fast-front peaks (a few percent
+for a 1.2 µs front at 1 MHz with $s = 0.85$).
+
 Practical notes from [1] and [3]: 512–8192 frequencies in $[0, 1\, \text{MHz}]$ suffice
 for lightning impulses. A caution from [56]: the required bandwidth is set by
 the frequency content of the *response*, not of the excitation alone — their
