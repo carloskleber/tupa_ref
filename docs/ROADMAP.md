@@ -2,7 +2,7 @@
 
 Reference electromagnetic transient solver (HEM / Method of Moments).
 Fortran implementation first; object model and test cases shared with the
-contributed Julia prototype and the planned Rust implementation (Phase 8; see
+contributed Julia prototype and the Rust implementation (Phase 8, `rust/`; see
 [ADR 0002](adr/0002-language-agnostic-object-model.md)).
 
 This roadmap supersedes the earlier `implementation-plan.md` /
@@ -38,7 +38,7 @@ implementation**; usability as an engineering tool is secondary.
 | Cases & tests | `common/` regression fixtures (golden), 15 test programs, all green under `fpm test --profile release` |
 | Validation | [`docs/validation/`](validation/README.md): digitized published-curve comparisons — Grcev et al. 2018 Fig. 12 (6 cases), Lima et al. 2020 Figs. 6/7, Poljak & Doric 2006 Fig. 4, Silva et al. 2025 Figs. 3/4 (harmonic + transient) — accepted as the release-bar oracle (§4) |
 | GUI | Python/PySide6 view-only module (`gui/`, ADR 0011): study tree, 3-D view, results/transient plots |
-| Other implementations | Julia prototype port (`julia/`, contributed 2026-09-29, §4) — harmonic + transient, not yet conforming; Rust planned (Phase 8) |
+| Other implementations | Julia prototype port (`julia/`, contributed 2026-09-29, §4) — harmonic + transient, not yet conforming; **Rust port (`rust/`, 2026-09-30, [ADR 0022](adr/0022-rust-implementation.md))** — harmonic conformance met on the three golden fixtures at 1e-6, transient path implemented, Phase 8 item 1 (Fortran fixture widening) still open |
 
 The original gap analysis (nine numbered gaps between this repository and
 the legacy pipeline) is fully resolved as of Phases 0–6; the historically
@@ -233,7 +233,7 @@ S/M/L (S ≈ days, M ≈ a focused week-scale task, L = new theory or
 object-model work) from the 2026-07-17 legacy survey (registered findings
 in theory.md §3.1, §4.3, §5, §6).
 
-### Phase 8 — Second implementation (Rust) — **next**
+### Phase 8 — Second implementation (Rust) — **in progress (items 2–8 implemented; item 1 open)**
 
 **Goal.** An independent Rust implementation of the public contract (JSON
 schema v1 + `common/` cases, ADR 0002/0018) that reproduces every golden
@@ -254,7 +254,10 @@ anti-alias filter). Out: the GUI (it already reads the shared results
 schema), parallelism, and Phase 9+ features until the follow-along rule
 (item 10) picks them up.
 
-**Design decisions** — to be recorded as a new ADR at item 1:
+**Design decisions** — recorded in [ADR 0022](adr/0022-rust-implementation.md)
+(which also lists the deviations from this proposal: in-repo LU instead of
+`faer`, series + Hankel Bessel subset instead of an AMOS port, no FFI
+features):
 
 | Topic | Proposal |
 | --- | --- |
@@ -274,7 +277,7 @@ schema), parallelism, and Phase 9+ features until the follow-along rule
 
 **Items** (numbered for citation; effort in brackets):
 
-1. **Contract freeze and fixture widening** (Fortran side) — **S–M**.
+1. **Contract freeze and fixture widening** (Fortran side) — **S–M**. **Status: open** (no Fortran toolchain was available when the Rust port was written; the Rust tree targets the three existing fixtures, [ADR 0022](adr/0022-rust-implementation.md)). A finding for this item: `grid_expected.csv` predates the FIFO order fix of ADR 0020 (electrodes listed `Line_4…Line_1`), so the positional comparison of `test_common_cases.f90` should be re-run and the fixture regenerated if it fails.
    Only three cases carry golden fixtures today (`portela1997`, `rod`,
    `grid` — all harmonic, all `linear` soil, current sources only), so
    "passes every `common/` case" is currently a weak bar. Add
@@ -287,48 +290,48 @@ schema), parallelism, and Phase 9+ features until the follow-along rule
    the discretised nodes and electrodes (IDs, coordinates, radii, media)
    so assembly can be compared before any physics. Write the ADR; cut the
    conformance tag (proposed **v0.6.0**).
-2. **Crate scaffold and conformance harness** — **S**. `rust/` package,
+2. **Crate scaffold and conformance harness** — **S**. **Status: done** — `rust/tests/conformance.rs` (keyed rows, 1e-6, passivity, guard for new fixtures). `rust/` package,
    gate commands, and first of all an integration test that walks
    `common/*_expected.csv`, runs the matching case and diffs at 1e-6
    relative, plus the independent passivity check of
    `test_common_cases.f90`. Written first so progress is measured case by
    case from red to green.
-3. **Schema reader and validation** — **S–M**. Schema v1 as frozen by
+3. **Schema reader and validation** — **S–M**. **Status: done** — `rust/src/json.rs`; all 29 `common/*.json` load, validate and assemble (`tests/physics.rs`). Deviation: a present value of the wrong JSON type is an error rather than 0. Schema v1 as frozen by
    ADR 0013/0015 plus the 0016, 0020 and 0021 additions; pre-run reference
    validation; ADR 0013 frequency-axis rule
    (`round(ppd·log10(fmax/fmin)) + 1`); CLI verbosity levels. Test: every
    `common/*.json` loads; negative cases mirror the Fortran rejections.
-4. **Object model and assembly** — **M**. Materials (`linear`,
+4. **Object model and assembly** — **M**. **Status: done** — identical discretised IDs, FIFO element order; `--dump-structure` prints the assembled nodes/electrodes (the Fortran-side dump is part of item 1). Materials (`linear`,
    `portela` per ADR 0007, `alipio-visacro` mean set, vacuum air);
    `tLine` discretisation and the `mesh` composite element in FIFO element
    order (ADR 0020); node/electrode registration with **identical
    discretised IDs** (the common/README gotcha — outputs and sources name
    generated nodes). Test: item 1's dump matches for every case.
-5. **Numerical kernels** — **M**. Geometry layer (mean/image distances,
+5. **Numerical kernels** — **M**. **Status: done** — line-by-line `dqag_k15`; Bessel subset is series + Hankel asymptotics rather than an AMOS port (ADR 0022). Geometry layer (mean/image distances,
    direction cosines, closed-form `g_self`, adaptive GK 7/15 `g(a,b)`,
    parallel-pair cache), propagation constant and `calcParamW`,
    solid-conductor internal impedance, `calcZSelf`/`calcZMutual` with all
    theory factors inside (ADR 0009). Tests: port the pins of
    `test_geometry.f90` (1e-6 vs independent integration) and
    `test_mesh.f90` (sign conventions, ADR 0008).
-6. **System assembly and solve** — **M**. Topology matrices, augmented
+6. **System assembly and solve** — **M**. **Status: done** — in-repo LU with `izamax`-style pivoting (no `faer`, ADR 0022). Topology matrices, augmented
    `Zeq` (ADR 0003), multi-RHS LU; current injections at named nodes
    (ADR 0010); voltage sources by unit-injection superposition (ADR 0016).
    Tests: port `test_solve.f90` (DC limit vs Sunde/Dwight, low-frequency
    plateau, passivity) and `test_material.f90`.
-7. **Sweep, results and writers** — **S–M**. `logFrequencyAxis`,
+7. **Sweep, results and writers** — **S–M**. **Status: done** — CLI parity plus `--output-dir`. **Milestone 8a met** on `portela1997`, `rod`, `grid` (1e-6). `logFrequencyAxis`,
    `runSweep`, `inputImpedance`, `maxVoltageMagnitude`; tidy CSV and
    results JSON (ADR 0012) with `outputs` filtering (ADR 0013); CLI
    parity with the Fortran executable (same arguments, same output file
    names). → **Milestone 8a: harmonic conformance.**
-8. **Time domain** — **M**. `mSignal` (Heidler legacy 6-term set and
+8. **Time domain** — **M**. **Status: implemented; Milestone 8b not formally closed** — ported unit and consistency tests pass, but no golden transient fixture exists until item 1. `mSignal` (Heidler legacy 6-term set and
    parametrised form with η, double exponential ± Jones front), tail
    taper, radix-2 FFT, transfer-function transient driver with the
    `freqZeroHz` DC-bin replacement (ADR 0019), anti-alias filter
    (ADR 0021), transient results JSON (ADR 0015). Tests: port
    `test_signal.f90`, `test_fft.f90`, `test_transient.f90`.
    → **Milestone 8b: full conformance.**
-9. **Cross-implementation report** — **S**.
+9. **Cross-implementation report** — **S**. **Status: partial** — Rust vs Julia/mHEM on Grcev ℓ = 10 m matches the published Fortran numbers (see `rust/README.md`); `docs/validation/fortran-vs-rust.md` and the wall-time table still need Fortran outputs.
    `docs/validation/fortran-vs-rust.md`: every runnable `common/` case,
    including those without golden fixtures (Grcev, Lima, Poljak, Silva),
    Rust vs Fortran, plus the three-way Fortran/Rust/Julia comparison on
@@ -604,14 +607,17 @@ shielded-wire segment.
   contributor-owned and off the critical path; once conforming, the Julia
   port joins the Phase 8 item 10 conformance table as a third
   implementation.
-- **Milestone 8a — Rust harmonic conformance** (planned): Phase 8 items
-  1–7.
-- **Milestone 8b — Rust full conformance** (planned): Phase 8 item 8; a
-  two-implementation reference.
-- **Next engineering steps**: Phase 8 item 1 (fixture widening and the
-  v0.6.0 conformance tag — it also gives the Julia port a sharper
-  target), then Phase 8 items 2 onward; on the Fortran side, in parallel,
-  Phase 9 items 1–3.
+- **Milestone 8a — Rust harmonic conformance** (**met** 2026-09-30 on the
+  three existing golden fixtures; item 1's widened fixtures would
+  strengthen it): Phase 8 items 2–7.
+- **Milestone 8b — Rust full conformance** (**implemented, not closed**):
+  Phase 8 item 8 is coded and self-consistent; closing it needs item 1's
+  transient/voltage/mesh/dispersive-soil fixtures so the claim is measured
+  against Fortran numbers, not asserted.
+- **Next engineering steps**: Phase 8 item 1 (Fortran-side fixture
+  widening and the v0.6.0 conformance tag — it closes Milestone 8b and
+  gives the Julia port a sharper target), then Phase 8 item 9 (report);
+  on the Fortran side, in parallel, Phase 9 items 1–3.
 
 ---
 
@@ -649,9 +655,9 @@ There is **no hosted CI** (ADR 0018): the gate is a local
 | Voltage-source handling | **Implemented** — current-injection equivalents (ADR 0010) by unit-injection superposition (ADR 0016), Phase 7 item 2 |
 | Impedance-fill interface | **Implemented** — theory factors inside `calcZ*` (ADR 0009) |
 | FFT dependency | **Implemented** — in-repo double-precision radix-2 FFT (ADR 0014); NLT proposed on top (§7 P4) |
-| JSON schema v1 | **Implemented (Fortran, GUI)** — ADR 0013 + 0015 (+ 0016/0020/0021 additions); parser migrated to json-fortran (ADR 0006 update); Rust reader pending Phase 8 |
+| JSON schema v1 | **Implemented (Fortran, GUI)** — ADR 0013 + 0015 (+ 0016/0020/0021 additions); parser migrated to json-fortran (ADR 0006 update); Rust reader implemented (`rust/src/json.rs`, ADR 0022) |
 | Reduced `Z_g` solver | Deferred optimisation (ADR 0003) |
-| Rust port dependencies and conformance tolerance | **Proposed** — Phase 8 design table (in-repo GK 7/15 and FFT ports, `faer` LU, pure-Rust Bessel subset; 1e-6 relative kept); ADR at Phase 8 item 1 |
+| Rust port dependencies and conformance tolerance | **Decided** — [ADR 0022](adr/0022-rust-implementation.md): in-repo GK 7/15 and FFT ports, in-repo LU (not `faer`), series + Hankel Bessel subset; 1e-6 relative kept |
 | GUI module | **Decided** — Python/PySide6/Qt3D, view-only v1 (ADR 0011) |
 | Results JSON schema | **Frozen** — ADR 0012 (harmonic) and ADR 0015 (transient) |
 | Quadrature tolerances | Dissertation-era values (`errrel = min(la,lb)·10⁻⁶`, `maxint = 500`), open to revision — revisit with the §7 P1 mHEM kernel, Phase 10 item 1 (ADR 0018) |

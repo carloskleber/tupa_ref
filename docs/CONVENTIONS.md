@@ -44,8 +44,9 @@ instructions (retired 2026-07-05).
   case → per-language implementation (ADR 0002).
 - **No new abstraction layers** unless explicitly agreed (reference-quality
   code prefers the simple, auditable path — ADR 0003).
-- **Language separation**: no Python/Rust code inside `fortran/`; future
-  implementations get sibling top-level folders sharing `common/`.
+- **Language separation**: no Python/Rust code inside `fortran/`;
+  implementations get sibling top-level folders (`rust/`, `julia/`, `gui/`)
+  sharing `common/`.
 - **Public repo hygiene**: private legacy-code locations and personal
   reference-library paths must never appear in committed files.
 
@@ -53,7 +54,7 @@ instructions (retired 2026-07-05).
 
 | Topic | Default |
 | --- | --- |
-| Implementation language for new features | Fortran first; the Rust port (ROADMAP Phase 8) follows per its item 10 follow-along rule |
+| Implementation language for new features | Fortran first; the Rust port (`rust/`, ROADMAP Phase 8) follows per its item 10 follow-along rule; Rust gate: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test --release` |
 | Soil dispersion model | `tPortelaSoil`, Lima–Portela parametrisation (ADR 0007) |
 | JSON library escape hatch | json-fortran (ADR 0006) |
 | Frequency axis | Logarithmic spacing for harmonic sweeps; linear grid for transients (theory.md §8) |

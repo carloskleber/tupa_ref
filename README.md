@@ -54,7 +54,7 @@ DC grounding resistance (Sunde), the Portela 1997 harmonic-impedance case,
 internal-consistency checks, and cross-code agreement with the open-source
 TAGS/PRTL-mHEM solvers. Current status: the end-to-end frequency-sweep and
 time-domain pipeline are wired and green (ROADMAP Phases 0–7; Phase 8, the Rust
-port, next); six comparisons against published papers' own figures — Silva et
+port, implemented — harmonic conformance met on the golden fixtures); six comparisons against published papers' own figures — Silva et
 al. 2025, Grcev et al. 2018, Lima et al. 2020 and Poljak & Doric 2006 —
 mostly agree within ±10-20% (closer for some cases, see
 [docs/validation/](docs/validation/README.md)). The formal anchors needing
@@ -76,6 +76,7 @@ not yet run) are still open — see [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 | [docs/validation/](docs/validation/README.md) | External-reference comparisons |
 | [common/README.md](common/README.md) | Shared JSON cases and schema (the public contract) |
 | [fortran/README.md](fortran/README.md) | Building and testing the Fortran implementation |
+| [rust/README.md](rust/README.md) | Building, testing and conformance status of the Rust implementation |
 | [gui/README.md](gui/README.md) | Solver-agnostic GUI (viewer); design in [docs/GUI_SDD.md](docs/GUI_SDD.md) |
 
 ## Implementations
@@ -84,8 +85,9 @@ The first implementation is **modern Fortran** (2008+, built with FPM) —
 partly because the original numerical core was already Fortran, cleaned up
 and modernised ([ADR 0001](docs/adr/0001-modern-fortran-reference-implementation.md)).
 A prototype native Julia port, contributed by acslima, lives in
-[julia/](julia/README.md). A Rust implementation is planned (ROADMAP Phase 8;
-Python is reserved for the GUI); all map the same object model
+[julia/](julia/README.md). A Rust implementation — no LAPACK/SLATEC needed, just `cargo` — lives in
+[rust/](rust/README.md) (ROADMAP Phase 8, [ADR 0022](docs/adr/0022-rust-implementation.md));
+Python is reserved for the GUI. All map the same object model
 (Study → Structure → Element/Material → Node/Electrode → Mesh → Result,
 [ADR 0002](docs/adr/0002-language-agnostic-object-model.md)) and must pass
 the same [common/](common/README.md) cases.

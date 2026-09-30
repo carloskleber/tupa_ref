@@ -3,7 +3,7 @@
 This document states the electromagnetic model implemented by TUPÃ: the Hybrid
 Electromagnetic Model (HEM), an application of the Method of Moments (MoM) to
 lightning and grounding-system transients. It is the normative reference for
-every implementation (Fortran, and the planned Rust port — ROADMAP Phase 8;
+every implementation (Fortran, the Rust port in `rust/` — ROADMAP Phase 8;
 Python is reserved for the GUI, ADR 0011): where code and this
 document disagree, one of them has a bug — and the discrepancy must be resolved
 before the code is merged.
