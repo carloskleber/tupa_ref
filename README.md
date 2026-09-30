@@ -53,8 +53,8 @@ anchors of [docs/theory.md](docs/theory.md) §9 within stated tolerances —
 DC grounding resistance (Sunde), the Portela 1997 harmonic-impedance case,
 internal-consistency checks, and cross-code agreement with the open-source
 TAGS/PRTL-mHEM solvers. Current status: the end-to-end frequency-sweep and
-time-domain pipeline are wired and green (ROADMAP Phases 0–6, Phase 7 in
-progress); six comparisons against published papers' own figures — Silva et
+time-domain pipeline are wired and green (ROADMAP Phases 0–7; Phase 8, the Rust
+port, next); six comparisons against published papers' own figures — Silva et
 al. 2025, Grcev et al. 2018, Lima et al. 2020 and Poljak & Doric 2006 —
 mostly agree within ±10-20% (closer for some cases, see
 [docs/validation/](docs/validation/README.md)). The formal anchors needing
@@ -83,8 +83,9 @@ not yet run) are still open — see [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 The first implementation is **modern Fortran** (2008+, built with FPM) —
 partly because the original numerical core was already Fortran, cleaned up
 and modernised ([ADR 0001](docs/adr/0001-modern-fortran-reference-implementation.md)).
-A prototype native Julia port lives in [julia/](julia/README.md).
-Python and Rust implementations are planned; all map the same object model
+A prototype native Julia port, contributed by acslima, lives in
+[julia/](julia/README.md). A Rust implementation is planned (ROADMAP Phase 8;
+Python is reserved for the GUI); all map the same object model
 (Study → Structure → Element/Material → Node/Electrode → Mesh → Result,
 [ADR 0002](docs/adr/0002-language-agnostic-object-model.md)) and must pass
 the same [common/](common/README.md) cases.
