@@ -58,7 +58,7 @@ which costs roughly 1-2 s per pair regardless of touching/singularity at
 today's tolerances (ROADMAP §6 "Quadrature tolerances", §7 P1) — a bigger
 grid is worth adding once the P1 mHEM single-integral kernel lands.
 
-## Schema (v1 — [ADR 0006](../docs/adr/0006-json-io.md) format, `sources`/`frequencies`/`outputs` frozen by [ADR 0013](../docs/adr/0013-input-schema-sources-frequencies-outputs.md), `signal` added by [ADR 0015](../docs/adr/0015-time-domain-signal-schema.md), voltage sources and Heidler `terms` by [ADR 0016](../docs/adr/0016-voltage-sources-by-superposition.md)/0015 amendment, `"mesh"` element by [ADR 0020](../docs/adr/0020-grid-mesh-element.md))
+## Schema (v1 — [ADR 0006](../docs/adr/0006-json-io.md) format, `sources`/`frequencies`/`outputs` frozen by [ADR 0013](../docs/adr/0013-input-schema-sources-frequencies-outputs.md), `signal` added by [ADR 0015](../docs/adr/0015-time-domain-signal-schema.md), voltage sources and Heidler `terms` by [ADR 0016](../docs/adr/0016-voltage-sources-by-superposition.md)/0015 amendment, `"mesh"` element by [ADR 0020](../docs/adr/0020-grid-mesh-element.md), `signal.antialiasStart` by [ADR 0021](../docs/adr/0021-transient-antialias-filter.md))
 
 ```json
 {
@@ -179,6 +179,12 @@ Semantics:
   `observeElectrodes` is an optional array of *discretised* electrode IDs
   (same ID gotcha as `outputs.electrodes` above) for i1(t)/i2(t). `fftPoints`
   is the time/FFT sample count, stated explicitly (must be a power of two).
+  `antialiasStart` is optional (ADR 0021): the fraction of `nyquistHz` where
+  a Tukey raised-cosine anti-aliasing roll-off of the synthesised spectrum
+  begins (it reaches zero at Nyquist); a number in (0, 1], where absent or
+  `1` means no filter. Enabling it changes transient results (on
+  `portela1997_transient.json`, `0.85` lowers the `Node_1` GPR peak by
+  about 3.4%), so it is never on by default.
   See `portela1997_transient.json` for a worked example.
   During inverse-FFT synthesis, the Fortran implementation automatically
   applies a Tukey raised-cosine anti-aliasing filter: its taper begins at
