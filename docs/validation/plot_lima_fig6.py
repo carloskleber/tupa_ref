@@ -27,6 +27,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DIGITIZED_XLSX = REPO_ROOT / "docs" / "validation" / "Lima_fig6.xlsx"
 RESULTS_DIR = REPO_ROOT / "fortran"
 OUTPUT_SVG = REPO_ROOT / "docs" / "figures" / "lima-fig6-comparison.svg"
+OUTPUT_PDF = OUTPUT_SVG.with_suffix(".pdf")
 
 XLSX_HEADER_ROWS = 3  # data starts on row 4 (0-indexed row 3)
 
@@ -87,7 +88,8 @@ def main() -> None:
     fig.tight_layout()
     OUTPUT_SVG.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUTPUT_SVG, format="svg")
-    print(f"Wrote {OUTPUT_SVG}")
+    fig.savefig(OUTPUT_PDF, format="pdf")
+    print(f"Wrote {OUTPUT_SVG} and {OUTPUT_PDF}")
 
 
 if __name__ == "__main__":

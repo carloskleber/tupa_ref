@@ -180,6 +180,9 @@ Semantics:
   (same ID gotcha as `outputs.electrodes` above) for i1(t)/i2(t). `fftPoints`
   is the time/FFT sample count, stated explicitly (must be a power of two).
   See `portela1997_transient.json` for a worked example.
+  During inverse-FFT synthesis, the Fortran implementation automatically
+  applies a Tukey raised-cosine anti-aliasing filter: its taper begins at
+  0.85 of the maximum represented frequency and reaches zero at Nyquist.
 
 ## Parser (ADR 0006)
 

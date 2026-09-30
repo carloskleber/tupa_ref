@@ -13,14 +13,14 @@ module mTransient
   !! quirks included (the Nyquist bin is reconstructed as a conjugated
   !! copy, never used unconjugated — harmless since realistic excitation
   !! spectra carry negligible energy there).
-  use mCtes, only: dp
+  use mCtes, only: dp, PI
   use mSignal, only: tSignal, tailTaper
   use mFft, only: fftForward, fftInverse, isPowerOfTwo
   use mStudy, only: tStudy
   use mError, only: raiseError
   implicit none
   private
-  public :: transientResponse, sampleTimeAxis, oneSidedFrequencyAxis
+  public :: transientResponse, sampleTimeAxis, oneSidedFrequencyAxis, tukeyAntialiasFilter
 
 contains
 
@@ -61,6 +61,40 @@ contains
     freqHz(1) = freqZeroHz
   end function oneSidedFrequencyAxis
 
+  function tukeyAntialiasFilter(nBins) result(filter)
+    !! One-sided, frequency-domain anti-aliasing filter. The response is
+    !! unity through 85% of the maximum represented frequency and follows
+    !! the falling half of a Tukey raised-cosine window from there to zero
+    !! at the maximum frequency (Nyquist):
+    !!
+    !!   H(x) = 1                                      x <= 0.85
+    !!          0.5 [1 + cos(pi (x - 0.85) / 0.15)]   0.85 < x <= 1
+    !!
+    !! where x = f/f_max. Keeping this separate from `tailTaper` is
+    !! intentional: that time-domain taper controls record-truncation
+    !! leakage, while this filter suppresses content close to Nyquist.
+    integer(4), intent(in) :: nBins
+    real(dp), allocatable :: filter(:)
+    real(dp), parameter :: TAPER_START = 0.85_dp
+    real(dp) :: x
+    integer(4) :: k
+
+    if (nBins < 2) then
+      call raiseError("tukeyAntialiasFilter: nBins must be at least 2")
+      return
+    end if
+
+    allocate(filter(nBins))
+    do k = 1, nBins
+      x = real(k - 1, dp) / real(nBins - 1, dp)
+      if (x <= TAPER_START) then
+        filter(k) = 1.0_dp
+      else
+        filter(k) = 0.5_dp * (1.0_dp + cos(PI * (x - TAPER_START) / (1.0_dp - TAPER_START)))
+      end if
+    end do
+  end function tukeyAntialiasFilter
+
   subroutine transientResponse(study, signal, sourceNodeId, observeNodeIds, &
                                 nyquistHz, nSamples, freqZeroHz, t, injectedCurrent, &
                                 nodeResponses, observeElectrodeIds, i1Responses, i2Responses)
@@ -74,9 +108,10 @@ contains
     !!      *every* node/electrode (`voltageResults`/`longCurrentResults`/
     !!      `transCurrentResults`), so observing more points costs no
     !!      extra `tStudy%run` calls, only more spectrum multiplies + IFFTs;
-    !!   4. per requested observe point: multiply spectra, rebuild the full
-    !!      spectrum by conjugate symmetry, and inverse-FFT back to the
-    !!      time domain.
+    !!   4. per requested observe point: multiply spectra, apply the Tukey
+    !!      anti-aliasing taper (starting at 0.85 of Nyquist), rebuild the
+    !!      full spectrum by conjugate symmetry, and inverse-FFT back to
+    !!      the time domain.
     class(tStudy), intent(inout) :: study
     class(tSignal), intent(in) :: signal
     character(len=*), intent(in) :: sourceNodeId
@@ -191,13 +226,17 @@ contains
     integer(4), intent(in) :: nBins, nSamples
     real(dp) :: series(nSamples)
     complex(dp), allocatable :: fullSpectrum(:)
-    integer(4) :: k
+    real(dp), allocatable :: antialias(:)
+    integer(4) :: k, sourceBin
 
     allocate(fullSpectrum(nSamples))
-    fullSpectrum(1:nBins - 1) = transferFunction(1:nBins - 1) * excitationSpectrum(1:nBins - 1)
+    antialias = tukeyAntialiasFilter(nBins)
+    fullSpectrum(1:nBins - 1) = transferFunction(1:nBins - 1) * &
+      excitationSpectrum(1:nBins - 1) * antialias(1:nBins - 1)
     fullSpectrum(1) = cmplx(real(fullSpectrum(1), dp), 0.0_dp, kind=dp)
     do k = nBins, nSamples
-      fullSpectrum(k) = conjg(transferFunction(2 * nBins - k) * excitationSpectrum(2 * nBins - k))
+      sourceBin = 2 * nBins - k
+      fullSpectrum(k) = conjg(transferFunction(sourceBin) * excitationSpectrum(sourceBin)) * antialias(sourceBin)
     end do
 
     call fftInverse(fullSpectrum)

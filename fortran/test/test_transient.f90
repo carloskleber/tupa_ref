@@ -29,11 +29,25 @@ program test_transient
   real(dp), parameter :: length = 10.0d0, r0 = 0.007d0, depth = 0.5d0
   real(dp), parameter :: sigmaSoil = 0.01d0, epsrSoil = 10.0d0
   type(tDoubleExpSignal) :: surge
-  real(dp), allocatable :: t(:), injectedCurrent(:), response(:,:)
+  real(dp), allocatable :: t(:), injectedCurrent(:), response(:,:), antialias(:)
   complex(dp), allocatable :: zin(:)
   real(dp) :: imax, nyquistHz, freqZeroHz, ratioAtPeak, zinLowFreqMag
   integer(4), parameter :: nSamples = 1024
   integer(4) :: iPeak
+
+  ! ----------------------------------------------------------------
+  ! Tukey anti-aliasing response: flat to 0.85 fmax, cosine to zero
+  ! ----------------------------------------------------------------
+  call test_init("Tukey anti-aliasing filter")
+
+  antialias = tukeyAntialiasFilter(101)
+  call test_ok("filter has one value per one-sided bin", size(antialias) == 101, "")
+  call test_ok("pass band is unity at DC", abs(antialias(1) - 1.0_dp) < 1.0d-15, "")
+  call test_ok("taper starts at 0.85 fmax", abs(antialias(86) - 1.0_dp) < 1.0d-15, "")
+  call test_ok("first bin above 0.85 fmax is attenuated", antialias(87) < 1.0_dp, "")
+  call test_ok("filter is zero at fmax", abs(antialias(101)) < 1.0d-15, "")
+  call test_ok("filter is monotonically non-increasing", &
+               all(antialias(2:) <= antialias(:size(antialias) - 1)), "")
 
   study%title = "Phase 6 transient test - buried conductor (Portela 1997 parameters)"
   call study%structure%addNode(newNode("Node_1", [0.0d0, 0.0d0, -depth]))

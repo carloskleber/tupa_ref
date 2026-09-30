@@ -27,6 +27,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DIGITIZED_XLSX = REPO_ROOT / "docs" / "validation" / "silva_fig3.xlsx"
 RESULTS_DIR = REPO_ROOT / "fortran"
 OUTPUT_SVG = REPO_ROOT / "docs" / "figures" / "silva2025-fig3-comparison.svg"
+OUTPUT_PDF = OUTPUT_SVG.with_suffix(".pdf")
 
 RHO_VALUES = [100, 300, 1000, 2400]
 SUBPLOT_LABELS = ["a", "b", "c", "d"]
@@ -101,7 +102,8 @@ def main() -> None:
     fig.tight_layout()
     OUTPUT_SVG.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUTPUT_SVG, format="svg")
-    print(f"Wrote {OUTPUT_SVG}")
+    fig.savefig(OUTPUT_PDF, format="pdf")
+    print(f"Wrote {OUTPUT_SVG} and {OUTPUT_PDF}")
 
 
 if __name__ == "__main__":

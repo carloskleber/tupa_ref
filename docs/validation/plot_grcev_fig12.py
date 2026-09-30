@@ -27,6 +27,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DIGITIZED_XLSX = REPO_ROOT / "docs" / "validation" / "grcev_fig12.xlsx"
 RESULTS_DIR = REPO_ROOT / "fortran"
 OUTPUT_SVG = REPO_ROOT / "docs" / "figures" / "grcev-fig12-comparison.svg"
+OUTPUT_PDF = OUTPUT_SVG.with_suffix(".pdf")
 
 LENGTHS = [10, 100]
 RHO_VALUES = [30, 300, 3000]
@@ -118,7 +119,8 @@ def main() -> None:
     fig.tight_layout(rect=(0.0, 0.08, 1.0, 1.0))
     OUTPUT_SVG.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUTPUT_SVG, format="svg")
-    print(f"Wrote {OUTPUT_SVG}")
+    fig.savefig(OUTPUT_PDF, format="pdf")
+    print(f"Wrote {OUTPUT_SVG} and {OUTPUT_PDF}")
 
 
 if __name__ == "__main__":
