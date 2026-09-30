@@ -16,7 +16,7 @@ BENCHMARKS.md's anchor table.
 | [silva2025-fig3.md](silva2025-fig3.md) | Silva et al. 2025 (SBAI, references.md [36]), Fig. 3 | Harmonic input impedance \|Z(ω)\|, 60 m buried electrode, `alipio-visacro` soil, ρ0 = 100/300/1000/2400 Ω·m | DC/high-frequency asymptotes and the resonance dips/peaks (ρ0 = 1000/2400 Ω·m) agree closely; a mid-band knee runs up to ~14% off for ρ0 = 100/300 Ω·m, partly corroborated by an independent discretization-sensitivity study — see writeup for the full table |
 | [silva2025-fig4.md](silva2025-fig4.md) | Silva et al. 2025 (SBAI, references.md [36]), Fig. 4 | Time-domain GPR at the injection node, same 60 m electrode/soil, MCS_FST#2 double-peaked first-stroke current (De Conti & Visacro 2007, [38]) | Both current-driven GPR humps agree within ~5% at every ρ0 (worst single point +12.5%, on the front at ρ0 = 2400 Ω·m); the tail (t ≥ 15 µs) has a mild +0.6-2% overestimate for ρ0 = 300/1000/2400 Ω·m — see writeup for the full table and the MCS_FST#1-vs-#2 finding |
 | [grcev-fig12.md](grcev-fig12.md) | Grcev et al. 2018 (IEEE TPWRD, references.md [23]), Fig. 12 | Harmonic input impedance \|Z(ω)\| of horizontal buried electrodes vs. the paper's own rigorous full-wave MoM reference model, ℓ = 10/100 m, homogeneous soil, ρ1 = 30/300/3000 Ω·m | DC/HF asymptotes agree within 0-4% on all six curves and the ℓ = 10 m, ρ1 = 3000 Ω·m double resonance is reproduced in shape/depth/location; excluding four slope-sensitive digitization outliers on that resonance and two knees, every other point is within ±11.5% — see writeup for the full table and why this is a closer physics match than the Silva comparisons above |
-| [tupa-vs-mhem.md](tupa-vs-mhem.md) | Supplied prototype Julia mHEM implementation and Grcev et al. 2018 Fig. 12 | Cross-code and external-reference comparison for the 10 m horizontal electrode, ρ = 30/300/3000 Ω·m | Tupa and mHEM differ by only 0.05–1.07% mean magnitude through 1 MHz; against the digitized full-wave reference, aggregate MAPE is 3.00% for Tupa and 3.31% for mHEM below 1 MHz. Both reproduce the high-resistivity resonance structure, where pointwise errors are dominated by frequency shifts on steep flanks. |
+| [tupa-vs-mhem.md](tupa-vs-mhem.md) | Julia port of TUPÃ, the TAGS/mHEM prototype (pedrohnv), and Grcev et al. 2018 Fig. 12 | Cross-code and external-reference comparison for the 10 m horizontal electrode, ρ = 30/300/3000 Ω·m | The Fortran and Julia solvers agree to ≤ 0.17% at every frequency; both are within 0.04–1.74% (mean) of the mHEM prototype through 10 MHz. Against the digitized full-wave curve, pooled MAPE below 1 MHz is 2.93% (Fortran), 3.00% (Julia), 3.31% (mHEM); the 3000 Ω·m resonance flank dominates the full-band error for all three (a frequency-shift effect, not an amplitude bias). |
 | [lima-fig6.md](lima-fig6.md) | Lima et al. 2020 (IEEE TEMC, references.md [11]), Fig. 6 (Case #9, MHEM curve only) | Harmonic input impedance \|Z(ω)\| of a 9-electrode distribution-tower counterpoise (4×6 m horizontal + 5×3 m vertical), ρ = 1000 Ω·m | Resonance dip/peak/dip locations agree within ~10-15%, but a systematic −13 to −17% gap runs from DC to ~2 MHz and the resonance amplitudes diverge by up to 2-3× above ~3 MHz; the paper doesn't state this case's electrode radius, burial depth or arm azimuths, so the gap can't be pinned on model vs. inferred-geometry — see writeup for the full table and the radius/depth sensitivity checks |
 | [lima-fig7.md](lima-fig7.md) | Lima et al. 2020 (IEEE TEMC, references.md [11]), Fig. 7 (Cases #10/#11, MHEM curve only) | Harmonic input impedance \|Z(ω)\| of two square buried grounding grids, 20×20 m 2×2 mesh (#10) and 40×40 m 4×4 mesh (#11), ρ = 1000 Ω·m | Closest agreement of the three Lima et al. comparisons — both grids track the digitized curve within ±7% below ~4 MHz (DC within +1%), then diverge to 10-19% through the ~6.5-7 MHz peak, matching the paper's own stated mismatch-onset frequency; every geometry parameter is stated explicitly for these cases, unlike case #9 — see writeup for the full tables |
 | [poljak-fig4.md](poljak-fig4.md) | Poljak & Doric 2006 (PIER, references.md [35]), Fig. 4 | Harmonic input impedance \|Z(ω)\| of a single L = 2 m, a = 5 mm vertical grounding electrode, d = 0.5 m, ρ = 5400 Ω·m, DC-100 MHz | Closest agreement of any comparison in this folder — DC plateau, roll-off and all four antenna-resonance lobes reproduced within ±10% almost everywhere (several points within ±3%); the two largest errors (up to −23%) sit at the steepest null crossings, a reading artifact rather than a modeling gap — see writeup for the full table and the digitization fix (original xlsx frequency column was 10x too low) |
@@ -63,18 +63,16 @@ Then run the complete validation pipeline:
 ```
 
 This builds the reference Fortran implementation, runs all 18 JSON studies,
-regenerates the six literature-comparison figures, reruns the matched Julia
-Tupa/mHEM/MoM pipeline, and writes SVG, PDF, and (for the Julia comparisons)
-PNG figures under `docs/figures/`. The aligned mHEM archive must be named
-`transient-analysis-grounding-systems-julia-tupa-aligned.zip` in the
-repository root. Alternatively, set `MHEM_ZIP` to its full path.
-
-To regenerate plots from existing Fortran result JSON files without rerunning
-the 18 Fortran studies:
+regenerates the six literature-comparison figures (SVG and PDF under
+`docs/figures/`), reruns the Julia port on the 10 m Grcev cases if Julia is
+installed, and rebuilds the Fortran/Julia/mHEM comparison
+([tupa-vs-mhem.md](tupa-vs-mhem.md)). To regenerate plots from existing
+Fortran result JSON files without rerunning the 18 Fortran studies:
 
 ```sh
 ./docs/validation/run_all.sh --plots-only
 ```
 
-The 100 m Grcev studies and transient studies are computationally expensive;
-the complete run can take considerably longer than the plotting-only mode.
+The 100 m Grcev studies and the transient studies are computationally
+expensive; the complete run can take considerably longer than the
+plotting-only mode.

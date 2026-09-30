@@ -35,8 +35,6 @@ if ! "$PYTHON_BIN" -c 'import matplotlib, numpy, openpyxl, pandas' >/dev/null 2>
     exit 1
 fi
 
-command -v julia >/dev/null 2>&1 || { echo "Julia was not found." >&2; exit 1; }
-
 export MPLCONFIGDIR="${MPLCONFIGDIR:-${TMPDIR:-/tmp}/tupa-matplotlib-cache}"
 mkdir -p "$MPLCONFIGDIR"
 
@@ -89,53 +87,15 @@ for plot_script in "${plot_scripts[@]}"; do
     "$PYTHON_BIN" "$SCRIPT_DIR/$plot_script"
 done
 
-MHEM_ZIP="${MHEM_ZIP:-$REPO_ROOT/transient-analysis-grounding-systems-julia-tupa-aligned.zip}"
-if [[ ! -f "$MHEM_ZIP" ]]; then
-    echo "Aligned mHEM archive not found: $MHEM_ZIP" >&2
-    echo "Set MHEM_ZIP to its location, or place it in the repository root." >&2
-    exit 1
+echo "Comparing TUPA (Fortran) with the mHEM prototype: compare_fortran_mhem.py"
+JULIA_RESULTS="$SCRIPT_DIR/julia-grcev-l10-results.csv"
+if [[ "$MODE" == "all" ]] && command -v julia >/dev/null 2>&1; then
+    julia --project="$REPO_ROOT/julia" -e 'using Pkg; Pkg.instantiate()'
+    julia --project="$REPO_ROOT/julia" "$REPO_ROOT/julia/comparison/run_tupa_grcev_l10.jl" \
+        "$REPO_ROOT" "$JULIA_RESULTS"
+else
+    echo "Not rerunning Julia; reusing $JULIA_RESULTS" >&2
 fi
-
-TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/tupa-validation.XXXXXX")"
-trap 'rm -rf "$TEMP_ROOT"' EXIT
-unzip -q "$MHEM_ZIP" -d "$TEMP_ROOT"
-MHEM_DIR="$TEMP_ROOT/transient-analysis-grounding-systems-julia"
-
-julia --project="$MHEM_DIR" -e 'using Pkg; Pkg.instantiate()'
-julia --project="$MHEM_DIR" "$MHEM_DIR/examples/tupa_grcev_fig12_l10.jl"
-julia --project="$MHEM_DIR" "$MHEM_DIR/examples/tupa_rod.jl"
-
-TUPA_GRCEV="$TEMP_ROOT/tupa_grcev.csv"
-TUPA_ROD="$TEMP_ROOT/tupa_rod.csv"
-MHEM_GRCEV="$MHEM_DIR/examples/tupa_matched_grcev_l10_mhem.csv"
-MHEM_ROD="$MHEM_DIR/examples/tupa_matched_rod_mhem.csv"
-
-julia --project="$REPO_ROOT/julia" "$REPO_ROOT/julia/comparison/run_tupa_grcev_l10.jl" "$REPO_ROOT" "$TUPA_GRCEV"
-julia --project="$REPO_ROOT/julia" "$REPO_ROOT/julia/comparison/run_tupa_rod.jl" "$REPO_ROOT" "$TUPA_ROD"
-
-COMBINED_RESULTS="$SCRIPT_DIR/tupa-mhem-grcev-l10-results.csv"
-METRICS="$SCRIPT_DIR/tupa-mhem-grcev-l10-metrics.csv"
-MOM_POINTS="$SCRIPT_DIR/tupa-mhem-mom-reference-points.csv"
-"$PYTHON_BIN" "$SCRIPT_DIR/compare_tupa_mhem.py" \
-    --tupa "$TUPA_GRCEV" \
-    --mhem "$MHEM_GRCEV" \
-    --reference "$SCRIPT_DIR/grcev_fig12.xlsx" \
-    --results "$COMBINED_RESULTS" \
-    --metrics "$METRICS" \
-    --reference-results "$MOM_POINTS"
-
-FIGURES_DIR="$REPO_ROOT/docs/figures"
-julia --project="$REPO_ROOT/julia" "$REPO_ROOT/julia/comparison/plot_tupa_mhem_grcev_l10.jl" \
-    "$COMBINED_RESULTS" "$MOM_POINTS" \
-    "$FIGURES_DIR/tupa-mhem-grcev-l10-comparison.png" \
-    "$FIGURES_DIR/tupa-mhem-grcev-l10-comparison.svg" \
-    "$FIGURES_DIR/tupa-mhem-grcev-l10-comparison.pdf"
-
-julia --project="$REPO_ROOT/julia" "$REPO_ROOT/julia/comparison/plot_tupa_mhem_aligned_cases.jl" \
-    "$COMBINED_RESULTS" "$TUPA_ROD" "$MHEM_ROD" "$MOM_POINTS" \
-    "$FIGURES_DIR/tupa-mhem-mom-comparison.png" \
-    "$FIGURES_DIR/tupa-mhem-mom-comparison.svg" \
-    "$FIGURES_DIR/tupa-mhem-mom-comparison.pdf"
+"$PYTHON_BIN" "$SCRIPT_DIR/compare_fortran_mhem.py"
 
 echo "All validation comparisons completed."
-echo "Figures: $FIGURES_DIR"
