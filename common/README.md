@@ -186,9 +186,6 @@ Semantics:
   `portela1997_transient.json`, `0.85` lowers the `Node_1` GPR peak by
   about 3.4%), so it is never on by default.
   See `portela1997_transient.json` for a worked example.
-  During inverse-FFT synthesis, the Fortran implementation automatically
-  applies a Tukey raised-cosine anti-aliasing filter: its taper begins at
-  0.85 of the maximum represented frequency and reaches zero at Nyquist.
 
 ## Parser (ADR 0006)
 
