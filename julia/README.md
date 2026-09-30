@@ -5,10 +5,22 @@ This is a native Julia port of the Fortran HEM solver. It reads the shared
 and image geometry matrices, assembles the augmented HEM system, and runs
 frequency- or time-domain simulations.
 
-Transient synthesis includes a frequency-domain Tukey antialiasing low-pass
-with **alpha = 0.75**. The response is flat through 25% of Nyquist and follows
-a raised-cosine roll-off to zero at Nyquist. The existing record-tail taper is
-also retained because it addresses FFT leakage, a different problem.
+Transient synthesis can apply the same optional frequency-domain Tukey
+antialiasing filter as the Fortran code: set `signal.antialiasStart` (fraction
+of Nyquist where the raised-cosine roll-off begins, in (0, 1]) in the study
+JSON, or pass `antialias_start` to `transient_response`. It is off by default
+([ADR 0021](../docs/adr/0021-transient-antialias-filter.md)). The existing
+record-tail taper is always applied because it addresses FFT leakage, a
+different problem.
+
+**Status: prototype.** On the Grcev Fig. 12 10 m cases it matches the Fortran
+solver to ≤ 0.17% in |Z| and, on `portela1997_transient.json`, to under
+8·10⁻⁴ of peak in v(t) and i1/i2(t) ([validation](../docs/validation/tupa-vs-mhem.md)).
+Known gaps relative to the Fortran code: fixed 64×64 midpoint quadrature for
+the geometry factors, no voltage sources (ADR 0016), no `outputs` filtering
+(ADR 0013), no results JSON, and a frequency sweep returns its result in
+memory instead of writing files. `i1`/`i2` are the segment end currents
+I₁/I₂ (positive into the segment), as in the Fortran outputs.
 
 ```sh
 cd julia

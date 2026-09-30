@@ -4,7 +4,7 @@ export Study, load_study, prepare!, solve_frequency, run_sweep, run_file,
        transient_response, tukey_antialias, sample_time_axis,
        one_sided_frequency_axis, heidler, double_exponential,
        write_transient_plot
-const EPS0=8.8541878128e-12; const MU0=1.25663706212e-6; const DEFAULT_TUKEY_ALPHA=.75
+const EPS0=8.8541878128e-12; const MU0=1.25663706212e-6
 
 struct Material
     id::String; kind::Symbol; epsilonr::Float64; mur::Float64; sigma::Float64; alpha0::Float64; kr::Float64
@@ -122,18 +122,22 @@ function solve_frequency(s,omega,source_ids,source_values)
     for (id,v) in zip(source_ids,source_values);p=nodeindex(s,String(id));p>0||error("unknown source node $id");rhs[2ns+p]+=v;end
     x=Z\rhs;x[1:nn],x[nn+1:nn+ns],x[nn+ns+1:end]
 end
+"Frequency sweep. `i1`/`i2` are the segment end currents I1/I2 (positive into the segment), as in the Fortran `i1`/`i2` outputs."
 function run_sweep(s,freqs,ids,values)
     V=Matrix{ComplexF64}(undef,length(s.nodes),length(freqs));I1=Matrix{ComplexF64}(undef,length(s.segments),length(freqs));I2=similar(I1)
     for (k,f) in pairs(freqs);V[:,k],I1[:,k],I2[:,k]=solve_frequency(s,2pi*f,ids,values);end
-    (;frequencies=collect(freqs),voltage=V,i1=(I1-I2)/2,i2=I1+I2)
+    (;frequencies=collect(freqs),voltage=V,i1=I1,i2=I2)
 end
 
 sample_time_axis(nyquist,n)=collect(0:n-1)/(2nyquist)
 one_sided_frequency_axis(nyquist,n,fzero=1e-6)=[fzero;collect(1:n÷2)*(2nyquist/n)]
-"Raised-cosine antialias response, flat then tapered to zero at Nyquist."
-function tukey_antialias(nbins::Integer;alpha::Real=DEFAULT_TUKEY_ALPHA)
-    0<=alpha<=1||throw(ArgumentError("Tukey alpha must be in [0,1]"));x=range(0,1,length=nbins);alpha==0&&return ones(nbins)
-    [u<=1-alpha ? 1. : .5*(1+cos(pi*(u-(1-alpha))/alpha)) for u in x]
+"""
+One-sided Tukey antialias response (ADR 0021): unity up to `start` times Nyquist,
+then a raised-cosine roll-off to zero at Nyquist. `start=1` is the identity.
+"""
+function tukey_antialias(nbins::Integer;start::Real=1)
+    0<start<=1||throw(ArgumentError("antialias start must be in (0,1]"));x=range(0,1,length=nbins)
+    [u<=start ? 1. : .5*(1+cos(pi*(u-start)/(1-start))) for u in x]
 end
 function double_exponential(t,imax,front;jones=false)
     vals=Dict("f1_2_5"=>(1.2e-6,1.25e6,2.8736e5),"f1_2_50"=>(1.2e-6,2.4691e6,1.4663e4),"f1_2_200"=>(1.2e-6,2.6247e6,3521.1),"f250_2500"=>(250e-6,9615.4,347.58));tf,a,b=vals[String(front)]
@@ -146,15 +150,15 @@ end
 function waveform(sig,t)
     String(sig[:waveform])=="doubleExp" ? double_exponential(t,Float64(sig[:imax]),String(sig[:front]);jones=Bool(getv(sig,:jones,false))) : haskey(sig,:terms) ? heidler(t,sig[:terms];imax=haskey(sig,:imax) ? Float64(sig[:imax]) : nothing) : error("legacy fixed-term Heidler requires terms")
 end
-"Transient solve with Tukey antialias low-pass (default alpha=0.75)."
-function transient_response(s,sig;tukey_alpha=DEFAULT_TUKEY_ALPHA)
+"Transient solve; `signal.antialiasStart` (or the keyword) enables the Tukey antialias filter, off by default."
+function transient_response(s,sig;antialias_start=Float64(getv(sig,:antialiasStart,1.0)))
     n=Int(sig[:fftPoints]);ispow2(n)||error("fftPoints must be a power of two");nyq=Float64(sig[:nyquistHz]);t=sample_time_axis(nyq,n);current=waveform(sig,t)
     current.*=[.5*erfc((k-.8n)/(n/20)) for k=1:n];X=fft(current);freqs=one_sided_frequency_axis(nyq,n,Float64(getv(sig,:freqZeroHz,1e-6)))
-    sw=run_sweep(s,freqs,[String(sig[:sourceNode])],[1+0im]);filt=tukey_antialias(length(freqs);alpha=tukey_alpha)
+    sw=run_sweep(s,freqs,[String(sig[:sourceNode])],[1+0im]);filt=tukey_antialias(length(freqs);start=antialias_start)
     function synth(H);half=H.*X[1:length(freqs)].*filt;half[1]=real(half[1]);half[end]=real(half[end]);real(ifft([half;conj.(reverse(half[2:end-1]))]));end
     nodes=String.(sig[:observeNodes]);volts=reduce(vcat,[permutedims(synth(sw.voltage[nodeindex(s,id),:])) for id in nodes]);elecs=String.(getv(sig,:observeElectrodes,String[]))
     i1=isempty(elecs) ? zeros(0,n) : reduce(vcat,[permutedims(synth(sw.i1[segmentindex(s,id),:])) for id in elecs]);i2=isempty(elecs) ? zeros(0,n) : reduce(vcat,[permutedims(synth(sw.i2[segmentindex(s,id),:])) for id in elecs])
-    (;time=t,injected_current=current,node_ids=nodes,voltage=volts,electrode_ids=elecs,i1=i1,i2=i2,tukey_alpha=Float64(tukey_alpha))
+    (;time=t,injected_current=current,node_ids=nodes,voltage=volts,electrode_ids=elecs,i1=i1,i2=i2,antialias_start=Float64(antialias_start))
 end
 function write_csv(path,r)
     open(path,"w") do io
@@ -181,7 +185,7 @@ function write_transient_plot(path::AbstractString,r)
 end
 function run_file(path::AbstractString)
     s,root=load_study(path);base=splitext(basename(path))[1]
-    if haskey(root,:signal);r=transient_response(s,root[:signal]);out=base*"_transient_results.csv";figure=base*"_transient_plot.png";write_csv(out,r);write_transient_plot(figure,r);println("wrote $out and $figure (Tukey antialias alpha=$(r.tukey_alpha))");return r
+    if haskey(root,:signal);r=transient_response(s,root[:signal]);out=base*"_transient_results.csv";figure=base*"_transient_plot.png";write_csv(out,r);write_transient_plot(figure,r);println("wrote $out and $figure (antialias start=$(r.antialias_start))");return r
     elseif haskey(root,:sources)&&haskey(root,:frequencies);f=root[:frequencies];count=round(Int,Float64(f[:pointsPerDecade])*log10(Float64(f[:max])/Float64(f[:min])))+1;freqs=10 .^ range(log10(Float64(f[:min])),log10(Float64(f[:max])),length=count);ids=String[x[:node] for x in root[:sources]];vals=ComplexF64[complex(Float64(x[:current][:re]),Float64(x[:current][:im])) for x in root[:sources]];return run_sweep(s,freqs,ids,vals)
     end
     println("$(s.title): $(length(s.nodes)) nodes, $(length(s.segments)) electrode segments");s
