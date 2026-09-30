@@ -1,9 +1,11 @@
 program test_assemble
   !! Tests for tLine%assemble and the tStructure node/electrode wiring it
-  !! relies on (ROADMAP.md Phase 1, item 1).
+  !! relies on (ROADMAP.md Phase 1, item 1), and for the tCatenary profile
+  !! built on it (ADR 0023).
   use mStructure
   use mElement
   use mElementLine
+  use mElementCatenary
   use mMaterial
   use mNode
   use check
@@ -76,6 +78,33 @@ program test_assemble
     call test_ok("material ID resolved correctly", &
                  trim(structure%electrodes(1)%material%id) == "cond", &
                  "electrode material does not point to the resolved 'cond' material")
+  end block
+
+  call test_init("tCatenary%assemble: parabolic sag profile (theory.md §4.4)")
+
+  block
+    type(tStructure) :: span
+    real(8) :: expected(3, 3)
+
+    call span%addNode(newNode("A", [0.0d0, 0.0d0, 30.0d0]))
+    call span%addNode(newNode("B", [100.0d0, 0.0d0, 30.0d0]))
+    mat = newMaterialLinear("steel", 1.0d0, 100.0d0, 5.88d6)
+    call span%addMaterial(mat)
+    elem = newElementCatenary("C", "A", "B", 5.0d0, 0.005d0, 4, "steel")
+    call span%addElement(elem)
+    call span%assembleStructure()
+
+    ! z = 30 - 4·sag·s(1-s): 26.25 m at the quarter points, 25 m at midspan
+    expected(:, 1) = [25.0d0, 0.0d0, 26.25d0]
+    expected(:, 2) = [50.0d0, 0.0d0, 25.0d0]
+    expected(:, 3) = [75.0d0, 0.0d0, 26.25d0]
+    call test_ok("3 internal nodes, 4 electrodes", &
+                 span%getNodeCount() == 5 .and. span%getElectrodeCount() == 4, "")
+    call test_ok("internal nodes on the sag profile", &
+                 all(abs(reshape([span%nodes(3)%p, span%nodes(4)%p, span%nodes(5)%p], [3, 3]) &
+                         - expected) < TOL), "catenary node positions off the parabola")
+    call test_ok("chain ends on the far boundary node", &
+                 all(span%electrodes(4)%nodeIndices == [5, 2]), "")
   end block
 
   call test_summary()

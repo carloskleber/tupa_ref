@@ -140,6 +140,26 @@ end
     @test err isa TupaError && occursin("material 'missing' not found", err.msg)
 end
 
+@testset "catenary element (ADR 0023)" begin
+    # theory.md §4.4: z = z_chord - 4·sag·s(1-s); midspan drops by the sag
+    function catenary_structure(sag)
+        st = Structure(Linear("soil", 10.0, 1.0, 0.01))
+        add_node!(st, Node("A", (0.0, 0.0, 30.0)))
+        add_node!(st, Node("B", (100.0, 0.0, 30.0)))
+        add_material!(st, Linear("steel", 1.0, 100.0, 5.88e6))
+        add_element!(st, Catenary(Line("C", "A", "B", 0.005, 4, "steel"), sag))
+        return st
+    end
+    st = assemble!(catenary_structure(5.0))
+    for (k, (x, z)) in enumerate([(25.0, 26.25), (50.0, 25.0), (75.0, 26.25)])
+        p = st.nodes[find_node_index(st, "C_n$k")].p
+        @test isapprox(p[1], x; atol = 1e-12) && p[2] == 0 && isapprox(p[3], z; atol = 1e-12)
+    end
+    @test length(st.electrodes) == 4 && find_electrode_index(st, "C_e4") !== nothing
+    err = try assemble!(catenary_structure(40.0)); nothing catch e; e end
+    @test err isa TupaError && occursin("crosses the air-soil interface", err.msg)
+end
+
 @testset "every common/*.json loads, validates and assembles (test_validation)" begin
     cases = filter(endswith(".json"), readdir(COMMON))
     @test length(cases) >= 25

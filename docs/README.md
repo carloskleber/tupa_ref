@@ -44,6 +44,7 @@ ARCHITECTURE → theory.md; contributors add CONVENTIONS and ROADMAP.
 | [0020](adr/0020-grid-mesh-element.md) | Grid/mesh element (`"type": "mesh"`) and FIFO element order | Accepted |
 | [0021](adr/0021-transient-antialias-filter.md) | Optional anti-aliasing filter for transient synthesis | Accepted |
 | [0022](adr/0022-rust-implementation.md) | Rust implementation (`rust/`): design decisions and conformance status | Accepted |
+| [0023](adr/0023-legacy-case-import.md) | Legacy case import: `catenary` element, `portela` waveform, legacy `common/` cases | Accepted |
 
 Language-specific build documentation stays with each implementation
 (e.g. [../fortran/README.md](../fortran/README.md),

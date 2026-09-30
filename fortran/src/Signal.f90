@@ -9,17 +9,18 @@ module mSignal
   !! correction for a zero-slope front). Phase 7 adds the standard
   !! user-parametrised Heidler construction (`newHeidlerSignalTerms`,
   !! Heidler 1985 / IEC 62305-1 — references.md) alongside the legacy
-  !! fixed 6-term set. The Matlab reference ships several more waveforms
-  !! (single exponential, impulse/step, Portela's concave model, sine) —
-  !! ported "as needed" per ROADMAP.md Phase 6 item 1; not duplicated here
-  !! until a case needs them.
+  !! fixed 6-term set. Phase 9 item 3 adds Portela's concave-front surge
+  !! (`tPortelaSignal`, legacy `sinais.Portela`/`impulso.m`). The Matlab
+  !! reference ships a few more waveforms (single exponential,
+  !! impulse/step, sine) — ported "as needed" per ROADMAP.md Phase 6 item 1;
+  !! not duplicated here until a case needs them.
   use mCtes, only: dp, PI
   use mError, only: raiseError
   implicit none
   private
 
-  public :: tSignal, tHeidlerSignal, tDoubleExpSignal
-  public :: newHeidlerSignal, newHeidlerSignalTerms, newDoubleExpSignal, tailTaper
+  public :: tSignal, tHeidlerSignal, tDoubleExpSignal, tPortelaSignal
+  public :: newHeidlerSignal, newHeidlerSignalTerms, newDoubleExpSignal, newPortelaSignal, tailTaper
 
   type, abstract :: tSignal
     !! Abstract base for a time-domain excitation waveform.
@@ -79,6 +80,23 @@ module mSignal
   contains
     procedure :: waveform => doubleExpWaveform
   end type tDoubleExpSignal
+
+  type, extends(tSignal) :: tPortelaSignal
+    !! Portela's piecewise surge (theory.md §8; legacy `sinais.Portela`,
+    !! `impulso.m`): exponential front i = imax·expm1(α·t/t₁)/expm1(α) for
+    !! 0 < t < t₁ (a linear ramp when α = 0, the legacy `rampa`), flat top
+    !! at imax until t₂, straight decay to zero at t₃, zero elsewhere.
+    real(dp) :: alpha
+    !! Front inclination factor α (concave for α > 0, convex for α < 0)
+    real(dp) :: tFront
+    !! End of the front, t₁ (s)
+    real(dp) :: tTopEnd
+    !! End of the flat top, t₂ (s)
+    real(dp) :: tTailEnd
+    !! End of the linear tail, t₃ (s)
+  contains
+    procedure :: waveform => portelaWaveform
+  end type tPortelaSignal
 
 contains
 
@@ -168,6 +186,23 @@ contains
     end select
   end function newDoubleExpSignal
 
+  function newPortelaSignal(imax, alpha, tFront, tTopEnd, tTailEnd) result(sig)
+    !! Portela concave-front surge (ROADMAP Phase 9 item 3) with peak
+    !! `imax` (A); requires 0 < tFront <= tTopEnd < tTailEnd.
+    real(dp), intent(in) :: imax, alpha, tFront, tTopEnd, tTailEnd
+    type(tPortelaSignal) :: sig
+
+    if (.not. (tFront > 0.0_dp .and. tFront <= tTopEnd .and. tTopEnd < tTailEnd)) then
+      call raiseError("newPortelaSignal: times must satisfy 0 < tFront <= tTopEnd < tTailEnd")
+      return
+    end if
+    sig%imax     = imax
+    sig%alpha    = alpha
+    sig%tFront   = tFront
+    sig%tTopEnd  = tTopEnd
+    sig%tTailEnd = tTailEnd
+  end function newPortelaSignal
+
   ! =====================================================================
   ! Waveform evaluation
   ! =====================================================================
@@ -226,6 +261,47 @@ contains
 
     i = merge(this%imax / (k * (this%alpha - this%beta)) * (tail - front), 0.0_dp, t > 0.0_dp)
   end function doubleExpWaveform
+
+  function portelaWaveform(this, t) result(i)
+    !! Same interval boundaries as the legacy `impulso.m`: front on
+    !! (0, t₁), top on [t₁, t₂), tail on [t₂, t₃).
+    class(tPortelaSignal), intent(in) :: this
+    real(dp), intent(in) :: t(:)
+    real(dp) :: i(size(t))
+    integer(4) :: k
+
+    do k = 1, size(t)
+      if (t(k) > 0.0_dp .and. t(k) < this%tFront) then
+        if (this%alpha == 0.0_dp) then
+          i(k) = this%imax * t(k) / this%tFront
+        else
+          i(k) = this%imax * expm1(this%alpha * t(k) / this%tFront) / expm1(this%alpha)
+        end if
+      else if (t(k) >= this%tFront .and. t(k) < this%tTopEnd) then
+        i(k) = this%imax
+      else if (t(k) >= this%tTopEnd .and. t(k) < this%tTailEnd) then
+        i(k) = this%imax * (this%tTailEnd - t(k)) / (this%tTailEnd - this%tTopEnd)
+      else
+        i(k) = 0.0_dp
+      end if
+    end do
+  end function portelaWaveform
+
+  elemental function expm1(x) result(y)
+    !! exp(x) - 1 without cancellation for small |x| (Kahan's u - 1 = x·(u - 1)/log u
+    !! correction; Fortran has no intrinsic expm1).
+    real(dp), intent(in) :: x
+    real(dp) :: y, u
+
+    u = exp(x)
+    if (u == 1.0_dp) then
+      y = x
+    else if (u - 1.0_dp == -1.0_dp) then
+      y = -1.0_dp
+    else
+      y = (u - 1.0_dp) * x / log(u)
+    end if
+  end function expm1
 
   ! =====================================================================
   ! Pre-transform windowing

@@ -5,7 +5,7 @@
 use num_complex::Complex64;
 use std::path::{Path, PathBuf};
 use tupa::ctes::PI;
-use tupa::element::{Element, Line, MeshElement};
+use tupa::element::{Catenary, Element, Line, MeshElement};
 use tupa::material::{Linear, Medium};
 use tupa::node::Node;
 use tupa::signal::new_double_exp_signal;
@@ -327,6 +327,42 @@ fn assembly_errors_name_the_missing_reference() {
     st.add_element(Element::Line(Line::new("L", "A", "B", 0.01, 2, "missing")));
     let e = st.assemble().unwrap_err();
     assert!(e.message().contains("material 'missing' not found"), "{e}");
+}
+
+/// Two towers 100 m apart at 30 m, 4-segment catenary with 5 m sag.
+fn catenary_structure(sag: f64) -> Structure {
+    let mut st = Structure::new(Medium::Linear(Linear::new("soil", 10.0, 1.0, 0.01)));
+    st.add_node(Node::new("A", [0.0, 0.0, 30.0]));
+    st.add_node(Node::new("B", [100.0, 0.0, 30.0]));
+    st.add_material(Linear::new("steel", 1.0, 100.0, 5.88e6));
+    st.add_element(Element::Catenary(Catenary {
+        line: Line::new("C", "A", "B", 0.005, 4, "steel"),
+        sag,
+    }));
+    st
+}
+
+#[test]
+fn catenary_nodes_follow_the_parabolic_profile() {
+    // theory.md §4.4: z = z_chord - 4·sag·s(1-s); midspan drops by the sag
+    let mut st = catenary_structure(5.0);
+    st.assemble().unwrap();
+    let expect = [(25.0, 30.0 - 3.75), (50.0, 25.0), (75.0, 30.0 - 3.75)];
+    for (k, (x, z)) in expect.iter().enumerate() {
+        let p = st.nodes[st.find_node_index(&format!("C_n{}", k + 1)).unwrap()].p;
+        assert!(
+            (p[0] - x).abs() < 1e-12 && p[1] == 0.0 && (p[2] - z).abs() < 1e-12,
+            "{p:?}"
+        );
+    }
+    assert_eq!(st.electrodes.len(), 4);
+    assert!(st.find_electrode_index("C_e4").is_some());
+
+    let e = catenary_structure(40.0).assemble().unwrap_err();
+    assert!(
+        e.message().contains("crosses the air-soil interface"),
+        "{e}"
+    );
 }
 
 #[test]

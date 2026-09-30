@@ -1,11 +1,14 @@
 //! Geometric elements that discretise into nodes and electrodes
-//! (`mElement`): straight `line` and composite rectangular `mesh` (ADR 0020).
+//! (`mElement`): straight `line`, composite rectangular `mesh` (ADR 0020) and
+//! sagging `catenary` (ADR 0023).
 
+pub mod catenary;
 pub mod line;
 pub mod mesh;
 
 use crate::error::Result;
 use crate::structure::Structure;
+pub use catenary::Catenary;
 pub use line::Line;
 pub use mesh::MeshElement;
 
@@ -16,6 +19,8 @@ pub enum Element {
     Line(Line),
     /// Rectangular axis-aligned grounding grid
     Mesh(MeshElement),
+    /// Parabolic sagging span between two nodes
+    Catenary(Catenary),
 }
 
 impl Element {
@@ -24,6 +29,7 @@ impl Element {
         match self {
             Element::Line(l) => &l.id,
             Element::Mesh(m) => &m.id,
+            Element::Catenary(c) => &c.line.id,
         }
     }
 
@@ -33,6 +39,7 @@ impl Element {
         match self {
             Element::Line(l) => l.assemble(structure).map(|_| ()),
             Element::Mesh(m) => m.assemble(structure),
+            Element::Catenary(c) => c.assemble(structure),
         }
     }
 
@@ -42,6 +49,7 @@ impl Element {
         match self {
             Element::Line(l) => l.report(),
             Element::Mesh(m) => m.report(),
+            Element::Catenary(c) => c.report(),
         }
     }
 }

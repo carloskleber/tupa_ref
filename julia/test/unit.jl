@@ -31,6 +31,17 @@ end
                                      GeometryCache(false))
     @test abs(closed - numeric) / closed < 1e-6
 
+    # opposite directions, unequal lengths (a 2 m air segment against the image
+    # of a 4 m one, legacy torre2): the legacy branches gave -173 instead of
+    # +0.092 (ADR 0017 finding 8)
+    a1, a2, b1, b2 = (0.0, 0.0, 50.0), (0.0, 0.0, 48.0), (0.0, 5.0, -40.0), (0.0, 5.0, -36.0)
+    closed = mutual_geometry_factor(a1, a2, b1, b2, GeometryOptions(), GeometryCache(false))
+    numeric = mutual_geometry_factor(a1, a2, b1, b2,
+                                     GeometryOptions(force_numeric = true, eps_rel = 1e-9),
+                                     GeometryCache(false))
+    @test abs(closed - numeric) / numeric < 1e-6
+    @test closed ≈ mutual_geometry_factor(a1, a2, b2, b1, GeometryOptions(), GeometryCache(false)) rtol = 1e-12
+
     # touching collinear segments: log formula
     g = mutual_geometry_factor((0.0, 0.0, -1.0), (1.0, 0.0, -1.0), (1.0, 0.0, -1.0),
                                (3.0, 0.0, -1.0), GeometryOptions(), GeometryCache(false))
@@ -116,6 +127,12 @@ end
     @test_throws TupaError heidler_signal_terms([1.0], [0.5], [1e-6], [1e-5])
     @test_throws TupaError heidler_signal_terms(Float64[], Float64[], Float64[], Float64[])
     @test_throws TupaError double_exp_signal(1.0, "nope")
+    w = waveform(portela_signal(1000.0, 2.0, 2e-6, 20e-6, 100e-6), [0.0, 1e-6, 2e-6, 10e-6, 60e-6, 100e-6])
+    @test w[1] == 0 && isapprox(w[2], 1000 * expm1(1.0) / expm1(2.0); atol = 1e-9)
+    @test w[3] == w[4] == 1000 && isapprox(w[5], 500; atol = 1e-9) && w[6] == 0
+    @test waveform(portela_signal(1.0, 0.0, 2e-6, 20e-6, 100e-6), [0.5e-6]) == [0.25]
+    @test isapprox(waveform(portela_signal(1.0, 1e-12, 2e-6, 20e-6, 100e-6), [0.5e-6])[1], 0.25; atol = 1e-12)
+    @test_throws TupaError portela_signal(1.0, 2.0, 2e-6, 1e-6, 100e-6)
     taper = tail_taper(1024)
     @test abs(taper[1] - 1) < 1e-12 && taper[end] < 1e-3 && abs(taper[819] - 0.5) < 0.05
     @test all(diff(taper) .<= 1e-15)
@@ -188,7 +205,7 @@ with_signal(extra) = replace(CASE, "\"outputs\"" => "\"signal\": { \"waveform\":
     @test find_electrode_index(c.study.structure, "L_e4") !== nothing
 
     c = redirect_stderr(devnull) do
-        load_study_string(replace(CASE, "\"type\": \"line\"" => "\"type\": \"catenary\""))
+        load_study_string(replace(CASE, "\"type\": \"line\"" => "\"type\": \"circumference\""))
     end
     @test isempty(c.study.structure.elements)
 

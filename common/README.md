@@ -24,6 +24,51 @@ when it reproduces every case within the stated tolerance.
 | `portelaMesh.json` | Native `"mesh"` element demo (ADR 0020): a single 32x32 m grounding grid, 5x5 main nodes (8 m pitch), 5 segments/bar, corner at `(0, -32, -1)` so the grid spans `x` in `[0, 32]`, `y` in `[-32, 0]`, from the classic layout in Portela's *Frequency and Transient Behavior of Grounding Systems* papers (references.md — the M2 point at x=30,y=-30 used there sits inside this mesh's footprint) | none — **structure-only** (no `sources`/`frequencies`): a full sweep over 200 electrodes' worth of mostly-non-parallel pairs is impractical before ROADMAP §7 P1 lands, so this case stays fast to parse/assemble (185 nodes, 200 electrodes — verified in `fortran/test/test_mesh_element.f90`'s topology tests, not by solving this file) rather than tempting an hours-long run |
 | `lima_fig6.json` | Lima et al. 2020 (IEEE TEMC, references.md [11]) §III-B Case #9: distribution tower grounding — 4 horizontal electrodes (6 m) radiating 90° apart from a center node, each ending in a vertical rod (3 m), plus a 5th vertical rod at the center (injection point); homogeneous soil (σ1 = 1 mS/m, εr = 10); 12.5 mm radius, arms at -0.5 m with rods to -3.5 m (both inferred — see writeup), 0.5 m segments, 1∠0° A at `Node_C`, 150 log-spaced points 100 Hz–10 MHz (`pointsPerDecade: 29.8`). For comparison against the paper's Fig. 6 MHEM curve — see [`docs/validation/lima-fig6.md`](../docs/validation/lima-fig6.md) | none yet (plausibility check only; case geometry only partially specified by the paper) |
 
+### Legacy TUPÃ cases (`linha*.json`, `torre*.json`, ADR 0023)
+
+Ten study cases from the original Matlab implementation's case library,
+converted by [`tools/legacy_import.py`](../tools/legacy_import.py) (mapping
+rules in [ADR 0023](../docs/adr/0023-legacy-case-import.md)). Node `N<k>`
+and element `E<k>` keep the legacy numbering, so a legacy output on
+element `k` is `E<k>_e1` here. Each file carries both a 1 A harmonic sweep
+at the injection node and the legacy transient: the first `sinal` waveform
+(`"portela"`) at the legacy Nyquist frequency and FFT size. The line cases
+also list 2 µs and 10 µs fronts (same `imax`/`alpha`/`tTopEnd`/`tTailEnd`);
+edit `tFront` to run those. `linha0`'s first signal is the legacy linear
+`rampa` (`alpha: 0`), and its other two are Portela surges with 2 µs and
+10 µs fronts.
+
+| File | Structure | Soil | Injection | Segments | Fortran run (CPU) |
+| --- | --- | --- | --- | --- | --- |
+| `linha0.json` | 300 m copper line at 30 m, each end grounded by a thin lead and a 20 m rod | 1 mS/m, εr 1 | 1 kA linear ramp, 2 µs front, line start | 68 | 2 s |
+| `linha1.json` | 200 m aluminium line at 30 m, steel down-lead and 20 m rod at the far end | 1 mS/m, εr 10 | 1 kA, 1 µs front, open end | 47 | 6 s |
+| `linha2.json` | Shield wire over 10 iron towers with 3 m footings, 170 m channel to midspan | 1 mS/m, εr 10 | 1 kA, 1 µs, channel top | 160 | 3 min |
+| `linha3.json` | Shield wire over 6 towers, channel to midspan, unconnected 100 m telephone wire at 5 m height, 100 m away | 1 mS/m, εr 10 | 1 kA, 1 µs, channel top | 310 | 26 min |
+| `linha4.json` | Shield wire over 6 towers, outer spans as **catenaries** (5 m sag); grounded channel 100 m off the line (indirect strike) | 1 mS/m, εr 10 | 1 kA, 1 µs, channel top | 164 | 4 min |
+| `linha5.json` | 6 steel towers with crossarms, shield wire, aluminium phase conductor 5 m below the crossarm tips (not connected), channel to midspan | 1 mS/m, εr 10 | 1 kA, 1 µs, channel top | 204 | 104 s |
+| `linha5a.json` | Same as `linha5`, with the legacy `freq_log` scan: Nyquist 2 MHz instead of 5 MHz | 1 mS/m, εr 10 | same | 204 | 2 min |
+| `torre0.json` | 2 × 2 × 100 m prism frame (`cubo`) of 0.2 mm wire, injection lead on top, 10 m lead down to a 10 m rod | 1 MS/m (near-ideal) | 1 kA, 10 µs, lead top | 87 | 31 s |
+| `torre1.json` | Guyed lattice tower (`cubo`/`piramide`): top pyramid, crossarm pyramids, mast, 4 guy wires with anchors, 10 m rod | `portela` (σ0 50 µS/m, α 0.82) | 10 kA, 2 µs, tower top | 319 | 24 min |
+| `torre2.json` | Cross frame: four 5 m arms at 40 m and at 20 m joined by 20 m verticals, 20 m mast, 10 m rod, injection lead on top | 10 kS/m (near-ideal) | 1 kA, 10 µs, lead top | 75 | 20 s |
+
+Run times are the CPU time of the whole CLI run (sweep plus transient),
+release build, single-threaded (AMD Ryzen 5 8500G). The transient solves every FFT bin
+(`fftPoints/2 + 1` frequencies) until ROADMAP Phase 9 item 1 lands. There
+is no `_expected.csv` for these cases: no legacy output files survive to
+compare against. Legacy features with no counterpart yet (field points,
+path voltages, impedance-matrix outputs, the `torre*` cases' Γ(ω) images)
+are listed in ADR 0023. Cross-check of the new code paths: Fortran, Rust
+and Julia agree to 5e-10 on `linha1` (`portela` waveform; harmonic
+rows and transient series). On `linha4` (`catenary`) they agree
+pairwise to about 1e-5 on harmonic rows and 3e-6 of peak on transient
+series. The one exception is a segment current that is zero by symmetry
+(~1e-6 A, pure round-off). The same 1e-5 spread appears with the sag set
+to 0, so it is quadrature-tolerance noise on the case's non-parallel
+segment pairs, not the catenary. The sag itself changes the line voltages
+by up to a factor of 8. (The Julia `linha4` run predates the ADR 0017
+finding 8 fix; Fortran and Rust were re-checked after it, with the same
+result.)
+
 `buried_conductor_short.json`/`buried_conductor_long.json` stay εr = 1 soil smoke tests with no
 `sources`/`frequencies` block. The other four carry `sources`/
 `frequencies`/`outputs` (ADR 0013) and are runnable with `runStudyFromFile`
@@ -59,7 +104,7 @@ which costs roughly 1-2 s per pair regardless of touching/singularity at
 today's tolerances (ROADMAP §6 "Quadrature tolerances", §7 P1) — a bigger
 grid is worth adding once the P1 mHEM single-integral kernel lands.
 
-## Schema (v1 — [ADR 0006](../docs/adr/0006-json-io.md) format, `sources`/`frequencies`/`outputs` frozen by [ADR 0013](../docs/adr/0013-input-schema-sources-frequencies-outputs.md), `signal` added by [ADR 0015](../docs/adr/0015-time-domain-signal-schema.md), voltage sources and Heidler `terms` by [ADR 0016](../docs/adr/0016-voltage-sources-by-superposition.md)/0015 amendment, `"mesh"` element by [ADR 0020](../docs/adr/0020-grid-mesh-element.md), `signal.antialiasStart` by [ADR 0021](../docs/adr/0021-transient-antialias-filter.md))
+## Schema (v1 — [ADR 0006](../docs/adr/0006-json-io.md) format, `sources`/`frequencies`/`outputs` frozen by [ADR 0013](../docs/adr/0013-input-schema-sources-frequencies-outputs.md), `signal` added by [ADR 0015](../docs/adr/0015-time-domain-signal-schema.md), voltage sources and Heidler `terms` by [ADR 0016](../docs/adr/0016-voltage-sources-by-superposition.md)/0015 amendment, `"mesh"` element by [ADR 0020](../docs/adr/0020-grid-mesh-element.md), `signal.antialiasStart` by [ADR 0021](../docs/adr/0021-transient-antialias-filter.md), `"catenary"` element and `"portela"` waveform by [ADR 0023](../docs/adr/0023-legacy-case-import.md))
 
 ```json
 {
@@ -71,7 +116,9 @@ grid is worth adding once the P1 mHEM single-integral kernel lands.
                   "radius": 0.01, "segments": 10, "material": "copper" },
                 { "type": "mesh", "id": "Grid_1", "position": [0.0, 0.0, -0.5],
                   "lengthX": 10.0, "lengthY": 10.0, "rowsX": 3, "rowsY": 3,
-                  "radius": 0.01, "segments": 2, "material": "copper" } ],
+                  "radius": 0.01, "segments": 2, "material": "copper" },
+                { "type": "catenary", "id": "Span_1", "from": "Node_3", "to": "Node_4",
+                  "sag": 5.0, "radius": 0.005, "segments": 20, "material": "steel" } ],
 
   "sources": [ { "node": "Node_1", "current": { "re": 1.0, "im": 0.0 } } ],
   "frequencies": { "min": 100.0, "max": 1.0e6, "pointsPerDecade": 3 },
@@ -99,8 +146,13 @@ Semantics:
   (Alipio & Visacro [14], mean parameter set) takes `permeability`/`sigma0`
   only — e.g. `{ "type": "alipio-visacro", "permeability": 1.0, "sigma0": 0.01 }`.
   See `silva2025_rho100.json` for a worked example.
-- `elements[].type`: `"line"` or `"mesh"` (ADR 0020); unknown types are
-  skipped with a warning.
+- `elements[].type`: `"line"`, `"mesh"` (ADR 0020) or `"catenary"` (ADR
+  0023); unknown types are skipped with a warning.
+- `"catenary"` (ADR 0023) is a `"line"` that sags: same fields plus `sag`,
+  the drop at midspan below the chord (m, negative bows upward). The chain
+  nodes lie on the parabola of theory.md §4.4, evenly spaced along the
+  chord; generated IDs are the same as `line`'s. A profile that crosses
+  `z = 0` is rejected. See `linha4.json`.
 - `segments` is the discretisation count of the element (per bar, for
   `"mesh"`); segment length must respect the λ/10 and thin-wire bounds
   (theory.md §4.1).
@@ -167,8 +219,11 @@ Semantics:
 - **`signal`** ([ADR 0015](../docs/adr/0015-time-domain-signal-schema.md))
   is optional and independent of `sources`/`frequencies` — a case runs a
   transient (time-domain) solve instead of, or alongside, a harmonic sweep.
-  `waveform` is `"doubleExp"` or `"heidler"` (`fortran/src/Signal.f90`);
-  `front`/`jones` apply only to `"doubleExp"`. For `"heidler"`, an optional
+  `waveform` is `"doubleExp"`, `"heidler"` or `"portela"` (`fortran/src/Signal.f90`);
+  `front`/`jones` apply only to `"doubleExp"`. `"portela"` (ADR 0023,
+  theory.md §8) is Portela's piecewise surge: `imax` (A), `alpha` (front
+  inclination; `0` is a linear ramp, `< 0` a convex front), and the end of
+  the front, flat top and tail, `tFront` ≤ `tTopEnd` < `tTailEnd` (s). For `"heidler"`, an optional
   `terms` array (ADR 0015 amendment, 2026-07-17) gives the standard
   parametrised Heidler function (Heidler 1985 [37] / IEC 62305-1 [39]) —
   one `{"i0", "n", "tau1", "tau2"}` object per term; `imax` is then

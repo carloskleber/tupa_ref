@@ -64,6 +64,7 @@ Measured on 2026-09-30 (Linux, `rustc 1.94`). Tolerance and comparison rule:
 | `portela1997_transient`, `silva2025_*_transient` | none | runs; internal consistency only |
 | `silva2025_*`, `grcev_*`, `lima_*`, `poljak_fig4`, `rod_air`, … | none | load, validate, assemble; sweeps run |
 | `portelaMesh` | none (structure-only) | 185 nodes / 200 electrodes, as pinned in `test_mesh_element.f90` |
+| `linha*`, `torre*` (ADR 0023: `catenary` element, `portela` waveform) | none | load, validate, assemble; vs fresh Fortran runs: `linha1` 3e-10, `linha4` 1e-5 (quadrature-tolerance level, same with zero sag) — see `common/README.md` |
 
 **Cross-code check on Grcev ℓ = 10 m** (`grcev_fig12_l10_rho{30,300,3000}`,
 81 frequencies ≤ 1 MHz, |Z|): Rust vs the contributed Julia port differs

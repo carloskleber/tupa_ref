@@ -209,6 +209,27 @@ program test_signal
                  w(nTap) < w(nint(0.8d0 * nTap)), "taper should keep decreasing into the tail")
   end block
 
+  call test_init("tPortelaSignal: front, flat top and linear tail (theory.md §8)")
+  block
+    type(tPortelaSignal) :: portela, ramp, nearRamp
+    real(dp) :: ip(6)
+
+    portela = newPortelaSignal(1000.0_dp, 2.0_dp, 2.0d-6, 20.0d-6, 100.0d-6)
+    ip = portela%waveform([0.0_dp, 1.0d-6, 2.0d-6, 10.0d-6, 60.0d-6, 100.0d-6])
+    call test_ok("zero at t = 0 and from t3 on", ip(1) == 0.0_dp .and. ip(6) == 0.0_dp, "")
+    ! Mid-front value imax·(e - 1)/(e² - 1) = imax/(e + 1)
+    call test_ok("front follows (exp(alpha t/t1) - 1)/(exp(alpha) - 1)", &
+                 abs(ip(2) - 1000.0_dp / (exp(1.0_dp) + 1.0_dp)) < 1.0d-9, "")
+    call test_ok("flat top at imax on [t1, t2)", ip(3) == 1000.0_dp .and. ip(4) == 1000.0_dp, "")
+    call test_ok("linear tail halfway at the t2-t3 midpoint", abs(ip(5) - 500.0_dp) < 1.0d-9, "")
+
+    ramp = newPortelaSignal(1.0_dp, 0.0_dp, 2.0d-6, 20.0d-6, 100.0d-6)
+    nearRamp = newPortelaSignal(1.0_dp, 1.0d-12, 2.0d-6, 20.0d-6, 100.0d-6)
+    ip(1:2) = [ramp%waveform([0.5d-6]), nearRamp%waveform([0.5d-6])]
+    call test_ok("alpha = 0 is the linear ramp (legacy rampa)", ip(1) == 0.25_dp, "")
+    call test_ok("alpha -> 0 converges to the ramp (expm1 form)", abs(ip(2) - 0.25_dp) < 1.0d-12, "")
+  end block
+
   call test_summary()
 
 end program test_signal

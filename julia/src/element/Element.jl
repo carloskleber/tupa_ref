@@ -1,5 +1,6 @@
 # Geometric elements that discretise into nodes and electrodes (`mElement`):
-# straight `Line` and composite rectangular `MeshElement` (ADR 0020).
+# straight `Line`, composite rectangular `MeshElement` (ADR 0020) and sagging
+# `Catenary` (ADR 0023).
 #
 # Every element implements `assemble!(element, structure)` (resolve
 # references, append nodes and electrodes) and `report(element)`.

@@ -6,11 +6,13 @@
 //! warning. (A *present* value of the wrong JSON type is an error here,
 //! where the Fortran reader silently yields 0.)
 
-use crate::element::{Element, Line, MeshElement};
+use crate::element::{Catenary, Element, Line, MeshElement};
 use crate::error::{Result, TupaError};
 use crate::material::{AlipioVisacroSoil, Linear, Medium, PortelaSoil};
 use crate::node::Node;
-use crate::signal::{Signal, new_double_exp_signal, new_heidler_signal, new_heidler_signal_terms};
+use crate::signal::{
+    Signal, new_double_exp_signal, new_heidler_signal, new_heidler_signal_terms, new_portela_signal,
+};
 use crate::structure::Structure;
 use crate::study::{Source, Study, log_frequency_axis};
 use crate::transient::TransientSpec;
@@ -65,6 +67,7 @@ struct ElementSpec {
     rows_x: f64,
     #[serde(rename = "rowsY")]
     rows_y: f64,
+    sag: f64,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -116,6 +119,13 @@ struct SignalSpec {
     front: String,
     jones: bool,
     terms: Option<Vec<HeidlerTermSpec>>,
+    alpha: f64,
+    #[serde(rename = "tFront")]
+    t_front: f64,
+    #[serde(rename = "tTopEnd")]
+    t_top_end: f64,
+    #[serde(rename = "tTailEnd")]
+    t_tail_end: f64,
     #[serde(rename = "sourceNode")]
     source_node: String,
     #[serde(rename = "observeNodes")]
@@ -247,6 +257,17 @@ fn build(spec: CaseSpec) -> Result<LoadedCase> {
                 count(e.segments),
                 e.material.clone(),
             ))),
+            "catenary" => structure.add_element(Element::Catenary(Catenary {
+                line: Line::new(
+                    e.id.clone(),
+                    e.from.clone(),
+                    e.to.clone(),
+                    e.radius,
+                    count(e.segments),
+                    e.material.clone(),
+                ),
+                sag: e.sag,
+            })),
             "mesh" => structure.add_element(Element::Mesh(MeshElement {
                 id: e.id.clone(),
                 position: pos3(&e.position),
@@ -342,9 +363,10 @@ fn build_signal(s: SignalSpec) -> Result<TransientSpec> {
             None => new_heidler_signal(imax),
         },
         "doubleExp" => new_double_exp_signal(imax, &s.front, s.jones)?,
+        "portela" => new_portela_signal(imax, s.alpha, s.t_front, s.t_top_end, s.t_tail_end)?,
         other => {
             return Err(TupaError::new(format!(
-                "mTupa: unknown signal.waveform '{other}' (expected heidler or doubleExp)"
+                "mTupa: unknown signal.waveform '{other}' (expected heidler, doubleExp or portela)"
             )));
         }
     };
@@ -507,7 +529,7 @@ mod tests {
 
     #[test]
     fn unknown_element_type_is_skipped() {
-        let text = CASE.replace("\"type\": \"line\"", "\"type\": \"catenary\"");
+        let text = CASE.replace("\"type\": \"line\"", "\"type\": \"circumference\"");
         let c = load_study_str(&text).unwrap();
         assert!(c.study.structure.elements.is_empty());
     }

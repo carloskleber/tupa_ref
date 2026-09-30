@@ -19,7 +19,20 @@ end
 Add `n-1` internal nodes and `n` electrodes to `s`; returns the number of
 internal nodes created (`assembleLine`).
 """
-function assemble!(l::Line, s::Structure)
+assemble!(l::Line, s::Structure) = assemble_sagging!(l, s, 0.0)
+
+"""
+Chain node `k` of `n` between `pa` and `pb`: `k` equal chord steps, lowered by
+`4·sag·s·(1 − s)` at `s = k/n` (theory.md §4.4; `sag = 0` is the straight line).
+"""
+function profile_point(pa, pb, k::Integer, n::Integer, sag::Real)
+    s = k / n
+    return (pa[1] + k * ((pb[1] - pa[1]) / n), pa[2] + k * ((pb[2] - pa[2]) / n),
+            pa[3] + k * ((pb[3] - pa[3]) / n) - 4.0 * sag * s * (1.0 - s))
+end
+
+"`assemble!` with the chain nodes on the `profile_point` parabola; shared with `Catenary`."
+function assemble_sagging!(l::Line, s::Structure, sag::Real)
     idx_start = find_node_index(s, l.id_node_start)
     idx_start === nothing && raise_error("tLine '$(l.id)': start node '$(l.id_node_start)' not found")
     idx_end = find_node_index(s, l.id_node_end)
@@ -31,13 +44,11 @@ function assemble!(l::Line, s::Structure)
     n = l.n_electrodes
     p_start = s.nodes[idx_start].p
     p_end = s.nodes[idx_end].p
-    inc = ((p_end[1] - p_start[1]) / n, (p_end[2] - p_start[2]) / n, (p_end[3] - p_start[3]) / n)
 
     node_idx = Vector{Int}(undef, n + 1)
     node_idx[1] = idx_start
     for k in 1:n-1
-        p = (p_start[1] + k * inc[1], p_start[2] + k * inc[2], p_start[3] + k * inc[3])
-        node_idx[k+1] = add_node!(s, Node("$(l.id)_n$k", p))
+        node_idx[k+1] = add_node!(s, Node("$(l.id)_n$k", profile_point(p_start, p_end, k, n, sag)))
     end
     node_idx[n+1] = idx_end
 

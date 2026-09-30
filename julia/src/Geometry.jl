@@ -55,33 +55,27 @@ result: the caller falls back to quadrature.
 """
 function parallel_geometry_factor(a1::Vec3, a2::Vec3, la::Float64, va::Vec3,
                                   b1::Vec3, b2::Vec3, lb::Float64, vb::Vec3)
-    alignment = vdot(va, vb)
-    da1b1 = vnorm(vsub(a1, b1))
-    da1b2 = vnorm(vsub(a1, b2))
-    da2b1 = vnorm(vsub(a2, b1))
-    da2b2 = vnorm(vsub(a2, b2))
+    # g = ∫∫ dla dlb / R does not depend on the segments' orientation
+    # (theory.md §4.2; the sign lives in cos θ), so an opposite-direction b is
+    # traversed backwards and only the same-direction branches are needed. The
+    # legacy `posparal` opposite-direction branches were wrong whenever
+    # la != lb (ADR 0017 finding 8).
+    c1, c2, vc = vdot(va, vb) > 0.0 ? (b1, b2, vb) : (b2, b1, (-vb[1], -vb[2], -vb[3]))
+    da1b1 = vnorm(vsub(a1, c1))
+    da1b2 = vnorm(vsub(a1, c2))
+    da2b1 = vnorm(vsub(a2, c1))
+    da2b2 = vnorm(vsub(a2, c2))
     x2 = la
 
-    if alignment > 0.0
-        if da1b2 > da2b1
-            xi1 = vdot(vsub(b1, a1), va)
-            xi2 = xi1 + lb
-            d11, d12, d21, d22 = da1b1, da1b2, da2b1, da2b2
-        else
-            x2 = lb
-            xi1 = vdot(vsub(a1, b1), vb)
-            xi2 = xi1 + la
-            d11, d12, d21, d22 = da1b1, da2b1, da1b2, da2b2
-        end
-    elseif da2b2 > da1b1
-        xi1 = vdot(vsub(b2, a1), vb)
+    if da1b2 > da2b1
+        xi1 = vdot(vsub(c1, a1), va)
         xi2 = xi1 + lb
-        d11, d12, d21, d22 = da2b1, da2b2, da1b1, da1b2
+        d11, d12, d21, d22 = da1b1, da1b2, da2b1, da2b2
     else
         x2 = lb
-        xi1 = vdot(vsub(b2, a1), va)
+        xi1 = vdot(vsub(a1, c1), vc)
         xi2 = xi1 + la
-        d11, d12, d21, d22 = da1b2, da1b1, da2b2, da2b1
+        d11, d12, d21, d22 = da1b1, da2b1, da1b2, da2b2
     end
 
     l11 = xi1

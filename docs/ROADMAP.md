@@ -33,9 +33,9 @@ implementation**; usability as an engineering tool is secondary.
 | Sources | Current injections at named nodes (ADR 0010); ideal voltage sources via unit-injection superposition, mixable with current sources (ADR 0016) |
 | Materials | `tLinear`, `tPortelaSoil` (ADR 0007), `tVisacroAlipioSoil` (mean set, theory.md §7); air hardcoded to vacuum (ADR 0019) |
 | Sweep & results | `runSweep` + `tResult` storage, `inputImpedance`/`maxVoltageMagnitude`; CSV/JSON writers (ADR 0012) with `outputs` filtering |
-| Time domain | `mSignal` (Heidler — legacy 6-term [38] and standard parametrised form [37, 39]; double-exp ± Jones), tail taper, in-repo FFT (ADR 0014), transfer-function transient driver (`mTransient`) |
-| JSON I/O | json-fortran parser (ADR 0006, superseded-in-place 2026-08-01); schema v1: structure + `sources`/`frequencies`/`outputs` (ADR 0013) + `signal` (ADR 0015) + voltage sources/Heidler terms (ADR 0016/0015 amendment) + `mesh` composite element (ADR 0020) + optional `signal.antialiasStart` (ADR 0021); pre-run reference validation (`validateStudyReferences`) and CLI verbosity levels |
-| Cases & tests | `common/` regression fixtures (golden), 15 test programs, all green under `fpm test --profile release` |
+| Time domain | `mSignal` (Heidler — legacy 6-term [38] and standard parametrised form [37, 39]; double-exp ± Jones; Portela concave front), tail taper, in-repo FFT (ADR 0014), transfer-function transient driver (`mTransient`) |
+| JSON I/O | json-fortran parser (ADR 0006, superseded-in-place 2026-08-01); schema v1: structure + `sources`/`frequencies`/`outputs` (ADR 0013) + `signal` (ADR 0015) + voltage sources/Heidler terms (ADR 0016/0015 amendment) + `mesh` composite element (ADR 0020) + optional `signal.antialiasStart` (ADR 0021) + `catenary` element and `portela` waveform (ADR 0023); pre-run reference validation (`validateStudyReferences`) and CLI verbosity levels |
+| Cases & tests | `common/` regression fixtures (golden) plus ten cases imported from the legacy Matlab case library (`linha*.json`, `torre*.json`, ADR 0023), 15 test programs, all green under `fpm test --profile release` |
 | Validation | [`docs/validation/`](validation/README.md): digitized published-curve comparisons — Grcev et al. 2018 Fig. 12 (6 cases), Lima et al. 2020 Figs. 6/7, Poljak & Doric 2006 Fig. 4, Silva et al. 2025 Figs. 3/4 (harmonic + transient) — accepted as the release-bar oracle (§4) |
 | GUI | Python/PySide6 view-only module (`gui/`, ADR 0011): study tree, 3-D view, results/transient plots |
 | Other implementations | **Julia port (`julia/`, contributed 2026-09-29, realigned 2026-09-30, Phase 8J)** — module-by-module mirror of the Fortran code, golden fixtures met at 1e-6 and every runnable `common/` case within 1e-6 of Rust/Fortran (bar two round-off rows Rust shares); **Rust port (`rust/`, 2026-09-30, [ADR 0022](adr/0022-rust-implementation.md))** — harmonic conformance met on the three golden fixtures at 1e-6, transient path implemented, Phase 8 item 1 (Fortran fixture widening) still open |
@@ -46,6 +46,9 @@ notable items are recorded where they now belong:
 
 - self-geometry-factor bug in *both* legacies (was item 8) —
   [ADR 0017](adr/0017-legacy-reinspection-findings.md) finding 2;
+- parallel-segment closed form wrong for opposite-direction pairs of
+  unequal length, inherited from the Matlab by all three ports (found
+  2026-09-30 while importing the legacy tower cases) — ADR 0017 finding 8;
 - `tStructure%air` never populated → NaN for any electrode in air (was
   item 9) — [ADR 0019](adr/0019-air-medium-hardcoded-vacuum.md);
 - C-interop leftovers, sign conventions, stub `assemble`, missing
@@ -185,14 +188,14 @@ Where the former Phase 7 items went:
 | --- | --- |
 | Transient driver fed by the harmonic scan | Phase 9 item 1 |
 | Windowing (Hanning first) | Phase 9 item 2 |
-| Portela concave-front signal | Phase 9 item 3 |
+| Portela concave-front signal | Phase 9 item 3 — done 2026-09-30 |
 | Multiple injections (transient) | Phase 9 item 4 |
 | Numerical Laplace Transform (§7 P4) | Phase 9 item 5 |
 | GPR, touch and step voltage (§7 P7) | Phase 11 items 1–2 |
 | `tCircumference` (grounding rings) | Phase 12 item 1 |
 | Tubular conductor | Phase 12 item 2 |
 | Series RLC element | Phase 12 item 3 |
-| `tCatenary` | Phase 13 item 1 |
+| `tCatenary` | Phase 13 item 1 — done 2026-09-30 |
 | Generic internal impedance models (OPGW) | Phase 13 item 2 |
 | Insulated conductor | Phase 13 item 3 |
 | Multipolar cables | Phase 13 item 4 |
@@ -480,7 +483,10 @@ impulse/step, sine) are ported alongside when a case needs them.
    window on the sampled excitation record. Default stays "none"; the erfc
    tail taper (`tailTaper`) keeps its separate record-truncation role and
    default, and the ADR 0021 anti-alias filter stays a separate option.
-3. **Portela concave-front signal** — **S**. Faithful port of the legacy
+3. **Portela concave-front signal** — **S** — **done 2026-09-30**
+   (`signal.waveform: "portela"`, fields `imax`/`alpha`/`tFront`/`tTopEnd`/
+   `tTailEnd`, in Fortran, Rust and Julia;
+   [ADR 0023](adr/0023-legacy-case-import.md)). Faithful port of the legacy
    `sinais.Portela`/`impulso.m` waveform: concave exponential front
    i(t) = I·(e^(αt/t₁) − 1)/(e^α − 1) up to the front time t₁, flat top
    at I until t₂, linear decay to zero at t₃ (formula in theory.md §8);
@@ -589,11 +595,14 @@ geometries (rods, counterpoises, rings, lumped branches).
 Application-tier features (ADR 0018). `tCatenary` is cheap and may be
 pulled forward if a tower-footing case needs shield wires.
 
-1. **`tCatenary`** — **S**. *Matlab-faithful port, discretised into
+1. **`tCatenary`** — **S** — **done 2026-09-30** (pulled forward for the
+   legacy `linha4` case; [ADR 0023](adr/0023-legacy-case-import.md)). *Matlab-faithful port, discretised into
    straight segments like `tLine`.* The legacy "catenary" (`Catenaria.m`)
    is a **parabolic** sag profile (z ∝ x², sag parameter at midspan,
    uniform plan spacing), plus a 3-node variant — Matlab-faithful and
    parabolic approximation coincide. Pure element-assembly work.
+   Implemented as JSON `"catenary"` (theory.md §4.4) in Fortran, Rust and
+   Julia; the 3-node variant (`catenaria3`) waits for a case that needs it.
 2. **Generic internal impedance models (e.g. OPGW)** — **M**. JSON
    database, alternatively referenced from the material property of
    elements. *Decided (2026-07-17 Q&A): entries carry

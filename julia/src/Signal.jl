@@ -1,6 +1,7 @@
 # Time-domain excitation waveforms (`mSignal`, ADR 0015): Heidler (legacy
-# fixed 6-term set [38] and the standard parametrised form [37, 39]) and
-# double exponential (± Jones front), plus the pre-transform tail taper.
+# fixed 6-term set [38] and the standard parametrised form [37, 39]), double
+# exponential (± Jones front) and Portela's concave-front surge [1, 67], plus
+# the pre-transform tail taper.
 
 "A source waveform."
 abstract type Signal end
@@ -28,6 +29,25 @@ struct DoubleExpSignal <: Signal
     beta::Float64
     t_front::Float64
     jones::Bool
+end
+
+"""
+Portela's piecewise surge (theory.md §8): front `imax·expm1(α t/t₁)/expm1(α)` on
+(0, t₁) (linear ramp for α = 0), flat top to t₂, linear decay to zero at t₃.
+"""
+struct PortelaSignal <: Signal
+    imax::Float64
+    alpha::Float64
+    t_front::Float64
+    t_top_end::Float64
+    t_tail_end::Float64
+end
+
+"Portela concave-front surge (`newPortelaSignal`); requires `0 < t_front <= t_top_end < t_tail_end`."
+function portela_signal(imax::Real, alpha::Real, t_front::Real, t_top_end::Real, t_tail_end::Real)
+    0 < t_front <= t_top_end < t_tail_end ||
+        raise_error("newPortelaSignal: times must satisfy 0 < tFront <= tTopEnd < tTailEnd")
+    return PortelaSignal(imax, alpha, t_front, t_top_end, t_tail_end)
 end
 
 "Legacy 6-term Heidler set of De Conti & Visacro [38] (MCS_FST#1), rescaled to `imax` (`newHeidlerSignal`)."
@@ -86,6 +106,21 @@ function waveform(s::DoubleExpSignal, t::AbstractVector{<:Real})
     k = (exp(-s.beta * s.t_front) - front(s.t_front)) / (s.alpha - s.beta)
     return [tv > 0.0 ? s.imax / (k * (s.alpha - s.beta)) * (exp(-s.beta * tv) - front(tv)) : 0.0
             for tv in t]
+end
+
+function waveform(s::PortelaSignal, t::AbstractVector{<:Real})
+    return map(t) do tv
+        if 0.0 < tv < s.t_front
+            s.alpha == 0.0 ? s.imax * tv / s.t_front :
+                             s.imax * expm1(s.alpha * tv / s.t_front) / expm1(s.alpha)
+        elseif s.t_front <= tv < s.t_top_end
+            s.imax
+        elseif s.t_top_end <= tv < s.t_tail_end
+            s.imax * (s.t_tail_end - tv) / (s.t_tail_end - s.t_top_end)
+        else
+            0.0
+        end
+    end
 end
 
 "Smooth pre-transform tail taper `0.5 erfc((k − 0.8 n)/(n/20))`, `k = 1..n`."

@@ -267,6 +267,11 @@ candidate cause of the mostly negative mid-band knee error in
   works the same parallel and orthogonal configurations (and the buried
   conductor with its image) from first principles — the course-text ancestry
   of these formulas. Used both as fast paths and as quadrature test oracles.
+  The geometry factor does not depend on either segment's orientation, so
+  an implementation reverses one segment of an opposite-direction pair and
+  needs only the same-direction form. The legacy opposite-direction
+  branches are wrong for unequal lengths
+  ([ADR 0017](adr/0017-legacy-reinspection-findings.md) finding 8).
 
   ![2-D quadrature convergence to the closed-form parallel-segment factor, swept over requested tolerance and pair separation](figures/quadrature-tolerance-sweep.svg)
 
@@ -379,6 +384,31 @@ length, $y_c = 2\pi(\sigma_c + j\omega\varepsilon_c)/\ln(r_c/r_0)$ for a
 coating of outer radius $r_c$, in **series** with the bare-conductor soil
 leakage — reducing to the bare case as $r_c \to r_0$. A reference
 implementation should do this rather than port the placeholder.
+
+### 4.4 Curved conductors: catenary spans
+
+Curved conductors enter the model as chains of straight segments, so every
+formula above applies to them unchanged. An overhead span hanging between
+nodes $\mathbf{P}_1$ and $\mathbf{P}_2$ takes the shape of a catenary. For a
+midspan sag $d$ on a span $L$, a parabola through the same end points and
+lowest point differs from it by terms of relative order $(d/L)^2$, i.e.
+millimetres on a typical 300 m span with a few metres of sag. The legacy
+Matlab (`Catenaria.m`) therefore uses the parabola, and so does the
+`catenary` element ([ADR 0023](adr/0023-legacy-case-import.md)). With
+$n$ segments, chain node $k$ sits at
+
+$$\mathbf{p}_k = \mathbf{P}_1 + s_k\,(\mathbf{P}_2 - \mathbf{P}_1) - 4\,d\,s_k(1 - s_k)\,\hat{\mathbf{z}}, \qquad s_k = k/n,$$
+
+which spaces the nodes evenly along the chord's horizontal projection and
+drops the midpoint by exactly $d$ ($d < 0$ bows upward). The legacy code
+takes the height of every internal node from $\mathbf{P}_1$ alone, which
+is the same curve only when both ends are at the same height (the only
+case the legacy supports). The chord form above agrees with it there and
+stays continuous when the heights differ. A span must stay in its end
+nodes' half-space (§5): implementations reject a profile that crosses
+$z = 0$. The §4.1 segment-length bounds apply along the arc. Moura's
+thesis [58] models non-uniform overhead spans this way and supports
+carrying the mean-distance approximation over to them.
 
 ---
 
@@ -697,7 +727,9 @@ implemented (the legacy Jones variant [65] replaces the front term
 $e^{-\alpha t}$ by $e^{-(\alpha t)^2}$, giving zero initial $di/dt$); the Matlab reference's remaining waveforms (single exponential,
 impulse/step,
 Portela's concave model, sine) are ported on demand, not spawned in advance.
-First in that queue (ROADMAP Phase 9 item 3) is Portela's concave-front surge
+The first of them, now implemented (ROADMAP Phase 9 item 3, JSON
+`signal.waveform: "portela"`, [ADR 0023](adr/0023-legacy-case-import.md)),
+is Portela's concave-front surge
 (legacy `impulso.m`), a piecewise model used in Portela's grounding
 studies [1], whose front law comes from his 1982 course text [67]:
 
@@ -709,7 +741,8 @@ exponential front (inclination factor $\alpha$), flat top, straight tail.
 The front is concave for $\alpha > 0$, as in first negative strokes, and
 convex for $\alpha < 0$, as in subsequent strokes [67];
 $i = 0$ for $t \le 0$ and $t \ge t_3$, with $0 < t_1 \le t_2 < t_3$. As
-$\alpha \to 0$ the front degenerates to the linear ramp $t/t_1$ and the
+$\alpha \to 0$ the front degenerates to the linear ramp $t/t_1$ (the legacy
+`rampa` waveform, imported as $\alpha = 0$) and the
 quotient above is $0/0$; implementations should evaluate it as
 $\mathrm{expm1}(\alpha t/t_1)/\mathrm{expm1}(\alpha)$, which is also the
 accurate form for small $\alpha$. The slope jumps at $t_1$, $t_2$ and $t_3$

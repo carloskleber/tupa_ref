@@ -1,0 +1,57 @@
+{
+  "title": "Legacy TUPÃ case torre0: detailed tower: cube with injection lead and ground rod",
+  "soil": {"conductivity": 1000000.0, "permittivity": 1.0, "permeability": 1.0},
+  "nodes": [
+    {"id": "N1", "position": [1.0, 1.0, 120.0]},
+    {"id": "N2", "position": [1.0, 1.0, 110.0]},
+    {"id": "N3", "position": [1.0, -1.0, 110.0]},
+    {"id": "N4", "position": [-1.0, -1.0, 110.0]},
+    {"id": "N5", "position": [-1.0, 1.0, 110.0]},
+    {"id": "N6", "position": [1.0, 1.0, 10.0]},
+    {"id": "N7", "position": [1.0, -1.0, 10.0]},
+    {"id": "N8", "position": [-1.0, -1.0, 10.0]},
+    {"id": "N9", "position": [-1.0, 1.0, 10.0]},
+    {"id": "N10", "position": [-1.0, -1.0, 0.0]},
+    {"id": "N11", "position": [-1.0, -1.0, -10.0]}
+  ],
+  "materials": [
+    {"id": "copper", "epsilonr": 1.0, "mur": 1.0, "sigma": 58000000.0}
+  ],
+  "elements": [
+    {"type": "line", "id": "E1", "from": "N1", "to": "N2", "radius": 0.0002, "segments": 5, "material": "copper"},
+    {"type": "line", "id": "E2", "from": "N2", "to": "N3", "radius": 0.0002, "segments": 4, "material": "copper"},
+    {"type": "line", "id": "E3", "from": "N2", "to": "N5", "radius": 0.0002, "segments": 4, "material": "copper"},
+    {"type": "line", "id": "E4", "from": "N3", "to": "N4", "radius": 0.0002, "segments": 4, "material": "copper"},
+    {"type": "line", "id": "E5", "from": "N5", "to": "N4", "radius": 0.0002, "segments": 4, "material": "copper"},
+    {"type": "line", "id": "E6", "from": "N6", "to": "N7", "radius": 0.0002, "segments": 4, "material": "copper"},
+    {"type": "line", "id": "E7", "from": "N6", "to": "N9", "radius": 0.0002, "segments": 4, "material": "copper"},
+    {"type": "line", "id": "E8", "from": "N7", "to": "N8", "radius": 0.0002, "segments": 4, "material": "copper"},
+    {"type": "line", "id": "E9", "from": "N9", "to": "N8", "radius": 0.0002, "segments": 4, "material": "copper"},
+    {"type": "line", "id": "E10", "from": "N2", "to": "N6", "radius": 0.0002, "segments": 10, "material": "copper"},
+    {"type": "line", "id": "E11", "from": "N3", "to": "N7", "radius": 0.0002, "segments": 10, "material": "copper"},
+    {"type": "line", "id": "E12", "from": "N4", "to": "N8", "radius": 0.0002, "segments": 10, "material": "copper"},
+    {"type": "line", "id": "E13", "from": "N5", "to": "N9", "radius": 0.0002, "segments": 10, "material": "copper"},
+    {"type": "line", "id": "E14", "from": "N8", "to": "N10", "radius": 0.0002, "segments": 5, "material": "copper"},
+    {"type": "line", "id": "E15", "from": "N10", "to": "N11", "radius": 0.05, "segments": 5, "material": "copper"}
+  ],
+  "sources": [{"node": "N1", "current": {"re": 1.0, "im": 0.0}}],
+  "frequencies": {"min": 500.0, "max": 5000000.0, "pointsPerDecade": 20},
+  "outputs": {
+    "nodes": ["N2", "N3", "N4", "N5"],
+    "electrodes": ["E10_e1", "E11_e1", "E12_e1", "E13_e1", "E2_e1", "E3_e1", "E4_e1", "E5_e1", "E1_e1", "E6_e1", "E7_e1", "E8_e1", "E9_e1"],
+    "quantities": ["voltage", "i1", "i2", "inputImpedance"]
+  },
+  "signal": {
+    "waveform": "portela",
+    "imax": 1000.0,
+    "alpha": 2.0,
+    "tFront": 1e-05,
+    "tTopEnd": 0.0001,
+    "tTailEnd": 0.0002,
+    "sourceNode": "N1",
+    "observeNodes": ["N2", "N3", "N4", "N5"],
+    "observeElectrodes": ["E10_e1", "E11_e1", "E12_e1", "E13_e1", "E2_e1", "E3_e1", "E4_e1", "E5_e1", "E1_e1", "E6_e1", "E7_e1", "E8_e1", "E9_e1"],
+    "nyquistHz": 5000000.0,
+    "fftPoints": 16384
+  }
+}

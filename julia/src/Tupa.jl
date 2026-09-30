@@ -32,6 +32,7 @@ include("element/Element.jl")
 include("Structure.jl")
 include("element/Line.jl")
 include("element/Mesh.jl")
+include("element/Catenary.jl")
 include("GeometryCache.jl")
 include("Impedance.jl")
 include("Geometry.jl")
@@ -48,7 +49,7 @@ include("JsonParser.jl")
 export TupaError, set_verbosity, VERB_QUIET, VERB_NORMAL, VERB_VERBOSE
 # object model
 export Linear, PortelaSoil, AlipioVisacroSoil, admittance, propagation_constant,
-       Node, Electrode, Line, MeshElement, Structure, add_node!, add_material!,
+       Node, Electrode, Line, MeshElement, Catenary, Structure, add_node!, add_material!,
        add_element!, assemble!, find_node_index, find_electrode_index
 # numerics
 export GeometryOptions, build_geometry_matrices, dqag_k15, internal_impedance
@@ -57,7 +58,7 @@ export Study, Source, prepare!, solve_frequency!, run_sweep!, input_impedance,
        max_voltage_magnitude, log_frequency_axis, dump_structure
 export results_csv, results_json, transient_csv, transient_json, fmt_real
 # time domain
-export heidler_signal, heidler_signal_terms, double_exp_signal, waveform,
+export heidler_signal, heidler_signal_terms, double_exp_signal, portela_signal, waveform,
        tail_taper, fft_forward!, fft_inverse!, sample_time_axis,
        one_sided_frequency_axis, tukey_antialias_filter, TransientSpec,
        transient_response, write_transient_plot

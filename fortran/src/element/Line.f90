@@ -15,7 +15,7 @@ module mElementLine
   implicit none
   private
 
-  public :: newElementLine
+  public :: newElementLine, assembleLine
 
   type, extends(tElement), public :: tLine
     !! Straight conductor spanning two nodes with evenly-spaced internal segments.
@@ -32,6 +32,9 @@ module mElementLine
   contains
     procedure :: assemble => assembleLine
     procedure :: report   => reportLine
+    procedure :: nodePosition => nodePositionLine
+    !! Position of chain node `k` (0 = start, nElectrodes = end); overridden
+    !! by elements with a non-straight profile (`tCatenary`)
   end type tLine
 
 contains
@@ -81,7 +84,7 @@ contains
     class(*), intent(inout) :: structure
     integer(4) :: idxStart, idxEnd
     class(tMaterial), pointer :: mat
-    real(8) :: pStart(3), pEnd(3), inc(3)
+    real(8) :: pStart(3), pEnd(3)
     integer(4), allocatable :: nodeIdx(:)
     type(tElectrode) :: electrode
     type(tNode) :: internalNode
@@ -114,7 +117,6 @@ contains
 
       pStart = structure%nodes(idxStart)%p
       pEnd   = structure%nodes(idxEnd)%p
-      inc    = (pEnd - pStart) / real(this%nElectrodes, kind=8)
 
       ! Build the chain of node indices spanning the line: boundary, internal..., boundary
       allocate(nodeIdx(this%nElectrodes + 1))
@@ -125,7 +127,7 @@ contains
         allocate(this%nodes(this%nElectrodes - 1))
         do k = 1, this%nElectrodes - 1
           write(buf, '(A,"_n",I0)') trim(this%id), k
-          internalNode = newNode(trim(buf), pStart + real(k, kind=8) * inc)
+          internalNode = newNode(trim(buf), this%nodePosition(pStart, pEnd, k))
           call structure%addNode(internalNode)
           nodeIdx(k + 1) = structure%getNodeCount()
           this%nodes(k) = internalNode
@@ -143,6 +145,20 @@ contains
       end do
     end select
   end subroutine assembleLine
+
+  function nodePositionLine(this, pStart, pEnd, k) result(p)
+    !! Straight profile: `k` equal steps of (pEnd - pStart)/nElectrodes from `pStart`.
+    class(tLine), intent(in) :: this
+    real(8), intent(in) :: pStart(3)
+    !! Start boundary-node position (m)
+    real(8), intent(in) :: pEnd(3)
+    !! End boundary-node position (m)
+    integer(4), intent(in) :: k
+    !! Chain node index, 0 (start) to nElectrodes (end)
+    real(8) :: p(3)
+
+    p = pStart + real(k, kind=8) * ((pEnd - pStart) / real(this%nElectrodes, kind=8))
+  end function nodePositionLine
 
   subroutine reportLine(this, str)
     !! Build a human-readable summary of the line element and append to `str`.

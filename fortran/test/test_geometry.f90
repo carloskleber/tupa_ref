@@ -139,6 +139,26 @@ program test_geometry
                  "reversing b's parametrisation must not change the mutual geometry factor")
   end block
 
+  ! Case 7b: opposite directions with UNEQUAL lengths, laterally offset and
+  ! axially separated -- a 2 m air segment against the mirror image of a
+  ! 4 m one (legacy torre2 geometry). The legacy opposite-direction branches
+  ! of `posparal` gave -173 here instead of +0.092 (ADR 0017 finding 8).
+  a1 = [0.0d0, 0.0d0, 50.0d0]
+  a2 = [0.0d0, 0.0d0, 48.0d0]
+  b1 = [0.0d0, 5.0d0, -40.0d0]
+  b2 = [0.0d0, 5.0d0, -36.0d0]
+  call mutualGeometryFactor(a1, a2, b1, b2, gClosed)
+  call mutualGeometryFactor(a1, a2, b1, b2, gQuad, forceNumeric=.true.)
+  call test_ok("opposite directions, unequal lengths: closed form matches quadrature", &
+               abs(gClosed - gQuad) < 1.0d-6 * abs(gQuad), &
+               "closed form and quadrature disagree for an opposite-direction pair with la /= lb")
+  block
+    real(8) :: gOpposite
+    call mutualGeometryFactor(a1, a2, b2, b1, gOpposite)
+    call test_ok("opposite directions, unequal lengths: g invariant to b's direction", &
+                 abs(gClosed - gOpposite) < 1.0d-12 * abs(gClosed), "")
+  end block
+
   ! Case 5: parallel, offset = length/10 (1 m over 10 m) -- safe for quadrature.
   a1 = [0.0d0, 0.0d0, 1.0d0]
   a2 = [10.0d0, 0.0d0, 1.0d0]

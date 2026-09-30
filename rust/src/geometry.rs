@@ -84,34 +84,32 @@ fn parallel_geometry_factor(
     lb: f64,
     vb: &Vec3,
 ) -> Option<f64> {
-    let alignment = dot(va, vb);
-    let da1b1 = norm(&sub(a1, b1));
-    let da1b2 = norm(&sub(a1, b2));
-    let da2b1 = norm(&sub(a2, b1));
-    let da2b2 = norm(&sub(a2, b2));
+    // g = ∫∫ dla dlb / R does not depend on the segments' orientation
+    // (theory.md §4.2; the sign lives in cos θ), so an opposite-direction b is
+    // traversed backwards and only the same-direction branches are needed. The
+    // legacy `posparal` opposite-direction branches were wrong whenever
+    // la != lb (ADR 0017 finding 8).
+    let (c1, c2, vc) = if dot(va, vb) > 0.0 {
+        (*b1, *b2, *vb)
+    } else {
+        (*b2, *b1, [-vb[0], -vb[1], -vb[2]])
+    };
+    let da1b1 = norm(&sub(a1, &c1));
+    let da1b2 = norm(&sub(a1, &c2));
+    let da2b1 = norm(&sub(a2, &c1));
+    let da2b2 = norm(&sub(a2, &c2));
     let mut x2 = la;
 
     let (xi1, xi2, d11, d12, d21, d22);
-    if alignment > 0.0 {
-        if da1b2 > da2b1 {
-            xi1 = dot(&sub(b1, a1), va);
-            xi2 = xi1 + lb;
-            (d11, d12, d21, d22) = (da1b1, da1b2, da2b1, da2b2);
-        } else {
-            x2 = lb;
-            xi1 = dot(&sub(a1, b1), vb);
-            xi2 = xi1 + la;
-            (d11, d12, d21, d22) = (da1b1, da2b1, da1b2, da2b2);
-        }
-    } else if da2b2 > da1b1 {
-        xi1 = dot(&sub(b2, a1), vb);
+    if da1b2 > da2b1 {
+        xi1 = dot(&sub(&c1, a1), va);
         xi2 = xi1 + lb;
-        (d11, d12, d21, d22) = (da2b1, da2b2, da1b1, da1b2);
+        (d11, d12, d21, d22) = (da1b1, da1b2, da2b1, da2b2);
     } else {
         x2 = lb;
-        xi1 = dot(&sub(b2, a1), va);
+        xi1 = dot(&sub(a1, &c1), &vc);
         xi2 = xi1 + la;
-        (d11, d12, d21, d22) = (da1b2, da1b1, da2b2, da2b1);
+        (d11, d12, d21, d22) = (da1b1, da2b1, da1b2, da2b2);
     }
 
     let l11 = xi1;
@@ -363,6 +361,37 @@ mod tests {
             (closed - numeric).abs() / closed < 1e-6,
             "{closed} vs {numeric}"
         );
+    }
+
+    #[test]
+    fn opposite_direction_unequal_lengths_match_quadrature() {
+        // A 2 m air segment against the image of a 4 m one (legacy torre2): the
+        // legacy opposite-direction branches gave -173 instead of +0.092
+        // (ADR 0017 finding 8).
+        let a1 = [0.0, 0.0, 50.0];
+        let a2 = [0.0, 0.0, 48.0];
+        let b1 = [0.0, 5.0, -40.0];
+        let b2 = [0.0, 5.0, -36.0];
+        let mut cache = GeometryCache::new(false);
+        let closed = mutual_geometry_factor(&a1, &a2, &b1, &b2, &opts(), &mut cache);
+        let reversed = mutual_geometry_factor(&a1, &a2, &b2, &b1, &opts(), &mut cache);
+        let numeric = mutual_geometry_factor(
+            &a1,
+            &a2,
+            &b1,
+            &b2,
+            &GeometryOptions {
+                force_numeric: true,
+                eps_rel: 1e-9,
+                ..opts()
+            },
+            &mut cache,
+        );
+        assert!(
+            (closed - numeric).abs() / numeric < 1e-6,
+            "{closed} vs {numeric}"
+        );
+        assert!((closed - reversed).abs() / closed < 1e-12);
     }
 
     #[test]

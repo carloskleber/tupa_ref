@@ -127,6 +127,10 @@ function load_study_string(text::AbstractString)
             add_element!(st, Line(json_str(e, "id"), json_str(e, "from"), json_str(e, "to"),
                                   json_real(e, "radius"), count_of(json_real(e, "segments")),
                                   json_str(e, "material")))
+        elseif kind == "catenary"
+            add_element!(st, Catenary(Line(json_str(e, "id"), json_str(e, "from"), json_str(e, "to"),
+                                           json_real(e, "radius"), count_of(json_real(e, "segments")),
+                                           json_str(e, "material")), json_real(e, "sag")))
         elseif kind == "mesh"
             add_element!(st, MeshElement(json_str(e, "id"), json_vec3(e, "position"),
                                          json_real(e, "lengthX"), json_real(e, "lengthY"),
@@ -188,8 +192,11 @@ function load_signal(s)
         end
     elseif wf == "doubleExp"
         double_exp_signal(something(imax, 0.0), json_str(s, "front"); jones = json_bool(s, "jones"))
+    elseif wf == "portela"
+        portela_signal(something(imax, 0.0), json_real(s, "alpha"), json_real(s, "tFront"),
+                       json_real(s, "tTopEnd"), json_real(s, "tTailEnd"))
     else
-        raise_error("mTupa: unknown signal.waveform '$wf' (expected heidler or doubleExp)")
+        raise_error("mTupa: unknown signal.waveform '$wf' (expected heidler, doubleExp or portela)")
     end
     antialias_start = json_real(s, "antialiasStart", 1.0)
     (antialias_start <= 0.0 || antialias_start > 1.0) &&

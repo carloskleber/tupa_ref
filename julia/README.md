@@ -157,6 +157,8 @@ identical to the last printed digit.
 | `grcev_fig12_l10_rho3000` | 0 | 0 |
 | `grid` | 5e-10 | 3e-10 |
 | `horizontal_vertical_mesh` | 0 | 0 |
+| `linha1` (ADR 0023, `portela` waveform) | 3e-10 | 4e-10 |
+| `linha4` (ADR 0023, `catenary`; measured before the ADR 0017 finding 8 fix) | 1e-05 | 1e-05 |
 | `lima_fig6` | 0 | 0 |
 | `lima_fig7_case10` | 0 | 0 |
 | `lima_fig7_case11` | 0 | 0 |

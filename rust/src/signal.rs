@@ -1,6 +1,7 @@
 //! Time-domain excitation waveforms (`mSignal`, ADR 0015): Heidler (legacy
-//! fixed 6-term set [38] and the standard parametrised form [37, 39]) and
-//! double exponential (± Jones front), plus the pre-transform tail taper.
+//! fixed 6-term set [38] and the standard parametrised form [37, 39]), double
+//! exponential (± Jones front) and Portela's concave-front surge [1, 67], plus
+//! the pre-transform tail taper.
 
 use crate::error::{Result, TupaError};
 use crate::special::erfc;
@@ -40,6 +41,23 @@ pub struct DoubleExpSignal {
     pub jones: bool,
 }
 
+/// Portela's piecewise surge (theory.md §8): front
+/// `imax·expm1(α t/t₁)/expm1(α)` on (0, t₁) (linear ramp for α = 0), flat top
+/// to t₂, linear decay to zero at t₃.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PortelaSignal {
+    /// Peak amplitude (A)
+    pub imax: f64,
+    /// Front inclination factor α (concave for α > 0)
+    pub alpha: f64,
+    /// End of the front t₁ (s)
+    pub t_front: f64,
+    /// End of the flat top t₂ (s)
+    pub t_top_end: f64,
+    /// End of the tail t₃ (s)
+    pub t_tail_end: f64,
+}
+
 /// A source waveform.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Signal {
@@ -47,6 +65,8 @@ pub enum Signal {
     Heidler(HeidlerSignal),
     /// Double exponential
     DoubleExp(DoubleExpSignal),
+    /// Portela concave-front surge
+    Portela(PortelaSignal),
 }
 
 /// Legacy 6-term Heidler set of De Conti & Visacro [38] (MCS_FST#1), rescaled
@@ -128,12 +148,36 @@ pub fn new_double_exp_signal(imax: f64, name: &str, jones: bool) -> Result<Signa
     }))
 }
 
+/// Portela concave-front surge (ROADMAP Phase 9 item 3); requires
+/// `0 < t_front <= t_top_end < t_tail_end`.
+pub fn new_portela_signal(
+    imax: f64,
+    alpha: f64,
+    t_front: f64,
+    t_top_end: f64,
+    t_tail_end: f64,
+) -> Result<Signal> {
+    if !(t_front > 0.0 && t_front <= t_top_end && t_top_end < t_tail_end) {
+        return Err(TupaError::new(
+            "newPortelaSignal: times must satisfy 0 < tFront <= tTopEnd < tTailEnd",
+        ));
+    }
+    Ok(Signal::Portela(PortelaSignal {
+        imax,
+        alpha,
+        t_front,
+        t_top_end,
+        t_tail_end,
+    }))
+}
+
 impl Signal {
     /// Waveform samples at times `t` (s); zero for `t ≤ 0`.
     pub fn waveform(&self, t: &[f64]) -> Vec<f64> {
         match self {
             Signal::Heidler(h) => h.waveform(t),
             Signal::DoubleExp(d) => d.waveform(t),
+            Signal::Portela(p) => p.waveform(t),
         }
     }
 }
@@ -192,6 +236,28 @@ impl DoubleExpSignal {
                         (-self.alpha * tp).exp()
                     };
                     self.imax / (k * (self.alpha - self.beta)) * (tail - front)
+                } else {
+                    0.0
+                }
+            })
+            .collect()
+    }
+}
+
+impl PortelaSignal {
+    fn waveform(&self, t: &[f64]) -> Vec<f64> {
+        t.iter()
+            .map(|&tv| {
+                if tv > 0.0 && tv < self.t_front {
+                    if self.alpha == 0.0 {
+                        self.imax * tv / self.t_front
+                    } else {
+                        self.imax * (self.alpha * tv / self.t_front).exp_m1() / self.alpha.exp_m1()
+                    }
+                } else if tv >= self.t_front && tv < self.t_top_end {
+                    self.imax
+                } else if tv >= self.t_top_end && tv < self.t_tail_end {
+                    self.imax * (self.t_tail_end - tv) / (self.t_tail_end - self.t_top_end)
                 } else {
                     0.0
                 }
@@ -262,6 +328,25 @@ mod tests {
         assert!(new_heidler_signal_terms(&[1.0], &[0.5], &[1e-6], &[1e-5], None).is_err());
         assert!(new_heidler_signal_terms(&[], &[], &[], &[], None).is_err());
         assert!(new_double_exp_signal(1.0, "nope", false).is_err());
+    }
+
+    #[test]
+    fn portela_pieces() {
+        let s = new_portela_signal(1000.0, 2.0, 2e-6, 20e-6, 100e-6).unwrap();
+        let w = s.waveform(&[0.0, 1e-6, 2e-6, 10e-6, 60e-6, 100e-6]);
+        let front_mid = 1000.0 * 1.0_f64.exp_m1() / 2.0_f64.exp_m1();
+        assert_eq!(w[0], 0.0);
+        assert!((w[1] - front_mid).abs() < 1e-9, "front {}", w[1]);
+        assert_eq!(w[2], 1000.0);
+        assert_eq!(w[3], 1000.0);
+        assert!((w[4] - 500.0).abs() < 1e-9);
+        assert_eq!(w[5], 0.0);
+        // alpha -> 0 is the linear ramp
+        let ramp = new_portela_signal(1.0, 0.0, 2e-6, 20e-6, 100e-6).unwrap();
+        let tiny = new_portela_signal(1.0, 1e-12, 2e-6, 20e-6, 100e-6).unwrap();
+        assert_eq!(ramp.waveform(&[0.5e-6])[0], 0.25);
+        assert!((tiny.waveform(&[0.5e-6])[0] - 0.25).abs() < 1e-12);
+        assert!(new_portela_signal(1.0, 2.0, 2e-6, 1e-6, 100e-6).is_err());
     }
 
     #[test]

@@ -150,38 +150,35 @@ contains
     real(8), intent(in)  :: b1(:), b2(:), lb, vb(3)
     real(8), intent(out) :: g
     logical, intent(out) :: ok
-    real(8) :: alignment, da1b1, da1b2, da2b1, da2b2, x2
+    real(8) :: da1b1, da1b2, da2b1, da2b2, x2
     real(8) :: xi1, xi2, d11, d12, d21, d22, l11, l21, l22, y
+    real(8) :: c1(3), c2(3), vc(3)
 
-    alignment = dot_product(va, vb)
-    da1b1 = norm2(a1 - b1)
-    da1b2 = norm2(a1 - b2)
-    da2b1 = norm2(a2 - b1)
-    da2b2 = norm2(a2 - b2)
+    ! g = ∫∫ dla dlb / R does not depend on the segments' orientation
+    ! (theory.md §4.2; the sign lives in cosθ), so an opposite-direction b is
+    ! traversed backwards and only the same-direction branches are needed.
+    ! The legacy `posparal` opposite-direction branches were wrong whenever
+    ! la /= lb (ADR 0017 finding 8).
+    if (dot_product(va, vb) > 0.0d0) then
+      c1 = b1; c2 = b2; vc = vb
+    else
+      c1 = b2; c2 = b1; vc = -vb
+    end if
+    da1b1 = norm2(a1 - c1)
+    da1b2 = norm2(a1 - c2)
+    da2b1 = norm2(a2 - c1)
+    da2b2 = norm2(a2 - c2)
     x2 = la
 
-    if (alignment > 0.0d0) then
-      if (da1b2 > da2b1) then
-        xi1 = dot_product(b1 - a1, va)
-        xi2 = xi1 + lb
-        d11 = da1b1; d12 = da1b2; d21 = da2b1; d22 = da2b2
-      else
-        x2 = lb
-        xi1 = dot_product(a1 - b1, vb)
-        xi2 = xi1 + la
-        d11 = da1b1; d12 = da2b1; d21 = da1b2; d22 = da2b2
-      end if
+    if (da1b2 > da2b1) then
+      xi1 = dot_product(c1 - a1, va)
+      xi2 = xi1 + lb
+      d11 = da1b1; d12 = da1b2; d21 = da2b1; d22 = da2b2
     else
-      if (da2b2 > da1b1) then
-        xi1 = dot_product(b2 - a1, vb)
-        xi2 = xi1 + lb
-        d11 = da2b1; d12 = da2b2; d21 = da1b1; d22 = da1b2
-      else
-        x2 = lb
-        xi1 = dot_product(b2 - a1, va)
-        xi2 = xi1 + la
-        d11 = da1b2; d12 = da1b1; d21 = da2b2; d22 = da2b1
-      end if
+      x2 = lb
+      xi1 = dot_product(a1 - c1, vc)
+      xi2 = xi1 + la
+      d11 = da1b1; d12 = da2b1; d21 = da1b2; d22 = da2b2
     end if
 
     l11 = xi1
@@ -201,19 +198,15 @@ contains
         !     = (la+lb)*ln(la+lb) - la*ln(la) - lb*ln(lb)
         ! is exact for BOTH orientations. `posparal`'s original log-difference
         ! form (xi1*log(-(..)/xi1) + ...) is the same limit taken through a
-        ! coefficient -> 0 while its paired log argument -> +-infinity: fine
-        ! numerically when alignment > 0 (same-direction chaining, xi1 -> x2,
-        ! matches this formula -- see test_geometry.f90's Case 1/2), but for
-        ! alignment <= 0 (opposite-direction, e.g. a segment touching its own
-        ! mirror image across the air/soil interface, xi1 -> 0) it hits
-        ! `coef * log(arg)` with coef exactly 0 and arg diverging: 0 * Inf =
-        ! NaN in IEEE arithmetic (the true t*ln(k/t) -> 0 limit isn't taken),
-        ! or even log of a negative argument, both misdiagnosed as the
-        ! genuine "degenerate pair" case and sent to `geometryFactor2D`
-        ! quadrature -- catastrophically slow there since the integrand has a
-        ! real 1/r corner singularity at the touch point (this is what was
-        ! driving ~700M `inverseDistanceIntegrand` calls for a single
-        ! straight vertical rod crossing the interface).
+        ! coefficient -> 0 while its paired log argument -> +-infinity; for a
+        ! segment touching its own mirror image across the air/soil interface
+        ! it hits `coef * log(arg)` with coef exactly 0 and arg diverging:
+        ! 0 * Inf = NaN in IEEE arithmetic (the true t*ln(k/t) -> 0 limit
+        ! isn't taken), misdiagnosed as the genuine "degenerate pair" case and
+        ! sent to `geometryFactor2D` quadrature -- catastrophically slow there
+        ! since the integrand has a real 1/r corner singularity at the touch
+        ! point (this is what was driving ~700M `inverseDistanceIntegrand`
+        ! calls for a single straight vertical rod crossing the interface).
         g = (la + lb) * log(la + lb) - la * log(la) - lb * log(lb)
       else
         g = x2 * log((x2 - xi2) / (x2 - xi1)) + xi1 * log(-(x2 - xi1) / xi1) &

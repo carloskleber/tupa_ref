@@ -30,15 +30,19 @@ module tupa
   !!   `material`. Plants its own main nodes, named `"<id>-<row><col>"`
   !!   (2-digit zero-padded, 0-based) — externally referenceable by
   !!   `sources[].node` or another element's `from`/`to`.
+  !! - `"catenary"` — parabolic sagging span (`mElementCatenary`, ADR 0023):
+  !!   the `"line"` fields plus `sag` (midspan drop below the chord, m).
   !!
-  !! Future versions will add tCatenary, tCircumference, tTower.
+  !! Future versions will add tCircumference, tTower.
   use mStudy
   use mNode
   use mMaterial
   use mElementLine
   use mElementMesh
+  use mElementCatenary
   use mJsonParser
-  use mSignal, only: tSignal, newHeidlerSignal, newHeidlerSignalTerms, newDoubleExpSignal
+  use mSignal, only: tSignal, newHeidlerSignal, newHeidlerSignalTerms, newDoubleExpSignal, &
+                     newPortelaSignal
   use mTransient, only: transientResponse
   use mResultsWriter, only: writeResultsCsv, writeResultsJson, &
                              writeTransientResultsCsv, writeTransientResultsJson
@@ -218,6 +222,16 @@ contains
           elem = newElementLine(trim(id), trim(from_id), trim(to_id), &
                                 radius, nseg, trim(mat_id))
           call study%structure%addElement(elem)
+        case ("catenary")
+          id      = json_str(elem_obj, "id")
+          from_id = json_str(elem_obj, "from")
+          to_id   = json_str(elem_obj, "to")
+          radius  = json_real(elem_obj, "radius")
+          nseg    = json_int(elem_obj, "segments")
+          mat_id  = json_str(elem_obj, "material")
+          elem = newElementCatenary(trim(id), trim(from_id), trim(to_id), &
+                                    json_real(elem_obj, "sag"), radius, nseg, trim(mat_id))
+          call study%structure%addElement(elem)
         case ("mesh")
           id       = json_str(elem_obj, "id")
           pos_arr  => json_child(elem_obj, "position")
@@ -351,9 +365,13 @@ contains
         case ("doubleExp")
           front = json_str(signal_obj, "front")
           allocate(signal, source=newDoubleExpSignal(imax, trim(front), jones=json_getbool(signal_obj, "jones")))
+        case ("portela")
+          allocate(signal, source=newPortelaSignal(imax, json_real(signal_obj, "alpha"), &
+            json_real(signal_obj, "tFront"), json_real(signal_obj, "tTopEnd"), &
+            json_real(signal_obj, "tTailEnd")))
         case default
           call raiseError("mTupa: unknown signal.waveform '" // trim(waveformType) // &
-                           "' (expected heidler or doubleExp)")
+                           "' (expected heidler, doubleExp or portela)")
           return
         end select
 

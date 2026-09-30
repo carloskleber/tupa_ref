@@ -46,6 +46,13 @@ impl Line {
     /// Add `n-1` internal nodes and `n` electrodes to `structure`; returns
     /// the number of internal nodes created.
     pub fn assemble(&self, structure: &mut Structure) -> Result<usize> {
+        self.assemble_sagging(structure, 0.0)
+    }
+
+    /// `assemble` with the chain nodes on the parabolic profile of
+    /// [`profile_point`] (`sag = 0` is the straight line); shared with
+    /// [`super::Catenary`].
+    pub(crate) fn assemble_sagging(&self, structure: &mut Structure, sag: f64) -> Result<usize> {
         let idx_start = structure
             .find_node_index(&self.id_node_start)
             .ok_or_else(|| {
@@ -81,22 +88,11 @@ impl Line {
         let n = self.n_electrodes;
         let p_start = structure.nodes[idx_start].p;
         let p_end = structure.nodes[idx_end].p;
-        let nf = n as f64;
-        let inc = [
-            (p_end[0] - p_start[0]) / nf,
-            (p_end[1] - p_start[1]) / nf,
-            (p_end[2] - p_start[2]) / nf,
-        ];
 
         let mut node_idx = Vec::with_capacity(n + 1);
         node_idx.push(idx_start);
         for k in 1..n {
-            let kf = k as f64;
-            let p = [
-                p_start[0] + kf * inc[0],
-                p_start[1] + kf * inc[1],
-                p_start[2] + kf * inc[2],
-            ];
+            let p = profile_point(p_start, p_end, k, n, sag);
             node_idx.push(structure.add_node(Node::new(format!("{}_n{}", self.id, k), p)));
         }
         node_idx.push(idx_end);
@@ -122,4 +118,24 @@ impl Line {
             self.radius
         )
     }
+}
+
+/// Chain node `k` of `n` between `p_start` and `p_end`: `k` equal chord steps,
+/// lowered by `4·sag·s·(1 − s)` at `s = k/n` (theory.md §4.4; `sag = 0` is the
+/// straight line).
+pub(crate) fn profile_point(
+    p_start: [f64; 3],
+    p_end: [f64; 3],
+    k: usize,
+    n: usize,
+    sag: f64,
+) -> [f64; 3] {
+    let kf = k as f64;
+    let nf = n as f64;
+    let s = kf / nf;
+    [
+        p_start[0] + kf * ((p_end[0] - p_start[0]) / nf),
+        p_start[1] + kf * ((p_end[1] - p_start[1]) / nf),
+        p_start[2] + kf * ((p_end[2] - p_start[2]) / nf) - 4.0 * sag * s * (1.0 - s),
+    ]
 }

@@ -2,7 +2,7 @@
 
 - **Status**: Recorded (informational — findings, not a single decision;
   moved here from ROADMAP.md §8 when the roadmap was tidied, 2026-07-17)
-- **Date**: 2026-07-05 .. 2026-07-17
+- **Date**: 2026-07-05 .. 2026-07-17 (finding 8 added 2026-09-30)
 
 ## Context
 
@@ -62,12 +62,34 @@ other documents and code comments cite them as "ADR 0017 finding N"
    (`.caso`/`.est`); XML was a C++ addition. Neither constrains the JSON
    schema (ADR 0006), but the Matlab case files are the natural source
    when porting reference cases to `common/`.
+8. **Parallel closed form wrong for opposite directions with unequal
+   lengths** (found 2026-09-30, importing the legacy tower cases, ADR 0023).
+   The Matlab `posparal` (`barraquad.m`) has two branches for
+   opposite-direction pairs. They place the second segment along the
+   reference axis in a way that is right only when both segments have the
+   same length. The Fortran, Rust and Julia ports inherited the branches
+   verbatim. Every case until then had equal-length segments wherever
+   opposite directions occur (a rod against its own image, for instance),
+   so nothing showed. In a structure in air, a vertical segment against the
+   image of a vertical segment of another length is such a pair: for 2 m
+   and 4 m segments 5 m apart, the factor came out as −173 instead of
+   +0.092. That made the longitudinal matrix indefinite and gave legacy
+   `torre2` an input reactance of −jω·640 µH. The fix follows from the
+   definition: `g = ∬ dℓa dℓb / R` does not depend on orientation (the sign
+   is carried by cos θ), so an opposite-direction segment is traversed
+   backwards and only the verified same-direction branches remain.
+   Regression tests in `test_geometry.f90`, `rust/src/geometry.rs` and
+   `julia/test/unit.jl` check the pair above against quadrature. The golden
+   fixtures do not change: every opposite-direction pair in them has equal
+   lengths.
 
 ## Consequences
 
 - The Matlab implementation remains the reference of record; the C++ is
   consulted only for features the Matlab lacks (XML I/O, bundle/L-profile
   internal impedances, shielded wire).
+- Finding 8 fixed the parallel-segment closed form in all three
+  implementations (theory.md §4.2 note).
 - Findings 1 and 2 changed theory.md (§5, §4.2); finding 3 hardened the
   ADR 0009 interface; finding 5 gates every cross-code comparison
   (ADR 0008).
