@@ -11,7 +11,13 @@ const COMMON = normpath(joinpath(@__DIR__, "..", "..", "common"))
 # ROADMAP Phase 9 cases/fixtures not yet ported (follow-along lag, julia/README.md)
 const PHASE9_LAG = ["portela1997_transient_hann", "portela1997_transient_hann_time",
                     "portela1997_transient_interpolated", "portela1997_transient_multi",
-                    "portela1997_transient_nlt"]
+                    "portela1997_transient_nlt", "portelaMesh", "portelaMesh_transient"]
+# ROADMAP Phase 10 (ADR 0024), not ported: the case uses the `numerics` block, which
+# the loader refuses; and the three harmonic golden fixtures were regenerated with
+# the Phase 10 defaults (single-integral kernel, Γ(ω) images) while this port still
+# computes the pre-Phase-10 numerics, so they are not run here (julia/README.md)
+const PHASE10_LAG_CASES = ["portela1997_ideal"]
+const PHASE10_LAG_FIXTURES = ["grid", "portela1997", "rod"]
 
 set_verbosity(VERB_QUIET)
 

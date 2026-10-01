@@ -99,6 +99,14 @@ function load_study_string(text::AbstractString)
     end
     root isa AbstractDict || raise_error("JSON error: the case file must be a JSON object")
 
+    # ROADMAP Phase 10 `numerics` block (ADR 0024: kernel, imageModel,
+    # maxSegmentLength) that this port does not implement yet: rejected rather
+    # than silently ignored. Without the block the Julia port still computes
+    # the pre-Phase-10 numerics (2-D kernel, ideal images) — see julia/README.md.
+    field(root, "numerics") === nothing ||
+        raise_error("mTupa: numerics (ROADMAP Phase 10) is not implemented in the Julia port yet " *
+                    "(follow-along lag, see julia/README.md)")
+
     soil_spec = field(root, "soil")
     soil_type = json_str(soil_spec, "type", "linear")
     soil = if soil_type == "linear"
