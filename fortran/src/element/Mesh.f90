@@ -217,13 +217,13 @@ contains
     !! `tLine`, then fold its internal nodes/electrodes into `this%nodes`/
     !! `this%electrodes` at the given running indices (already sized
     !! exactly by `assembleMesh`).
-    class(tMeshElement), intent(inout) :: this
+    class(tMeshElement), intent(inout), target :: this
     class(*), intent(inout) :: structure
     integer(4), intent(in) :: row1, col1, row2, col2
     integer(4), intent(inout) :: idxInternalNode, idxElectrode
     class(tElement), allocatable, target :: bar
     character(len=256) :: barId
-    integer(4) :: nInternal
+    integer(4) :: nInternal, k
 
     barId = trim(this%id) // "-" // rowColTag(row1, col1) // "-" // rowColTag(row2, col2)
     bar = newElementLine(trim(barId), meshNodeId(this%id, row1, col1), meshNodeId(this%id, row2, col2), &
@@ -237,6 +237,17 @@ contains
     end if
 
     this%electrodes(idxElectrode + 1 : idxElectrode + this%segments) = bar%electrodes
+    ! The bar is a temporary: it owns a material copy that is freed on return, so the
+    ! electrodes it registered (here and in the structure) must point at the mesh's own.
+    do k = idxElectrode + 1, idxElectrode + this%segments
+      this%electrodes(k)%material => this%material
+    end do
+    select type (structure)
+    type is (tStructure)
+      do k = structure%electrodeCount - this%segments + 1, structure%electrodeCount
+        structure%electrodes(k)%material => this%material
+      end do
+    end select
     idxElectrode = idxElectrode + this%segments
   end subroutine assembleBar
 

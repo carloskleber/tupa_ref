@@ -686,6 +686,7 @@ contains
     integer(4), allocatable :: sourcePos(:), retPos(:)
     complex(8), allocatable :: lastSrc(:)
     logical :: anyVoltage, laplace
+    type(tMesh) :: meshLocal
 
     if (.not. this%prepared) call prepareStudy(this)
 
@@ -730,11 +731,9 @@ contains
     ! comments and the loop is the former serial one.
     solveInfo = 0
     call warmUpMachineConstants()
-    !$omp parallel default(shared) private(k, lastSrc, info)
+    !$omp parallel default(shared) private(k, lastSrc, info, meshLocal)
+    meshLocal = this%mesh
     block
-      type(tMesh) :: meshLocal
-
-      meshLocal = this%mesh
       !$omp do schedule(dynamic)
       do k = 1, nf
         if (verbosityLevel() .eq. VERB_VERBOSE) write(*, '("f = ",EN0.1E2," Hz")') freqHz(k)
@@ -809,6 +808,10 @@ contains
     complex(8), allocatable :: patterns(:,:), unitValues(:)
     integer(4) :: nf, nT, k, solveInfo
     logical :: anyVoltage, laplace
+    type(tMesh) :: meshLocal
+    complex(8), allocatable :: vU(:,:), i1U(:,:), i2U(:,:)
+    complex(8) :: scale
+    integer(4) :: m, info
 
     if (.not. this%prepared) call prepareStudy(this)
 
@@ -832,14 +835,9 @@ contains
     ! thread-private mesh each, disjoint writes, bit-identical for any thread count.
     solveInfo = 0
     call warmUpMachineConstants()
-    !$omp parallel default(shared)
+    !$omp parallel default(shared) private(meshLocal, vU, i1U, i2U, scale, m, info)
+    meshLocal = this%mesh
     block
-      type(tMesh) :: meshLocal
-      complex(8), allocatable :: vU(:,:), i1U(:,:), i2U(:,:)
-      complex(8) :: scale
-      integer(4) :: m, info
-
-      meshLocal = this%mesh
       !$omp do schedule(dynamic)
       do k = 1, nf
         if (verbosityLevel() .eq. VERB_VERBOSE) write(*, '("f = ",EN0.1E2," Hz")') freqHz(k)
