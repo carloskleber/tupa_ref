@@ -5,7 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QStandardItem, QStandardItemModel
 
-from tupa_gui.data import LineElement, Study
+from tupa_gui.data import CatenaryElement, LineElement, Study
 
 # Qt.UserRole payload on a node/element's tree item: ("node"|"element", id).
 # Lets the controller (main_window) map a tree selection to the matching 3D
@@ -27,9 +27,19 @@ def build_study_model(study: Study) -> tuple[QStandardItemModel, dict[tuple[str,
     entity_items: dict[tuple[str, str], QStandardItem] = {}
 
     soil = _row("Soil")
-    soil.appendRow(_row("conductivity", f"{study.soil.conductivity} S/m"))
-    soil.appendRow(_row("permittivity (εr)", str(study.soil.permittivity)))
-    soil.appendRow(_row("permeability (μr)", str(study.soil.permeability)))
+    sl = study.soil
+    soil.appendRow(_row("type", sl.type))
+    if sl.conductivity is not None:
+        soil.appendRow(_row("conductivity", f"{sl.conductivity} S/m"))
+    if sl.permittivity is not None:
+        soil.appendRow(_row("permittivity (εr)", str(sl.permittivity)))
+    soil.appendRow(_row("permeability (μr)", str(sl.permeability)))
+    if sl.sigma0 is not None:
+        soil.appendRow(_row("σ0", f"{sl.sigma0} S/m"))
+    if sl.alpha0 is not None:
+        soil.appendRow(_row("α0", str(sl.alpha0)))
+    if sl.kr is not None:
+        soil.appendRow(_row("kr", str(sl.kr)))
     root.appendRow(soil)
 
     materials = _row("Materials", f"({len(study.materials)})")
@@ -52,9 +62,12 @@ def build_study_model(study: Study) -> tuple[QStandardItemModel, dict[tuple[str,
     elements = _row("Elements", f"({len(study.elements)})")
     for e in study.elements:
         if isinstance(e, LineElement):
-            item = _row(e.id, f"line {e.from_node} -> {e.to_node}")
+            kind = "catenary" if isinstance(e, CatenaryElement) else "line"
+            item = _row(e.id, f"{kind} {e.from_node} -> {e.to_node}")
             item.setData(("element", e.id), ENTITY_ROLE)
             entity_items[("element", e.id)] = item
+            if isinstance(e, CatenaryElement):
+                item.appendRow(_row("sag", f"{e.sag} m"))
             item.appendRow(_row("radius", f"{e.radius} m"))
             item.appendRow(_row("segments", str(e.segments)))
             item.appendRow(_row("material", e.material))
@@ -104,6 +117,11 @@ def build_study_model(study: Study) -> tuple[QStandardItemModel, dict[tuple[str,
         s = study.signal
         signal.appendRow(_row("waveform", s.waveform))
         signal.appendRow(_row("imax", f"{s.imax} A"))
+        if s.portela is not None:
+            signal.appendRow(_row("α (front inclination)", str(s.portela.alpha)))
+            signal.appendRow(_row("tFront", f"{s.portela.t_front} s"))
+            signal.appendRow(_row("tTopEnd", f"{s.portela.t_top_end} s"))
+            signal.appendRow(_row("tTailEnd", f"{s.portela.t_tail_end} s"))
         if s.front is not None:
             signal.appendRow(_row("front", s.front))
             signal.appendRow(_row("jones", str(s.jones)))

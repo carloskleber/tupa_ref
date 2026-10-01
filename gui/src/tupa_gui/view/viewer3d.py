@@ -17,7 +17,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QQuaternion, QVector3D
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
-from tupa_gui.data import LineElement, MeshElement, Study
+from tupa_gui.data import CatenaryElement, LineElement, MeshElement, Study
 
 # theory.md §2: right-handed, z up, air-soil interface at z = 0.
 # Qt3D's convention is y-up; map study (x, y, z) -> Qt3D (x, z, y) so the
@@ -86,6 +86,7 @@ class GeometryViewer(QWidget):
         # Reposition node-id labels whenever the camera moves (orbit/pan/zoom
         # all change the view or projection matrix) or the pane is resized.
         self._camera.viewMatrixChanged.connect(self._update_label_positions)
+        self._camera.viewMatrixChanged.connect(self._rescale_nodes)
         self._camera.projectionMatrixChanged.connect(self._update_label_positions)
         # A camera aspect ratio that doesn't match the actual viewport
         # stretches everything non-uniformly (spheres render as ellipsoids,
@@ -99,6 +100,10 @@ class GeometryViewer(QWidget):
         # the ownership note in load_study.
         self._scene: list[object] = []
         self._node_entries: dict[str, _Highlightable] = {}
+        # Node spheres keep a constant on-screen size: each transform is
+        # scaled by (camera distance / distance at load), see _rescale_nodes.
+        self._node_transforms: dict[str, Qt3DCore.QTransform] = {}
+        self._node_reference_distance = 0.0
         self._element_entries: dict[str, _Highlightable] = {}
         self._node_positions: dict[str, QVector3D] = {}
         self._element_centers: dict[str, QVector3D] = {}
@@ -125,6 +130,7 @@ class GeometryViewer(QWidget):
         # for as long as it is displayed.
         scene: list[object] = []
         node_entries: dict[str, _Highlightable] = {}
+        node_transforms: dict[str, Qt3DCore.QTransform] = {}
         element_entries: dict[str, _Highlightable] = {}
         node_positions: dict[str, QVector3D] = {}
         element_centers: dict[str, QVector3D] = {}
@@ -169,11 +175,29 @@ class GeometryViewer(QWidget):
         self._add_grid(root, scene, extent)
         self._add_axes(root, scene, extent)
         for node_id, position in node_positions.items():
-            entry = self._add_node(root, scene, position, node_id, node_radius)
+            entry, node_transform = self._add_node(root, scene, position, node_id, node_radius)
             node_entries[node_id] = entry
+            node_transforms[node_id] = node_transform
             self._node_labels[node_id] = self._make_label(node_id)
         for element in study.elements:
-            if isinstance(element, LineElement):
+            if isinstance(element, CatenaryElement):
+                # Parabolic span (ADR 0023): one cylinder per chain segment,
+                # all sharing the element's ID, like a mesh's bars.
+                chain = [
+                    _to_qt3d(p)
+                    for p in element.chain_points(
+                        study.node(element.from_node).position, study.node(element.to_node).position
+                    )
+                ]
+                materials = []
+                for a, b in zip(chain, chain[1:]):
+                    entry = self._add_conductor(root, scene, a, b, element.radius, min_visible_radius, element.id)
+                    if entry is not None:
+                        materials += entry.materials
+                if materials:
+                    element_entries[element.id] = _Highlightable(materials, CONDUCTOR_COLOR)
+                element_centers[element.id] = chain[len(chain) // 2]
+            elif isinstance(element, LineElement):
                 a = node_positions[element.from_node]
                 b = node_positions[element.to_node]
                 entry = self._add_conductor(root, scene, a, b, element.radius, min_visible_radius, element.id)
@@ -222,11 +246,14 @@ class GeometryViewer(QWidget):
         # scene's references lets GC destroy the old (now undisplayed) scene.
         self._scene = scene
         self._node_entries = node_entries
+        self._node_transforms = node_transforms
+        self._node_reference_distance = (camera.position() - camera.viewCenter()).length()
         self._element_entries = element_entries
         self._node_positions = node_positions
         self._element_centers = element_centers
         self._highlighted = None
         self._update_label_positions()
+        self._rescale_nodes()
 
     def highlight_node(self, node_id: str) -> None:
         """Highlight a node and re-centre orbiting on it (tree/3D selection sync)."""
@@ -294,6 +321,20 @@ class GeometryViewer(QWidget):
         for label in self._node_labels.values():
             label.deleteLater()
         self._node_labels = {}
+
+    def _rescale_nodes(self) -> None:
+        """Scale node spheres with the camera-to-node distance so they keep
+        the on-screen size they have in the default view, however far the
+        user zooms."""
+        if not self._node_transforms or self._node_reference_distance <= 0:
+            return
+        camera_position = self._camera.position()
+        for node_id, transform in self._node_transforms.items():
+            position = self._node_positions.get(node_id)
+            if position is None:
+                continue
+            distance = (camera_position - position).length()
+            transform.setScale(max(distance / self._node_reference_distance, 1e-6))
 
     def _update_label_positions(self) -> None:
         if not self._node_labels:
@@ -364,7 +405,7 @@ class GeometryViewer(QWidget):
         position: QVector3D,
         node_id: str,
         radius: float,
-    ) -> _Highlightable:
+    ) -> tuple[_Highlightable, Qt3DCore.QTransform]:
         entity = Qt3DCore.QEntity(root)
         mesh = Qt3DExtras.QSphereMesh(entity)
         mesh.setRadius(radius)
@@ -379,7 +420,7 @@ class GeometryViewer(QWidget):
         entity.addComponent(transform)
         entity.addComponent(picker)
         scene += [entity, mesh, material, transform, picker]
-        return _Highlightable([material], NODE_COLOR)
+        return _Highlightable([material], NODE_COLOR), transform
 
     def _add_conductor(
         self,

@@ -88,24 +88,64 @@ are still open — see [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
 ## Implementations
 
-The first implementation is **modern Fortran** (2008+, built with FPM) —
-partly because the original numerical core was already Fortran, cleaned up
+**Fortran** (2008+, built with FPM) — based in the original numerical core, cleaned up
 and modernised ([ADR 0001](docs/adr/0001-modern-fortran-reference-implementation.md)).
-A native Julia port — contributed by acslima as a prototype and since
-realigned module by module with the Fortran code (not yet with Phases 9–10)
-— lives in [julia/](julia/README.md). A Rust implementation — no LAPACK/SLATEC needed, just `cargo` — lives in
-[rust/](rust/README.md) (ROADMAP Phase 8, [ADR 0022](docs/adr/0022-rust-implementation.md));
-Python is reserved for the GUI. All map the same object model
-(Study → Structure → Element/Material → Node/Electrode → Mesh → Result,
-[ADR 0002](docs/adr/0002-language-agnostic-object-model.md)) and must pass
-the same [common/](common/README.md) cases.
 
 ```bash
 cd fortran
 bash build.sh                          # fetch+build SLATEC, optimised build
-fpm run -- ../common/portela1997.json  # run the solver on a JSON case
-fpm test                               # tests (see docs/ROADMAP.md §5 for the fast/slow split)
+./build/gfortran_*/app/Tupa ../common/portela1997.json   # run the solver on a JSON case
 ```
+
+Run the binary that `build.sh` produced. If several `build/gfortran_*` folders
+exist, pick the newest (`ls -td build/gfortran_*/app/Tupa | head -1`). A bare
+`fpm run` / `fpm test` rebuilds with fpm's default (debug) profile and
+different flags, and needs the SLATEC library on the linker path, which
+`build.sh` sets only for its own process. To use fpm directly:
+
+```bash
+export LIBRARY_PATH=$HOME/.local/lib:$LIBRARY_PATH
+fpm run --profile release \
+  --flag "-ffree-line-length-none -fno-range-check -fopenmp" \
+  --link-flag "-Wl,--no-as-needed -llapack -lblas" \
+  -- ../common/portela1997.json
+```
+
+For `fpm test` (fast/slow split in docs/ROADMAP.md §5) use the same flags; see
+[fortran/README.md](fortran/README.md#building-and-testing-without-buildsh).
+
+**Rust** — only `cargo` is needed ([rust/README.md](rust/README.md)):
+
+```bash
+cd rust
+cargo build --release
+./target/release/tupa ../common/portela1997.json   # writes portela1997_results.{csv,json}
+cargo test --release                               # tests
+```
+
+**Julia** (≥ 1.10) — no build step ([julia/README.md](julia/README.md)):
+
+```bash
+cd julia
+julia --project=. -e 'using Pkg; Pkg.instantiate()'   # once
+julia bin/tupa.jl ../common/portela1997.json          # writes portela1997_results.{csv,json}
+julia --project=. -e 'using Pkg; Pkg.test()'          # tests
+```
+
+**GUI** — Python ≥ 3.11 with [uv](https://docs.astral.sh/uv/)
+([gui/README.md](gui/README.md)). It views a case and, optionally, the result
+file written by any of the solvers above:
+
+```bash
+cd gui
+uv sync
+uv run tupa-gui ../common/buried_conductor_short.json
+uv run tupa-gui ../common/portela1997.json --results path/to/portela1997_results.json
+uv run pytest                                         # headless data-layer tests
+```
+
+All three solvers take the same JSON case and write result files with the same
+names, so the GUI reads any of them unchanged.
 
 `build.sh` enables OpenMP: the frequency sweep runs on all cores (results are
 bit-identical for any thread count; `OMP_NUM_THREADS` or `--threads <n>`

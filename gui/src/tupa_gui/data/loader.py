@@ -10,12 +10,14 @@ from pathlib import Path
 from .model import (
     ElectrodeCurrent,
     FrequencySweep,
+    CatenaryElement,
     LineElement,
     Material,
     MeshElement,
     Node,
     NodeVoltage,
     Outputs,
+    PortelaSurge,
     Results,
     Signal,
     Soil,
@@ -45,13 +47,22 @@ def load_study(path: str | Path) -> Study:
         raise StudyLoadError(f"{path}: invalid JSON ({exc})") from exc
 
     try:
-        soil = Soil(**raw["soil"])
+        rs = raw["soil"]
+        soil = Soil(
+            conductivity=rs.get("conductivity"),
+            permittivity=rs.get("permittivity"),
+            permeability=rs.get("permeability", 1.0),
+            type=rs.get("type", "linear"),
+            sigma0=rs.get("sigma0"),
+            alpha0=rs.get("alpha0"),
+            kr=rs.get("kr"),
+        )
         nodes = [Node(id=n["id"], position=tuple(n["position"])) for n in raw.get("nodes", [])]
         materials = [Material(**m) for m in raw.get("materials", [])]
     except KeyError as exc:
         raise StudyLoadError(f"{path}: missing required field {exc}") from exc
 
-    elements: list[LineElement | MeshElement] = []
+    elements: list[LineElement | CatenaryElement | MeshElement] = []
     for e in raw.get("elements", []):
         etype = e.get("type")
         if etype == "line":
@@ -65,6 +76,18 @@ def load_study(path: str | Path) -> Study:
                     # may set the count; the view does not expand subdivisions)
                     segments=e.get("segments", 1),
                     material=e["material"],
+                )
+            )
+        elif etype == "catenary":
+            elements.append(
+                CatenaryElement(
+                    id=e["id"],
+                    from_node=e["from"],
+                    to_node=e["to"],
+                    radius=e["radius"],
+                    segments=e.get("segments", 1),
+                    material=e["material"],
+                    sag=e["sag"],
                 )
             )
         elif etype == "mesh":
@@ -122,6 +145,14 @@ def load_study(path: str | Path) -> Study:
             jones=sig.get("jones", False),
             observe_electrodes=list(sig.get("observeElectrodes", [])),
             freq_zero_hz=sig.get("freqZeroHz", 1.0e-6),
+            portela=PortelaSurge(
+                alpha=sig["alpha"],
+                t_front=sig["tFront"],
+                t_top_end=sig["tTopEnd"],
+                t_tail_end=sig["tTailEnd"],
+            )
+            if sig["waveform"] == "portela"
+            else None,
         )
 
     return Study(

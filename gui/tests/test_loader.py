@@ -141,3 +141,38 @@ def test_missing_soil_raises(tmp_path):
 
     with pytest.raises(StudyLoadError):
         load_study(path)
+
+
+LEGACY_CASES = [
+    *(f"torre{i}" for i in range(3)),
+    *(f"linha{i}" for i in range(6)),
+    "linha5a",
+]
+
+
+@pytest.mark.parametrize("case", LEGACY_CASES)
+def test_legacy_base_case_loads(case):
+    study = load_study(COMMON / f"{case}.json")
+    assert study.nodes and study.elements
+    assert study.signal is not None and study.signal.portela is not None
+    # every element references declared nodes (catenary included)
+    ids = {n.id for n in study.nodes}
+    assert all(e.from_node in ids and e.to_node in ids for e in study.elements)
+
+
+def test_catenary_and_portela_soil():
+    from tupa_gui.data import CatenaryElement
+
+    linha4 = load_study(COMMON / "linha4.json")
+    cats = [e for e in linha4.elements if isinstance(e, CatenaryElement)]
+    assert cats and all(c.sag == 5.0 for c in cats)
+    c = cats[0]
+    pts = c.chain_points(linha4.node(c.from_node).position, linha4.node(c.to_node).position)
+    assert len(pts) == c.segments + 1
+    # midpoint drops by exactly `sag` below the chord midpoint (theory.md §4.4)
+    a, b = linha4.node(c.from_node).position, linha4.node(c.to_node).position
+    assert pts[c.segments // 2][2] == pytest.approx((a[2] + b[2]) / 2 - c.sag)
+
+    torre1 = load_study(COMMON / "torre1.json")
+    assert torre1.soil.type == "portela" and torre1.soil.kr == 0.00271357
+    assert torre1.soil.conductivity is None

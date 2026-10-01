@@ -14,6 +14,9 @@ and is buildable/runnable on its own.
 **Status**: G0 (tree view of an input study), G1 (Qt3D geometry view,
 authored elements only), and G2 (results loader + 1D magnitude/phase plots)
 are implemented. See GUI_SDD.md §7 for later phases.
+The legacy base cases (`torre0`–`torre2`, `linha0`–`linha5a`) load and render: the
+`catenary` element (drawn as its parabolic chain), `portela`/`alipio-visacro` soil
+models and the `portela` surge waveform are shown in the tree.
 
 ## Setup
 

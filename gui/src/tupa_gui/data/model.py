@@ -11,9 +11,18 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class Soil:
-    conductivity: float
-    permittivity: float
-    permeability: float
+    """Soil dispersion model (`soil.type`, common/README.md): `"linear"`
+    takes conductivity/permittivity/permeability; `"portela"` (ADR 0007)
+    takes permeability/sigma0/alpha0/kr; `"alipio-visacro"` takes
+    permeability/sigma0. Fields a type does not use stay `None`."""
+
+    conductivity: float | None = None
+    permittivity: float | None = None
+    permeability: float = 1.0
+    type: str = "linear"
+    sigma0: float | None = None
+    alpha0: float | None = None
+    kr: float | None = None
 
 
 @dataclass(frozen=True)
@@ -40,6 +49,33 @@ class LineElement:
     radius: float
     segments: int
     material: str
+
+
+@dataclass(frozen=True)
+class CatenaryElement(LineElement):
+    """A `line` that sags (`"type": "catenary"`, ADR 0023): `sag` is the drop
+    at midspan below the chord (m, negative bows upward). Chain node k of
+    `segments` sits at `P1 + s(P2 - P1) - 4*sag*s*(1 - s)*z`, s = k/segments
+    (theory.md §4.4, `mElementCatenary::nodePositionCatenary`)."""
+
+    sag: float = 0.0
+
+    def chain_points(
+        self, start: tuple[float, float, float], end: tuple[float, float, float]
+    ) -> list[tuple[float, float, float]]:
+        """The `segments + 1` chain-node positions between the end nodes."""
+        n = max(self.segments, 1)
+        points = []
+        for k in range(n + 1):
+            s = k / n
+            points.append(
+                (
+                    start[0] + s * (end[0] - start[0]),
+                    start[1] + s * (end[1] - start[1]),
+                    start[2] + s * (end[2] - start[2]) - 4.0 * self.sag * s * (1.0 - s),
+                )
+            )
+        return points
 
 
 @dataclass(frozen=True)
@@ -131,6 +167,18 @@ class Outputs:
 
 
 @dataclass(frozen=True)
+class PortelaSurge:
+    """Extra fields of `waveform == "portela"` (ADR 0023, theory.md §8):
+    front inclination `alpha` (0 = linear ramp) and the end times of the
+    front, flat top and tail (s)."""
+
+    alpha: float
+    t_front: float
+    t_top_end: float
+    t_tail_end: float
+
+
+@dataclass(frozen=True)
 class Signal:
     """Time-domain excitation spec (ADR 0015) — independent of
     `sources`/`frequencies`; a study may carry either, both, or neither.
@@ -146,6 +194,7 @@ class Signal:
     jones: bool = False
     observe_electrodes: list[str] = field(default_factory=list)
     freq_zero_hz: float = 1.0e-6
+    portela: PortelaSurge | None = None
 
 
 @dataclass
@@ -154,7 +203,7 @@ class Study:
     soil: Soil
     nodes: list[Node] = field(default_factory=list)
     materials: list[Material] = field(default_factory=list)
-    elements: list[LineElement | MeshElement] = field(default_factory=list)
+    elements: list[LineElement | CatenaryElement | MeshElement] = field(default_factory=list)
     sources: list[Source] = field(default_factory=list)
     frequencies: FrequencySweep | None = None
     outputs: Outputs | None = None

@@ -7,6 +7,7 @@ from .loader import (
     load_transient_results,
 )
 from .model import (
+    CatenaryElement,
     ElectrodeCurrent,
     FrequencySweep,
     LineElement,
@@ -15,6 +16,7 @@ from .model import (
     Node,
     NodeVoltage,
     Outputs,
+    PortelaSurge,
     Results,
     Signal,
     Soil,
@@ -26,6 +28,7 @@ from .model import (
 )
 
 __all__ = [
+    "CatenaryElement",
     "ElectrodeCurrent",
     "FrequencySweep",
     "LineElement",
@@ -34,6 +37,7 @@ __all__ = [
     "Node",
     "NodeVoltage",
     "Outputs",
+    "PortelaSurge",
     "Results",
     "ResultsLoadError",
     "Signal",
