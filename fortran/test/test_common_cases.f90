@@ -100,6 +100,9 @@ program test_common_cases
   call compareCase("../common/portela1997.json", "../common/portela1997_expected.csv", "Node_1")
   call compareCase("../common/rod.json", "../common/rod_expected.csv", "Node_1")
   call compareCase("../common/grid.json", "../common/grid_expected.csv", "Node_A")
+  ! Ideal images (numerics.imageModel "ideal", ROADMAP Phase 10 item 2): the
+  ! low-frequency-limit pin; the cases above run the Γ(ω) default
+  call compareCase("../common/portela1997_ideal.json", "../common/portela1997_ideal_expected.csv", "Node_1")
 
   ! Transient fixtures, one per ROADMAP Phase 9 option
   call compareTransientCase("portela1997_transient_interpolated")

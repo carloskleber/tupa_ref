@@ -17,7 +17,7 @@ module mStudy
   use mElement
   use mMaterial
   use mResult
-  use mGeometry, only: buildGeometryMatrices
+  use mGeometry, only: buildGeometryMatrices, setGeometryKernel, getGeometryKernel
   use mGeometryCache, only: geomCacheStats
   use mImpedance, only: internalImpedance, internalImpedanceLaplace
   use mError, only: raiseError
@@ -69,6 +69,19 @@ module mStudy
     !! `runSweep` call, shape (nSources, nFreq) — frequency-dependent for
     !! voltage sources, constant columns for current sources
 
+    integer :: imageModel = 0
+    !! Image reflection model (`IMAGE_FREQ_DEPENDENT` / `IMAGE_IDEAL` of
+    !! mMesh; ROADMAP Phase 10 item 2). 0 = the process default
+    !! (`mMesh%getDefaultImageModel`, frequency-dependent unless `--image-model`).
+    integer :: geometryKernel = 0
+    !! Geometry-factor quadrature (`GEOM_KERNEL_SINGLE`/`_DOUBLE` of
+    !! mGeometry; ROADMAP Phase 10 item 1). 0 = the process default
+    !! (`mGeometry%getGeometryKernel`, the single-integral form unless
+    !! `--kernel double`).
+    real(8) :: maxSegmentLength = 0.0d0
+    !! Per-study segment-length target (m), ROADMAP Phase 10 item 3; 0 = none
+    !! (each element keeps its own `segments` count). Applied while loading.
+
     logical :: prepared = .false.
     !! Set once assembly and geometry-factor computation have run (theory.md
     !! §4.1: these are frequency-independent and computed only once, even
@@ -109,7 +122,7 @@ contains
     !! calls across a frequency sweep do not redo the assembly or the O(n²)
     !! quadrature.
     class(tStudy), intent(inout) :: this
-    integer(4) :: nno, nseg, i
+    integer(4) :: nno, nseg, i, kernelDefault
     integer(4), allocatable :: n1(:), n2(:)
     real(8), allocatable :: p1(:,:), p2(:,:)
 
@@ -140,9 +153,15 @@ contains
     allocate(this%geomRbar(nseg,nseg),     this%geomRbari(nseg,nseg))
     allocate(this%geomCosTheta(nseg,nseg), this%geomCosThetaI(nseg,nseg))
 
+    ! The study's own kernel, if it states one, applies only to its geometry
+    ! build: the process default is restored afterwards so studies do not leak
+    ! into each other.
+    kernelDefault = getGeometryKernel()
+    if (this%geometryKernel /= 0) call setGeometryKernel(this%geometryKernel)
     call buildGeometryMatrices(p1, p2, this%geomRadius, nseg, &
       this%geomG, this%geomGi, this%geomRbar, this%geomRbari, &
       this%geomCosTheta, this%geomCosThetaI, pos=this%geomPos)
+    if (this%geometryKernel /= 0) call setGeometryKernel(kernelDefault)
 
     if (verbosityLevel() .eq. VERB_VERBOSE) then
       block
@@ -259,6 +278,7 @@ contains
     ! whichever concrete model (tLinear, tPortelaSoil, ...) is stored, so any
     ! dispersive soil (ROADMAP Phase 4, ADR 0007) works here without a
     ! type-specific branch.
+    this%mesh%imageModel = this%imageModel
     if (laplace) then
       call calcParamLaplace(this%mesh, sLap, muAir, this%structure%air%admittanceLaplace(sLap), &
                              muSoil, this%structure%soil%admittanceLaplace(sLap))

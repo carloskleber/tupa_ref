@@ -4,6 +4,7 @@ program test_geometry
   use mCtes
   use mGeometry
   use mImpedance, only: internalImpedance, setQuadEpsRel, getQuadEpsRel
+  use mImpedance, only: geometryFactor1D, geometryFactor2D
   use mGeometryCache, only: geomCacheClear, geomCacheStats, geomCacheSetEnabled
   use check
   implicit none
@@ -228,6 +229,9 @@ program test_geometry
   ! machine precision even at epsrel=1e-1, so it is not repeated here.
   ! ----------------------------------------------------------------
   call test_init("Quadrature tolerance sweep vs closed form (testesIntegralxAnalitica.m INT_TOL sweep)")
+  ! These sweeps characterise the nested 2-D quadrature (the default
+  ! kernel is the 1-D mHEM form since Phase 10 item 1).
+  call setGeometryKernel(GEOM_KERNEL_DOUBLE)
 
   block
     real(8) :: epsrel(4), err(4), gTol
@@ -301,6 +305,8 @@ program test_geometry
                  getQuadEpsRel() == 1.0d-6, &
                  "the sweep must leave global quadrature state as it found it for later tests")
   end block
+
+  call setGeometryKernel(GEOM_KERNEL_SINGLE)
 
   ! ----------------------------------------------------------------
   ! Direction cosines, including image (z-flip)
@@ -475,6 +481,7 @@ program test_geometry
   ! Quadrature tolerance control (CLI --epsrel -> setQuadEpsRel)
   ! ----------------------------------------------------------------
   call test_init("setQuadEpsRel controls the geometryFactor2D tolerance")
+  call setGeometryKernel(GEOM_KERNEL_DOUBLE)
 
   block
     real(8) :: gTight, gLoose
@@ -500,6 +507,36 @@ program test_geometry
     call test_ok("loose-tolerance result stays within its own tolerance", &
                  abs(gLoose - gTight) < 1.0d-2 * abs(gTight), &
                  "epsrel = 1e-2 quadrature strayed more than 1e-2 from the tight result")
+  end block
+  call setGeometryKernel(GEOM_KERNEL_SINGLE)
+
+  ! ----------------------------------------------------------------
+  ! mHEM single-integral kernel vs the 2-D oracle (ROADMAP Phase 10 item 1)
+  ! ----------------------------------------------------------------
+  call test_init("geometryFactor1D (mHEM single integral) vs 2-D quadrature oracle")
+
+  block
+    ! Perpendicular, skew, touching (T and L junctions), close, far, image-like
+    call kernelPair("perpendicular, separated", [0d0,0d0,0d0], [1d0,0d0,0d0], [2d0,1d0,0d0], [2d0,1d0,1d0], 1d-8)
+    call kernelPair("skew 3-D, general position", [0d0,0d0,0d0], [3d0,1d0,0.5d0], [1d0,2d0,-1d0], [2.5d0,-1d0,1.5d0], 1d-8)
+    call kernelPair("L junction (touching end to end)", [0d0,0d0,0d0], [2d0,0d0,0d0], [2d0,0d0,0d0], [2d0,3d0,0d0], 1d-5)
+    call kernelPair("thin: close non-parallel (offset 1e-3)", [0d0,0d0,0d0], [1d0,0d0,0d0], [0.5d0,1d-3,0d0], [0.5d0,1d0,0d0], 1d-6)
+    call kernelPair("buried segment vs mirror image (z flip)", [0d0,0d0,-0.5d0], [1d0,0d0,-1.5d0], [0d0,0d0,0.5d0], [1d0,0d0,1.5d0], 1d-8)
+    call kernelPair("far apart", [0d0,0d0,0d0], [1d0,0d0,0d0], [50d0,40d0,10d0], [52d0,40d0,12d0], 1d-9)
+  end block
+
+  ! T junction (b starts at the midpoint of a, perpendicular): the field
+  ! point on a passes through b's end, so the integrand's log singularity
+  ! sits inside the integration range. Exact value:
+  !   g = 2 * int_0^1 asinh(2/u) du = 2 (asinh 2 + 2 asinh 0.5)
+  block
+    real(8) :: gT, gExact
+
+    gExact = 2d0 * (asinh(2d0) + 2d0 * asinh(0.5d0))
+    call geometryFactor1D([0d0, 0d0, 0d0], [1d0, 0d0, 0d0], 2d0, &
+                          [1d0, 0d0, 0d0], [0d0, 0d0, -1d0], 2d0, gT)
+    call test_ok("T junction (singularity inside the range): 1-D matches the exact value to 1e-6", &
+                 abs(gT - gExact) < 1d-6 * gExact, "1-D kernel does not resolve the interior end-point singularity")
   end block
 
   ! ----------------------------------------------------------------
@@ -532,5 +569,24 @@ program test_geometry
                "internal impedance must be dissipative")
 
   call test_summary()
+
+contains
+
+  subroutine kernelPair(label, pa1, pa2, pb1, pb2, tol)
+    !! Compare the 1-D kernel with the 2-D oracle (tight epsrel) on a pair.
+    character(len=*), intent(in) :: label
+    real(8), intent(in) :: pa1(3), pa2(3), pb1(3), pb2(3), tol
+    real(8) :: va(3), vb(3), la, lb, g1, g2, epsOld
+
+    call segmentVector(pa1, pa2, va, la)
+    call segmentVector(pb1, pb2, vb, lb)
+    epsOld = getQuadEpsRel()
+    call setQuadEpsRel(1.0d-12)
+    call geometryFactor1D(pa1, va, la, pb1, vb, lb, g1)
+    call geometryFactor2D(pa1, va, la, pb1, vb, lb, g2)
+    call setQuadEpsRel(epsOld)
+    call test_ok(trim(label) // ": 1-D matches 2-D oracle", &
+                 abs(g1 - g2) <= tol * abs(g2), "1-D and 2-D geometry factors disagree")
+  end subroutine kernelPair
 
 end program test_geometry

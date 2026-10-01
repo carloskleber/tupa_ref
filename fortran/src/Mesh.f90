@@ -34,6 +34,18 @@ module mMesh
     end subroutine zgesv
   end interface
 
+  integer, parameter :: IMAGE_FREQ_DEPENDENT = 1
+  !! Image reflection coefficient Γ(ω) = (W_own − W_other)/(W_own + W_other),
+  !! the quasi-static Fresnel form of the original Matlab default mode
+  !! (theory.md §5, ADR 0017 finding 1; ROADMAP Phase 10 item 2). Default.
+  integer, parameter :: IMAGE_IDEAL = 2
+  !! Ideal images, Γ = +1 for conductors in soil and −1 in air: the
+  !! |W_own| ≫ |W_other| limit of the above (the Matlab `SOLO_IDEAL`
+  !! switch); the low-frequency limit and the pre-Phase-10 behaviour.
+
+  integer, save :: defaultImageModel = IMAGE_FREQ_DEPENDENT
+  !! Image model for meshes that do not state one (CLI `--image-model`).
+
   type :: tMesh
     !! Discretised electromagnetic mesh for frequency-domain HEM solution.
 
@@ -83,6 +95,15 @@ module mMesh
     complex(8) :: propSoil
     !! Propagation constant for soil
 
+    ! Image reflection coefficients (theory.md §5), set by calcParamW /
+    ! calcParamLaplace from the media immittances
+    integer :: imageModel = 0
+    !! `IMAGE_FREQ_DEPENDENT` or `IMAGE_IDEAL`; 0 = use `defaultImageModel`
+    complex(8) :: gammaAir = (-1.0d0, 0.0d0)
+    !! Reflection coefficient of the image of a segment in air (ideal: −1)
+    complex(8) :: gammaSoil = (1.0d0, 0.0d0)
+    !! Reflection coefficient of the image of a segment in soil (ideal: +1)
+
     ! Problem dimensions
     integer(4) :: nno
     !! Number of nodes
@@ -91,6 +112,44 @@ module mMesh
   end type tMesh
 
 contains
+
+  ! =====================================================================
+  ! Image model selection (ROADMAP Phase 10 item 2)
+  ! =====================================================================
+
+  subroutine setDefaultImageModel(model)
+    !! Set the image model used by meshes that do not state one.
+    integer, intent(in) :: model
+
+    if (model /= IMAGE_FREQ_DEPENDENT .and. model /= IMAGE_IDEAL) return
+    defaultImageModel = model
+  end subroutine setDefaultImageModel
+
+  integer function getDefaultImageModel() result(model)
+    model = defaultImageModel
+  end function getDefaultImageModel
+
+  subroutine calcImageCoefficients(mesh)
+    !! Set `gammaAir`/`gammaSoil` from the current `cEAir`/`cESoil`.
+    !!
+    !! With cE = 1/(4π W): Γ_own = (W_own − W_other)/(W_own + W_other) =
+    !! (cE_other − cE_own)/(cE_other + cE_own). For a segment in soil and a
+    !! soil with σ ≫ ωε0 this is +1, for one in air above conducting soil −1:
+    !! the ideal rule of theory.md §5 as the limit. Applied to the image
+    !! parcels of both Z_t and Z_ℓ, as the original Matlab does.
+    type(tMesh), intent(inout) :: mesh
+    integer :: model
+
+    model = mesh%imageModel
+    if (model == 0) model = defaultImageModel
+    if (model == IMAGE_IDEAL) then
+      mesh%gammaAir  = cmplx(-1.0d0, 0.0d0, kind=8)
+      mesh%gammaSoil = cmplx( 1.0d0, 0.0d0, kind=8)
+    else
+      mesh%gammaAir  = (mesh%cESoil - mesh%cEAir) / (mesh%cESoil + mesh%cEAir)
+      mesh%gammaSoil = (mesh%cEAir - mesh%cESoil) / (mesh%cEAir + mesh%cESoil)
+    end if
+  end subroutine calcImageCoefficients
 
   ! =====================================================================
   ! Memory allocation and initialisation
@@ -197,6 +256,7 @@ contains
     ! theory.md §2: gamma = sqrt(j*omega*mu*W), Re(gamma) >= 0
     mesh%propAir  = sqrt(cmplx(0.0d0, omega, kind=8) * muAir  * Wair)
     mesh%propSoil = sqrt(cmplx(0.0d0, omega, kind=8) * muSoil * Wsoil)
+    call calcImageCoefficients(mesh)
   end subroutine calcParamW
 
   subroutine calcParamLaplace(mesh, s, muAir, Wair, muSoil, Wsoil)
@@ -217,6 +277,7 @@ contains
     mesh%cMSoil = s * (muSoil / FOUR_PI)
     mesh%propAir  = sqrt(s * muAir  * Wair)
     mesh%propSoil = sqrt(s * muSoil * Wsoil)
+    call calcImageCoefficients(mesh)
   end subroutine calcParamLaplace
 
   ! =====================================================================
@@ -257,7 +318,8 @@ contains
     !! of the image, 1/l² length normalisation) are applied HERE; callers pass
     !! the raw outputs of mGeometry%buildGeometryMatrices. The direct-term
     !! direction cosine is identically 1 for a segment against itself.
-    !! Image sign: "-" in air, "+" in soil (theory.md §5).
+    !! Image factor `s`: the reflection coefficient Γ of the
+    !! image (`gammaAir`/`gammaSoil`; ideal limit −1 in air, +1 in soil, theory.md §5).
     integer(4), intent(in) :: i, pos
     !! 1-based segment index and position (1 = air, 2 = soil)
     real(8), intent(in) :: d
@@ -275,13 +337,12 @@ contains
     complex(8), intent(in) :: zint
     !! Internal (skin-effect) impedance of the segment
     type(tMesh), intent(inout) :: mesh
-    complex(8) :: prop, cE, cM, fprop, fpropi
-    real(8) :: s
+    complex(8) :: prop, cE, cM, fprop, fpropi, s
 
     if (pos == 1) then
-      prop = mesh%propAir; cE = mesh%cEAir;  cM = mesh%cMAir;  s = -1.0d0
+      prop = mesh%propAir; cE = mesh%cEAir;  cM = mesh%cMAir;  s = mesh%gammaAir
     else
-      prop = mesh%propSoil; cE = mesh%cESoil; cM = mesh%cMSoil; s = +1.0d0
+      prop = mesh%propSoil; cE = mesh%cESoil; cM = mesh%cMSoil; s = mesh%gammaSoil
     end if
     fprop  = exp(-d  * prop)
     fpropi = exp(-di * prop)
@@ -304,8 +365,8 @@ contains
     !!
     !! All theory factors (propagation at the mean distances, direction
     !! cosines, 1/(la·lb) length normalisation) are applied HERE; callers pass
-    !! the raw outputs of mGeometry%buildGeometryMatrices. Image sign: "-"
-    !! both in air, "+" both in soil; mixed-media pairs are neglected (zero),
+    !! the raw outputs of mGeometry%buildGeometryMatrices. Image factor
+    !! Γ = `gammaAir` both in air, `gammaSoil` both in soil (ideal limits −1/+1); mixed-media pairs are neglected (zero),
     !! per theory.md §5 / ADR 0005.
     integer(4), intent(in), value :: i, j, pos1, pos2
     !! 1-based segment indices, positions (1 = air, 2 = soil)
@@ -318,14 +379,13 @@ contains
     real(8), intent(in), value :: cosTheta, cosThetaI
     !! Direction cosines, direct and against the image of segment j
     type(tMesh), intent(inout) :: mesh
-    complex(8) :: prop, cE, cM, fprop, fpropi, zt, zl
-    real(8) :: s
+    complex(8) :: prop, cE, cM, fprop, fpropi, zt, zl, s
 
     if (pos1 == pos2) then
       if (pos1 == 1) then
-        prop = mesh%propAir; cE = mesh%cEAir;  cM = mesh%cMAir;  s = -1.0d0
+        prop = mesh%propAir; cE = mesh%cEAir;  cM = mesh%cMAir;  s = mesh%gammaAir
       else
-        prop = mesh%propSoil; cE = mesh%cESoil; cM = mesh%cMSoil; s = +1.0d0
+        prop = mesh%propSoil; cE = mesh%cESoil; cM = mesh%cMSoil; s = mesh%gammaSoil
       end if
       fprop  = exp(-d  * prop)
       fpropi = exp(-di * prop)

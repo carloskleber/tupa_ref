@@ -99,7 +99,7 @@ module mImpedance
   integer, parameter :: igauss(7) = [2, 4, 6, 8, 10, 12, 14]
   !! Indices in xgk/wgk that correspond to the 7-point Gauss rule
 
-  public :: geometryFactor2D, inverseDistanceIntegrand, lowerLimit, upperLimit, TWODQ, internalImpedance, internalImpedanceLaplace
+  public :: geometryFactor2D, geometryFactor1D, inverseDistanceIntegrand, lowerLimit, upperLimit, TWODQ, internalImpedance, internalImpedanceLaplace
   public :: setQuadEpsRel, getQuadEpsRel
 
 contains
@@ -243,6 +243,84 @@ contains
     errrel = dmin1(la, lb) * quadEpsRel
     call TWODQ(inverseDistanceIntegrand, 0.0d0, la, lowerLimit, upperLimit, errabs, errrel, res, errest)
   end subroutine geometryFactor2D
+
+
+  subroutine geometryFactor1D(za1, zva, zla, zb1, zvb, zlb, res)
+    !! Geometry factor g(a,b) by the single-integral (mHEM) form of theory.md
+    !! §4.2, ROADMAP Phase 10 item 1. The inner integral over segment b is
+    !! taken in closed form,
+    !!
+    !!     ∫ dl_b / R = ln( (r1 + r2 + lb) / (r1 + r2 - lb) ),
+    !!
+    !! with r1, r2 the distances from the field point on a to the two ends of
+    !! b, leaving one adaptive Gauss-Kronrod integral over a. Same quantity as
+    !! `geometryFactor2D` (kept as the test oracle); the integrand is smooth
+    !! unless the segments touch, where it has an integrable logarithmic
+    !! end-point singularity that the bisection resolves.
+    !!
+    !! Re-entrant: all state lives in locals and an internal procedure, so it
+    !! may be called from concurrent threads (unlike `geometryFactor2D`, which
+    !! stores its state in module variables and a COMMON block).
+    !!
+    !! The relative tolerance is `quadEpsRel` itself — not scaled by the
+    !! shorter segment as in the 2-D path, whose scaling compensated for the
+    !! nested-integration error accumulation the 1-D path does not have.
+    real(8), intent(in) :: za1(:)
+    !! Starting point of the first segment (m)
+    real(8), intent(in) :: zva(3)
+    !! Unit direction vector of the first segment
+    real(8), intent(in) :: zla
+    !! Length of the first segment (m)
+    real(8), intent(in) :: zb1(:)
+    !! Starting point of the second segment (m)
+    real(8), intent(in) :: zvb(3)
+    !! Unit direction vector of the second segment
+    real(8), intent(in) :: zlb
+    !! Length of the second segment (m)
+    real(8), intent(out) :: res
+    !! Result: the geometry factor g(a,b) (m)
+    real(8) :: a1(3), b1(3), va(3), vb(3), b2(3), err
+
+    a1 = za1(1:3)
+    b1 = zb1(1:3)
+    va = zva
+    vb = zvb
+    b2 = b1 + zlb * vb
+    call dqag_k15(innerClosedForm, 0.0d0, zla, 0.0d0, quadEpsRel, res, err)
+
+  contains
+
+    real(8) function innerClosedForm(x)
+      !! ∫ dl_b / R from the field point a1 + x·va, closed form.
+      real(8), intent(in) :: x
+      real(8) :: w(3), s, r1, r2, rho2, diff, den1, den2
+
+      w = a1 + va * x - b1
+      r1 = norm2(w)
+      r2 = norm2(a1 + va * x - b2)
+      s = dot_product(w, vb)
+      if (s >= 0.0d0 .and. s <= zlb) then
+        ! r1 + r2 - lb written without cancellation (field point alongside b):
+        ! r1 - s = rho²/(r1 + s) and r2 - (lb - s) = rho²/(r2 + lb - s)
+        den1 = r1 + s
+        den2 = r2 + zlb - s
+        if (den1 > 0.0d0 .and. den2 > 0.0d0) then
+          rho2 = max(0.0d0, dot_product(w, w) - s * s)
+          diff = rho2 * (1.0d0 / den1 + 1.0d0 / den2)
+        else
+          diff = 0.0d0
+        end if
+      else
+        diff = r1 + r2 - zlb
+      end if
+      ! The field point lying exactly on b (an end point shared by touching
+      ! segments) makes the integrand +Inf on that single point; clamp, written
+      ! without NaN-dependent comparisons (the release build uses -ffast-math),
+      ! so one quadrature node cannot poison the sum — the bisection then moves
+      ! the singular point to an interval end.
+      innerClosedForm = log((r1 + r2 + zlb) / max(diff, 1.0d-300))
+    end function innerClosedForm
+  end subroutine geometryFactor1D
 
   ! =====================================================================
   ! Integration kernel (integrand and integration limits)

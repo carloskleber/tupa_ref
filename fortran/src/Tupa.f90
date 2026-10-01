@@ -35,6 +35,8 @@ module tupa
   !!
   !! Future versions will add tCircumference, tTower.
   use mStudy
+  use mMesh, only: IMAGE_FREQ_DEPENDENT, IMAGE_IDEAL
+  use mGeometry, only: GEOM_KERNEL_SINGLE, GEOM_KERNEL_DOUBLE
   use mNode
   use mMaterial
   use mElementLine
@@ -54,6 +56,40 @@ module tupa
   public :: loadStudy, runFromFile, runStudyFromFile, validateStudyReferences
 
 contains
+
+  ! =====================================================================
+  ! Segmentation helpers (ROADMAP Phase 10 item 3)
+  ! =====================================================================
+
+  function nodeDistance(study, idA, idB) result(d)
+    !! Chord length between two already-loaded boundary nodes (m); 0 when
+    !! either is unknown (the element's own reference check reports that).
+    type(tStudy), intent(in) :: study
+    character(len=*), intent(in) :: idA, idB
+    real(8) :: d
+    integer :: ia, ib
+
+    d = 0.0d0
+    ia = study%structure%findNodeIndex(trim(idA))
+    ib = study%structure%findNodeIndex(trim(idB))
+    if (ia == 0 .or. ib == 0) return
+    d = norm2(study%structure%nodes(ia)%p - study%structure%nodes(ib)%p)
+  end function nodeDistance
+
+  integer function readSegments(elemObj, maxLen, length) result(n)
+    !! Segment count of one element: the explicit `segments` field (default
+    !! 1 when absent), raised to ceil(length / maxLen) when the study carries
+    !! a `numerics.maxSegmentLength` target — the target only ever refines.
+    type(tJsonValue), pointer, intent(in) :: elemObj
+    real(8), intent(in) :: maxLen
+    !! Study segment-length target (m); 0 = none
+    real(8), intent(in) :: length
+    !! Element length (m)
+
+    n = 1
+    if (json_has(elemObj, "segments")) n = json_int(elemObj, "segments")
+    if (maxLen > 0.0d0 .and. length > 0.0d0) n = max(n, ceiling(length / maxLen - 1.0d-9))
+  end function readSegments
 
   ! =====================================================================
   ! JSON parsing and study loading
@@ -146,7 +182,7 @@ contains
     type(tJsonValue), pointer :: sources_arr, src_obj, current_obj
     type(tJsonValue), pointer :: freq_obj, outputs_obj, strArr
     !! Pointers for the sources/frequencies/outputs blocks (ADR 0013)
-    type(tJsonValue), pointer :: signal_obj
+    type(tJsonValue), pointer :: signal_obj, numerics_obj
     !! Pointer for the "signal" block (ADR 0015)
     class(tMaterial), allocatable :: mat
     !! Temporary material object for adding to structure
@@ -156,7 +192,8 @@ contains
     !! Loop indices, segment count, and "mesh" row/column counts
     character(len=256) :: id, from_id, to_id, mat_id, elem_type
     !! String fields from JSON: identifiers and element type
-    real(8) :: x, y, z, radius, sigma, epsr, mur_val, lengthX, lengthY
+    real(8) :: x, y, z, radius, sigma, epsr, mur_val, lengthX, lengthY, segLen, sag
+    integer :: idxA, idxB
     !! Geometric and material parameters
 
     call parseJsonFile(filename, root)
@@ -190,6 +227,45 @@ contains
                        "' (expected linear, portela or alipio-visacro)")
       return
     end select
+
+    ! Optional numerics block (ADR 0024, ROADMAP Phase 10): kernel, image
+    ! model and the segment-length target. Parsed before the elements, whose
+    ! segment counts the target can raise.
+    if (json_has(root, "numerics")) then
+      numerics_obj => json_child(root, "numerics")
+      if (json_has(numerics_obj, "kernel")) then
+        elem_type = json_str(numerics_obj, "kernel")
+        select case (trim(elem_type))
+        case ("single")
+          study%geometryKernel = GEOM_KERNEL_SINGLE
+        case ("double")
+          study%geometryKernel = GEOM_KERNEL_DOUBLE
+        case default
+          call raiseError("mTupa: unknown numerics.kernel '" // trim(elem_type) // "' (expected single or double)")
+          return
+        end select
+      end if
+      if (json_has(numerics_obj, "imageModel")) then
+        elem_type = json_str(numerics_obj, "imageModel")
+        select case (trim(elem_type))
+        case ("frequency-dependent")
+          study%imageModel = IMAGE_FREQ_DEPENDENT
+        case ("ideal")
+          study%imageModel = IMAGE_IDEAL
+        case default
+          call raiseError("mTupa: unknown numerics.imageModel '" // trim(elem_type) // &
+                          "' (expected frequency-dependent or ideal)")
+          return
+        end select
+      end if
+      if (json_has(numerics_obj, "maxSegmentLength")) then
+        study%maxSegmentLength = json_real(numerics_obj, "maxSegmentLength")
+        if (study%maxSegmentLength <= 0.0d0) then
+          call raiseError("mTupa: numerics.maxSegmentLength must be positive")
+          return
+        end if
+      end if
+    end if
 
     if (json_has(root, "nodes")) then
       nodes_arr => json_child(root, "nodes")
@@ -231,7 +307,7 @@ contains
           from_id = json_str(elem_obj, "from")
           to_id   = json_str(elem_obj, "to")
           radius  = json_real(elem_obj, "radius")
-          nseg    = json_int(elem_obj, "segments")
+          nseg    = readSegments(elem_obj, study%maxSegmentLength, nodeDistance(study, from_id, to_id))
           mat_id  = json_str(elem_obj, "material")
           elem = newElementLine(trim(id), trim(from_id), trim(to_id), &
                                 radius, nseg, trim(mat_id))
@@ -241,10 +317,14 @@ contains
           from_id = json_str(elem_obj, "from")
           to_id   = json_str(elem_obj, "to")
           radius  = json_real(elem_obj, "radius")
-          nseg    = json_int(elem_obj, "segments")
+          sag     = json_real(elem_obj, "sag")
+          segLen  = nodeDistance(study, from_id, to_id)
+          ! parabolic arc length: c + 8 s² / (3 c) (theory.md §4.4)
+          if (segLen > 0.0d0) segLen = segLen + 8.0d0 * sag * sag / (3.0d0 * segLen)
+          nseg    = readSegments(elem_obj, study%maxSegmentLength, segLen)
           mat_id  = json_str(elem_obj, "material")
           elem = newElementCatenary(trim(id), trim(from_id), trim(to_id), &
-                                    json_real(elem_obj, "sag"), radius, nseg, trim(mat_id))
+                                    sag, radius, nseg, trim(mat_id))
           call study%structure%addElement(elem)
         case ("mesh")
           id       = json_str(elem_obj, "id")
@@ -257,7 +337,9 @@ contains
           rowsX    = json_int(elem_obj, "rowsX")
           rowsY    = json_int(elem_obj, "rowsY")
           radius   = json_real(elem_obj, "radius")
-          nseg     = json_int(elem_obj, "segments")
+          ! One count serves every bar, so the longest bar sets the target
+          nseg     = readSegments(elem_obj, study%maxSegmentLength, &
+                                  max(lengthX / real(max(rowsX, 1), kind=8), lengthY / real(max(rowsY, 1), kind=8)))
           mat_id   = json_str(elem_obj, "material")
           elem = newElementMesh(trim(id), [x, y, z], lengthX, lengthY, rowsX, rowsY, &
                                 radius, nseg, trim(mat_id))
