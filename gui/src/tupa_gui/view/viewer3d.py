@@ -13,11 +13,11 @@ from dataclasses import dataclass
 from PySide6.Qt3DCore import Qt3DCore
 from PySide6.Qt3DExtras import Qt3DExtras
 from PySide6.Qt3DRender import Qt3DRender
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QEvent, QPointF, Qt, Signal
 from PySide6.QtGui import QColor, QQuaternion, QVector3D
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
-from tupa_gui.data import CatenaryElement, LineElement, MeshElement, Study
+from tupa_gui.data import CatenaryElement, ChannelElement, LineElement, MeshElement, Study
 
 # theory.md §2: right-handed, z up, air-soil interface at z = 0.
 # Qt3D's convention is y-up; map study (x, y, z) -> Qt3D (x, z, y) so the
@@ -27,6 +27,16 @@ def _to_qt3d(position: tuple[float, float, float]) -> QVector3D:
     x, y, z = position
     return QVector3D(x, z, y)
 
+
+def _from_qt3d(v: QVector3D) -> tuple[float, float, float]:
+    return (v.x(), v.z(), v.y())
+
+
+# Cursor travel (px) between press and release beyond which a gesture is a drag, not a click.
+DRAG_THRESHOLD_PX = 4
+
+CHANNEL_COLOR = QColor(170, 215, 255)
+CHANNEL_HALO_COLOR = QColor(90, 150, 255)
 
 NODE_COLOR = QColor(255, 205, 60)
 CONDUCTOR_COLOR = QColor(200, 120, 60)
@@ -57,6 +67,9 @@ class _Highlightable:
 
     materials: list[Qt3DExtras.QPhongMaterial]
     base_color: QColor
+    emissive: bool = False
+    """Glowing entity (the channel): its ambient term tracks the diffuse one, else the
+    full-strength ambient glow would hide the red selection highlight."""
 
 
 class GeometryViewer(QWidget):
@@ -81,6 +94,15 @@ class GeometryViewer(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(container)
+
+        # Qt3D's pickers fire `clicked` on the release of a drag too, and a pick
+        # re-centres the orbit on the picked object: panning or orbiting with
+        # the cursor over any conductor (the kilometre-long channel, say) snapped
+        # the view back to it on release. Track the press-to-release travel and
+        # let `_on_*_picked` ignore gestures that were drags.
+        self._press_pos: QPointF | None = None
+        self._dragged = False
+        self._window.installEventFilter(self)
 
         self._camera = self._window.camera()
         # Reposition node-id labels whenever the camera moves (orbit/pan/zoom
@@ -162,6 +184,18 @@ class GeometryViewer(QWidget):
                 for node_id, position in element.node_positions().items():
                     node_positions[node_id] = _to_qt3d(position)
 
+        # A ChannelElement (ADR 0025) plants `<id>-base` (coincident with the
+        # strike node) and `<id>-top`; the intermediate nodes are not drawn.
+        for element in study.elements:
+            if isinstance(element, ChannelElement):
+                foot = element.position
+                if element.strike is not None:
+                    foot = _from_qt3d(node_positions[element.strike]) if element.strike in node_positions else None
+                if foot is None:
+                    continue
+                for node_id, position in element.end_positions(foot).items():
+                    node_positions[node_id] = _to_qt3d(position)
+
         positions = list(node_positions.values())
         extent = max((v.length() for v in positions), default=1.0)
         extent = max(extent, 1.0)
@@ -203,6 +237,15 @@ class GeometryViewer(QWidget):
                 entry = self._add_conductor(root, scene, a, b, element.radius, min_visible_radius, element.id)
                 if entry is not None:
                     element_entries[element.id] = entry
+                element_centers[element.id] = (a + b) * 0.5
+            elif isinstance(element, ChannelElement):
+                # One glowing line from base to top; the solver's graded chain is not expanded.
+                a, b = node_positions.get(element.base_id), node_positions.get(element.top_id)
+                if a is None or b is None:
+                    continue
+                element_entries[element.id] = self._add_glowing_segment(
+                    root, scene, a, b, min_visible_radius, element.id
+                )
                 element_centers[element.id] = (a + b) * 0.5
             else:  # MeshElement (ADR 0020) — one cylinder per bar, all sharing the element's ID
                 materials: list[Qt3DExtras.QPhongMaterial] = []
@@ -275,12 +318,16 @@ class GeometryViewer(QWidget):
         if self._highlighted is not None:
             for material in self._highlighted.materials:
                 material.setDiffuse(self._highlighted.base_color)
+                if self._highlighted.emissive:
+                    material.setAmbient(self._highlighted.base_color)
             self._highlighted = None
 
     def _set_highlight(self, entry: _Highlightable) -> None:
         self.clear_highlight()
         for material in entry.materials:
             material.setDiffuse(HIGHLIGHT_COLOR)
+            if entry.emissive:
+                material.setAmbient(HIGHLIGHT_COLOR)
         self._highlighted = entry
 
     def _focus_camera(self, target: QVector3D) -> None:
@@ -458,6 +505,54 @@ class GeometryViewer(QWidget):
         scene += [entity, mesh, material, transform, picker]
         return _Highlightable([material], CONDUCTOR_COLOR)
 
+    def _add_glowing_segment(
+        self,
+        root: Qt3DCore.QEntity,
+        scene: list[object],
+        a: QVector3D,
+        b: QVector3D,
+        core_radius: float,
+        element_id: str,
+    ) -> _Highlightable:
+        """A glowing line, for the lightning channel (ADR 0025): a bright pickable core whose
+        ambient term equals its diffuse one (lit regardless of the light), wrapped in two
+        translucent, non-pickable halos. The core radius is the scene's conductor floor, so the
+        channel's physical radius (centimetres on a kilometre) never decides its look."""
+        direction = b - a
+        length = direction.length()
+        rotation = self._align_to_direction(direction)
+        center = (a + b) * 0.5
+
+        def cylinder(radius: float, material_type, pickable: bool) -> Qt3DExtras.QPhongMaterial:
+            entity = Qt3DCore.QEntity(root)
+            mesh = Qt3DExtras.QCylinderMesh(entity)
+            mesh.setRadius(radius)
+            mesh.setLength(length)
+            material = material_type(entity)
+            transform = Qt3DCore.QTransform(entity)
+            transform.setRotation(rotation)
+            transform.setTranslation(center)
+            entity.addComponent(mesh)
+            entity.addComponent(material)
+            entity.addComponent(transform)
+            scene.extend([entity, mesh, material, transform])
+            if pickable:
+                picker = Qt3DRender.QObjectPicker(entity)
+                picker.clicked.connect(lambda _event, eid=element_id: self._on_element_picked(eid))
+                entity.addComponent(picker)
+                scene.append(picker)
+            return material
+
+        for scale, alpha in ((6.0, 0.10), (3.0, 0.22)):
+            halo = cylinder(core_radius * scale, Qt3DExtras.QPhongAlphaMaterial, False)
+            halo.setAlpha(alpha)
+            halo.setDiffuse(CHANNEL_HALO_COLOR)
+            halo.setAmbient(CHANNEL_HALO_COLOR)
+        core = cylinder(core_radius, Qt3DExtras.QPhongMaterial, True)
+        core.setDiffuse(CHANNEL_COLOR)
+        core.setAmbient(CHANNEL_COLOR)
+        return _Highlightable([core], CHANNEL_COLOR, emissive=True)
+
     @staticmethod
     def _align_to_direction(direction: QVector3D) -> QQuaternion:
         """Rotation taking a mesh built along +Y onto `direction` (QCylinderMesh/QConeMesh convention)."""
@@ -616,10 +711,25 @@ class GeometryViewer(QWidget):
             self._add_plain_cylinder(root, scene, shaft_end, head_base, shaft_radius, INJECTION_COLOR)
             self._add_cone(root, scene, tip, head_base, head_radius, INJECTION_COLOR)
 
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802 (Qt override)
+        if watched is self._window:
+            kind = event.type()
+            if kind == QEvent.Type.MouseButtonPress:
+                self._press_pos = event.position()
+                self._dragged = False
+            elif kind == QEvent.Type.MouseMove and self._press_pos is not None:
+                if (event.position() - self._press_pos).manhattanLength() > DRAG_THRESHOLD_PX:
+                    self._dragged = True
+        return False  # never consume: the camera controller needs every event
+
     def _on_node_picked(self, node_id: str) -> None:
+        if self._dragged:
+            return
         self.highlight_node(node_id)
         self.nodeClicked.emit(node_id)
 
     def _on_element_picked(self, element_id: str) -> None:
+        if self._dragged:
+            return
         self.highlight_element(element_id)
         self.elementClicked.emit(element_id)

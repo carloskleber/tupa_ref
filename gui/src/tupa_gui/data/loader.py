@@ -13,6 +13,7 @@ from .model import (
     Excitation,
     FrequencySweep,
     CatenaryElement,
+    ChannelElement,
     HeidlerTerm,
     LineElement,
     Material,
@@ -130,7 +131,7 @@ def load_study(path: str | Path) -> Study:
     except KeyError as exc:
         raise StudyLoadError(f"{path}: missing required field {exc}") from exc
 
-    elements: list[LineElement | CatenaryElement | MeshElement] = []
+    elements: list[LineElement | CatenaryElement | MeshElement | ChannelElement] = []
     for e in raw.get("elements", []):
         etype = e.get("type")
         if etype == "line":
@@ -170,6 +171,26 @@ def load_study(path: str | Path) -> Study:
                     radius=e["radius"],
                     segments=e.get("segments", 1),
                     material=e["material"],
+                )
+            )
+        elif etype == "channel":
+            elements.append(
+                ChannelElement(
+                    id=e["id"],
+                    length=e["length"],
+                    radius=e["radius"],
+                    strike=e.get("strike"),
+                    position=tuple(e["position"]) if "position" in e else None,
+                    incidence=e.get("incidence", 0.0),
+                    azimuth=e.get("azimuth", 0.0),
+                    segments=e.get("segments"),
+                    first_segment=e.get("firstSegment"),
+                    growth=e.get("growth"),
+                    max_segment=e.get("maxSegment"),
+                    speed=e.get("speed"),
+                    inductance=e.get("inductance"),
+                    resistance=e.get("resistance"),
+                    calibrate=e.get("calibrate", False),
                 )
             )
         else:

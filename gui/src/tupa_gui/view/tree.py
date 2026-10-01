@@ -5,7 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QStandardItem, QStandardItemModel
 
-from tupa_gui.data import CatenaryElement, Excitation, LineElement, Study
+from tupa_gui.data import CatenaryElement, ChannelElement, Excitation, LineElement, Study
 
 # Qt.UserRole payload on a node/element's tree item: ("node"|"element", id).
 # Lets the controller (main_window) map a tree selection to the matching 3D
@@ -99,6 +99,26 @@ def build_study_model(study: Study) -> tuple[QStandardItemModel, dict[tuple[str,
             item.appendRow(_row("radius", f"{e.radius} m"))
             item.appendRow(_row("segments", str(e.segments)))
             item.appendRow(_row("material", e.material))
+        elif isinstance(e, ChannelElement):  # ADR 0025
+            where = f"strike {e.strike}" if e.strike else f"@ {tuple(e.position)}"
+            item = _row(e.id, f"channel {where}, {e.length:g} m")
+            item.setData(("element", e.id), ENTITY_ROLE)
+            entity_items[("element", e.id)] = item
+            item.appendRow(_row("nodes", f"{e.base_id}, {e.top_id}"))
+            item.appendRow(_row("length", f"{e.length} m"))
+            item.appendRow(_row("radius", f"{e.radius} m"))
+            if e.incidence or e.azimuth:
+                item.appendRow(_row("incidence / azimuth", f"{e.incidence}° / {e.azimuth}°"))
+            if e.segments is not None:
+                item.appendRow(_row("segments", str(e.segments)))
+            else:
+                graded = (e.first_segment, e.growth, e.max_segment)
+                item.appendRow(_row("graded (first, growth, max)", ", ".join("-" if g is None else f"{g:g}" for g in graded)))
+            for label, value in (("speed", e.speed), ("inductance", e.inductance), ("resistance", e.resistance)):
+                if value is not None:
+                    item.appendRow(_row(label, str(value)))
+            if e.calibrate:
+                item.appendRow(_row("calibrate", "true"))
         else:  # MeshElement (ADR 0020)
             item = _row(e.id, f"mesh {e.rows_x}x{e.rows_y} rows @ {tuple(e.position)}")
             item.setData(("element", e.id), ENTITY_ROLE)

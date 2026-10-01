@@ -23,6 +23,9 @@ numerics, which move result files.
 - `tStudy%runSweepUnits` / `Study::run_sweep_units`: transfer functions of
   several unit terminals from one factorisation per frequency, keeping only the
   observed rows.
+- GUI: the `channel` element (ADR 0025) loads instead of being skipped as an unknown
+  type: the tree lists it, and the 3D view draws a glowing line from `<id>-base`
+  (coincident with the strike node) to `<id>-top`, selectable like any element.
 - GUI: the signal model covers every `signal` form (single, `sources`,
   `signals`) and option, so every `common/` case loads (the loader used to raise
   `KeyError` on the `sources` form, Heidler `terms` and the sine); the

@@ -397,7 +397,7 @@ coating of outer radius $r_c$, in **series** with the bare-conductor soil
 leakage — reducing to the bare case as $r_c \to r_0$. A reference
 implementation should do this rather than port the placeholder.
 
-### 4.4 Curved conductors: catenary spans
+### 4.4 Catenary spans
 
 Curved conductors enter the model as chains of straight segments, so every
 formula above applies to them unchanged. An overhead span hanging between
@@ -426,9 +426,7 @@ carrying the mean-distance approximation over to them.
 
 Implemented in ROADMAP Phase 10b ([ADR 0025](adr/0025-lightning-channel-and-two-node-sources.md);
 validation in [validation/channel-validation.md](validation/channel-validation.md)).
-The legacy Matlab's channel class is empty and
-`canal.m` only generates geometry, so this section is new theory. The
-channel is a chain of ordinary segments in air. Of everything in §4.1–§5,
+The channel is a chain of ordinary segments in air. Of everything in §4.1–§5,
 only one term changes: a per-unit-length series impedance on the $Z_\ell$
 diagonal. Main sources: Baba & Rakov's review [44] and its book-length
 update [74, ch. 8], the antenna-model chapter [74, ch. 9], and the

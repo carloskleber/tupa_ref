@@ -97,11 +97,25 @@ and modernised ([ADR 0001](docs/adr/0001-modern-fortran-reference-implementation
 cd fortran
 bash build.sh                          # fetch+build SLATEC, optimised build
 ./build/gfortran_*/app/Tupa ../common/portela1997.json   # run the solver on a JSON case
+./build/gfortran_*/app/Tupa ../common/channel_tower.json # e.g. the lightning-channel case
 ```
 
-Run the binary that `build.sh` produced. If several `build/gfortran_*` folders
-exist, pick the newest (`ls -td build/gfortran_*/app/Tupa | head -1`). A bare
-`fpm run` / `fpm test` rebuilds with fpm's default (debug) profile and
+The solver takes one argument, the path to a study JSON, and writes
+`<case>_results.csv` and `<case>_results.json` into the **current directory**
+(git-ignored under `fortran/`). The commands above assume you are in `fortran/`:
+both the `./build/...` binary path and the `../common/` case path are relative to
+it. From another directory, give the full path to both.
+
+Run the binary that `build.sh` produced. The `build/gfortran_*` glob only
+works when a single such folder exists; if there are several (one per compiler
+flag set), pick the newest, which is the one just built:
+
+```bash
+BIN=$(ls -td build/gfortran_*/app/Tupa | head -1)
+$BIN ../common/channel_tower.json
+```
+
+A bare `fpm run` / `fpm test` rebuilds with fpm's default (debug) profile and
 different flags, and needs the SLATEC library on the linker path, which
 `build.sh` sets only for its own process. To use fpm directly:
 

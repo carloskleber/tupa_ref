@@ -6,6 +6,7 @@ only place that understands the common/README.md JSON schema (v1, ADR 0013).
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 
@@ -272,6 +273,58 @@ class Signal:
         """True for a list of independent signals (`signal.signals`, ADR 0026)."""
         return self.form == "signals"
 
+@dataclass(frozen=True)
+class ChannelElement:
+    """Lightning channel (`"type": "channel"`, ADR 0025): a straight, loaded air
+    wire rising from a strike node (`strike`) or a free position (`position`)
+    along an axis `incidence` degrees off the vertical and `azimuth` degrees
+    from +x. The solver plants `<id>-base` (a separate node coincident with
+    the strike node) and `<id>-top`, plus intermediate nodes `<id>_n<k>`; the
+    view draws the single straight conductor between base and top and does
+    not expand the segmentation, like a line's `segments` (GUI_SDD.md §5.1a).
+
+    `speed`, `inductance` and `resistance` keep the JSON value as authored (a
+    number or an `{upTo, value}` profile) — the view only displays them."""
+
+    id: str
+    length: float
+    radius: float
+    strike: str | None = None
+    position: tuple[float, float, float] | None = None
+    incidence: float = 0.0
+    azimuth: float = 0.0
+    segments: int | None = None
+    first_segment: float | None = None
+    growth: float | None = None
+    max_segment: float | None = None
+    speed: object | None = None
+    inductance: object | None = None
+    resistance: object | None = None
+    calibrate: bool = False
+
+    @property
+    def base_id(self) -> str:
+        return f"{self.id}-base"
+
+    @property
+    def top_id(self) -> str:
+        return f"{self.id}-top"
+
+    def axis(self) -> tuple[float, float, float]:
+        """Unit vector of the axis, pointing up for zero incidence
+        (`mElementChannel::channelUnitVector`)."""
+        th, ph = math.radians(self.incidence), math.radians(self.azimuth)
+        return (math.sin(th) * math.cos(ph), math.sin(th) * math.sin(ph), math.cos(th))
+
+    def end_positions(
+        self, foot: tuple[float, float, float]
+    ) -> dict[str, tuple[float, float, float]]:
+        """`<id>-base` and `<id>-top` positions for a channel footed at `foot`
+        (the strike node's position, or `position` when free-standing)."""
+        ux, uy, uz = self.axis()
+        top = (foot[0] + self.length * ux, foot[1] + self.length * uy, foot[2] + self.length * uz)
+        return {self.base_id: foot, self.top_id: top}
+
 
 @dataclass
 class Study:
@@ -279,7 +332,7 @@ class Study:
     soil: Soil
     nodes: list[Node] = field(default_factory=list)
     materials: list[Material] = field(default_factory=list)
-    elements: list[LineElement | CatenaryElement | MeshElement] = field(default_factory=list)
+    elements: list[LineElement | CatenaryElement | MeshElement | ChannelElement] = field(default_factory=list)
     sources: list[Source] = field(default_factory=list)
     frequencies: FrequencySweep | None = None
     outputs: Outputs | None = None

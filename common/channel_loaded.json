@@ -18,7 +18,7 @@
     "observeNodes": ["ch-base"],
     "observeElectrodes": ["ch_e1", "ch_e30", "ch_e60", "ch_e90"],
     "nyquistHz": 5.0e6,
-    "fftPoints": 512,
+    "fftPoints": 2048,
     "transform": "nlt"
   }
 }

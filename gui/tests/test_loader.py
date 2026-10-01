@@ -233,3 +233,18 @@ def test_signal_options_and_terms_heidler():
     # a case with the channel and a two-node source (ADR 0025) loads too
     tower = load_study(COMMON / "channel_tower.json").signal
     assert tower.excitations[0].return_node is not None or tower.excitations[0].node
+
+
+def test_channel_element_loads_and_plants_its_end_nodes():
+    # ADR 0025: the channel was skipped as an unknown element type
+    tower = load_study(COMMON / "channel_tower.json")
+    ch = next(e for e in tower.elements if e.id == "ch")
+    assert (ch.strike, ch.length, ch.radius, ch.speed) == ("Ttop", 1000.0, 0.03, 1.5e8)
+    assert (ch.base_id, ch.top_id) == ("ch-base", "ch-top")
+    ends = ch.end_positions(tower.node("Ttop").position)
+    assert ends["ch-base"] == tower.node("Ttop").position
+    assert ends["ch-top"][2] == tower.node("Ttop").position[2] + 1000.0  # vertical: incidence 0
+
+    free = load_study(COMMON / "channel_unloaded.json")
+    ch = next(e for e in free.elements if e.id == "ch")
+    assert ch.strike is None and ch.position == (0.0, 0.0, 0.0) and ch.segments == 200

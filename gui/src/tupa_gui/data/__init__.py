@@ -8,6 +8,7 @@ from .loader import (
 )
 from .model import (
     CatenaryElement,
+    ChannelElement,
     ElectrodeCurrent,
     Excitation,
     FrequencySweep,
@@ -33,6 +34,7 @@ from .model import (
 
 __all__ = [
     "CatenaryElement",
+    "ChannelElement",
     "ElectrodeCurrent",
     "Excitation",
     "FrequencySweep",
