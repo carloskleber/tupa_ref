@@ -19,6 +19,11 @@ const PHASE10B_LAG_CASES = ["channel_loaded", "channel_tower", "channel_tower_ga
 const PHASE10B_LAG_FIXTURES = ["channel_loaded", "channel_tower", "channel_tower_gap",
                                "channel_tower_gap_transient", "channel_tower_transient", "channel_unloaded"]
 
+# ROADMAP Phase 11 (ADR 0027, grounding-safety outputs), not ported: the loader refuses the
+# `observation` block. The fixtures of the case are not run.
+const PHASE11_LAG_CASES = ["grid_safety"]
+const PHASE11_LAG_FIXTURES = ["grid_safety", "grid_safety_potentials"]
+
 set_verbosity(VERB_QUIET)
 
 @testset "Tupa" begin

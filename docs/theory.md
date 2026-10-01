@@ -129,31 +129,67 @@ on the conductor surface (radius `r₀`), which regularises the self terms.
 
 The same segment-source potential, evaluated at an arbitrary observation
 point $P$ *off* the conductors, is pure post-processing of a solved study
-(no new unknowns): with the solved transversal currents $I_{t,b}$,
+(no new unknowns): with the solved transversal currents $I_{t,b} = i_{1,b} + i_{2,b}$,
 
 $$\psi(P) = \sum_b \frac{I_{t,b}}{4\pi l_b (\sigma + j\omega\varepsilon)}
-\left( g_b(P)\, e^{-\gamma R_b} + \Gamma_t\, g_{b,i}(P)\, e^{-\gamma R_{b,i}} \right)$$
+\left( g_b(P)\, e^{-\gamma R_b} + \Gamma\, g_{b,i}(P)\, e^{-\gamma R_{b,i}} \right)$$
 
 where $g_b(P) = \int_b d\ell/R$ is the §4.1 geometry factor with the field
-point at $P$ (no self-regularisation needed off the wire), $R_b$/$R_{b,i}$
-are midpoint distances to the segment and its image, and the image parcel
-follows §5 (the legacy applies ideal images; the medium constants are those
-of the medium containing $P$). This is exactly what the legacy Matlab
-computes in its soil-potential and touch-potential outputs, and what TAGS
-exposes as potential/field/step-and-touch post-processing (ROADMAP §7 P7):
+point at $P$, $R_b$/$R_{b,i}$ are the distances from $P$ to the midpoint of
+the segment and of its mirror image, and $g_{b,i}$ is the factor of the image
+segment. This is the $Z_t$ row of §4.1 with the field point moved off the
+wire, so it is *consistent* with the solved system: a point on a conductor's
+surface reproduces that conductor's voltage to the discretisation error. Two
+rules fix the medium constants:
 
-- **GPR profile / surface potential**: $\psi$ evaluated on a line or grid of
-  points at $z = 0$;
+- **Medium of $P$**: $P$ is in soil if $z \le 0$ and in air above, the same
+  midpoint rule as for segments (§2). $\sigma + j\omega\varepsilon$, $\gamma$
+  and the image coefficient $\Gamma(\omega)$ (§5) are those of that medium,
+  and **only the segments in the same medium as $P$ contribute** — mixed-media
+  coupling is neglected exactly as in the impedance fill (§5). A surface point
+  at $z = 0$ therefore sees only the buried electrodes; the air-side leakage of
+  a tower's above-ground part is a displacement current, smaller than the soil
+  leakage by about $\omega\varepsilon_0/\sigma$.
+- **Closed form**: for a straight segment $a \to b$ seen from $P$, with
+  $s_1$, $s_2$ the axial coordinates of $P$ relative to the two ends and
+  $\rho$ its distance to the axis, the factor is
+  $g = \operatorname{asinh}(s_1/\rho) - \operatorname{asinh}(s_2/\rho)$
+  (the form of §4.2 for an off-axis point, algebraically equal to the
+  logarithm there but stable when $P$ is far along the axis). A point nearer
+  to the axis than the conductor radius is moved to the surface
+  ($\rho \to r_0$), the same regularisation as the self terms (§4.3).
+
+This is what the legacy Matlab computes in its soil-potential and
+touch-potential outputs, and what TAGS exposes as potential/field/step-and-touch
+post-processing (ROADMAP §7 P7). Two details of the legacy code were *not*
+carried over: its older `potsolonovo.m` divides by $l_b$ twice (the
+transversal current there is already per unit length), and its `PotencialToque`
+output class is a work in progress whose argument list no longer matches the
+code that calls it. The model above is the one `PotencialToque` states: current
+per unit length times $1/(4\pi(\sigma + j\omega\varepsilon))$ times the
+geometry factor.
+
+The outputs built on $\psi$ (ADR 0027):
+
+- **Surface potential / GPR profile**: $\psi$ on a line or a rectangular grid
+  of points, usually at $z = 0$;
+- **ground potential rise (GPR)**: the solved node voltage $u_k$ of a
+  designated node (potentials are referred to a remote earth);
 - **touch voltage** (legacy definition): $\max_P |\psi(P) - u_k|$ over a
-  1 m-radius circle of points around a designated node $k$ (36 points in
-  the legacy default) — a purely geometric definition, without IEEE Std 80's
-  body-circuit and surface-layer derating factors [42];
-- **step voltage**: difference of $\psi$ between surface points 1 m apart
-  along a profile [42].
+  circle of 36 points and 1 m radius in the horizontal plane around the node's
+  $(x, y)$, at the soil surface — a purely geometric definition, without IEEE
+  Std 80's body-circuit and surface-layer derating factors [42];
+- **step voltage**: $|\psi(P_2) - \psi(P_1)|$ for two surface points a stride
+  (1 m) apart [42]; as a *map*, the maximum over a set of azimuths of
+  $|\psi(P) - \psi(P + 1\,\mathrm{m}\,\hat e_\theta)|$ at every grid point.
 
-The observation-point geometry factor reuses the §4.2 machinery (closed
-form for the collinear/parallel cases, quadrature otherwise), so the
-single-integral mHEM kernel (§4.2) benefits this output as well.
+All are harmonic phasors (peak amplitudes follow the source's), evaluated at
+each frequency of the sweep; a time-domain map is the inverse transform of
+these, which the transient driver does not yet apply.
+
+The observation-point geometry factor is a closed form for every position,
+so no quadrature is involved and the output costs $O(n_{\text{sites}}\,
+n_{\text{segments}}\,n_f)$ with no factorisation.
 
 ---
 

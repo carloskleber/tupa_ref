@@ -43,6 +43,33 @@ pub struct MediumConstants {
 }
 
 impl MediumConstants {
+    /// The constants at angular frequency `omega` from the immittances
+    /// `W(ω) = σ + jωε` of air and soil (`calcParamW`), with the image
+    /// coefficients of `model`. Also used by the potential post-processing
+    /// (ROADMAP Phase 11), which needs them without a mesh.
+    pub fn from_immittance(
+        omega: f64,
+        mu_air: f64,
+        w_air: Complex64,
+        mu_soil: f64,
+        w_soil: Complex64,
+        model: ImageModel,
+    ) -> Self {
+        let jw = Complex64::new(0.0, omega);
+        let mut m = MediumConstants {
+            c_e_air: 1.0 / (FOUR_PI * w_air),
+            c_e_soil: 1.0 / (FOUR_PI * w_soil),
+            c_m_air: Complex64::new(0.0, omega * mu_air / FOUR_PI),
+            c_m_soil: Complex64::new(0.0, omega * mu_soil / FOUR_PI),
+            prop_air: (jw * mu_air * w_air).sqrt(),
+            prop_soil: (jw * mu_soil * w_soil).sqrt(),
+            gamma_air: ZERO,
+            gamma_soil: ZERO,
+        };
+        m.set_image_coefficients(model);
+        m
+    }
+
     /// Fill `gamma_air`/`gamma_soil` from `c_e_*` (`calcImageCoefficients`).
     ///
     /// With `cE = 1/(4πW)`: `Γ_own = (W_own − W_other)/(W_own + W_other) =
@@ -153,18 +180,14 @@ impl Mesh {
         mu_soil: f64,
         w_soil: Complex64,
     ) {
-        let jw = Complex64::new(0.0, omega);
-        self.medium = MediumConstants {
-            c_e_air: 1.0 / (FOUR_PI * w_air),
-            c_e_soil: 1.0 / (FOUR_PI * w_soil),
-            c_m_air: Complex64::new(0.0, omega * mu_air / FOUR_PI),
-            c_m_soil: Complex64::new(0.0, omega * mu_soil / FOUR_PI),
-            prop_air: (jw * mu_air * w_air).sqrt(),
-            prop_soil: (jw * mu_soil * w_soil).sqrt(),
-            gamma_air: ZERO,
-            gamma_soil: ZERO,
-        };
-        self.medium.set_image_coefficients(self.image_model);
+        self.medium = MediumConstants::from_immittance(
+            omega,
+            mu_air,
+            w_air,
+            mu_soil,
+            w_soil,
+            self.image_model,
+        );
     }
 
     /// `calc_param_w` at a complex frequency `s = c + jω` (every `jω → s`),

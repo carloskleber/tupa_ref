@@ -3,7 +3,7 @@
 - **Status**: Accepted (schema v0, open to revision before more than one
   writer/reader depends on it)
 - **Date**: 2026-07-05
-- **Amended by**: [ADR 0025](0025-lightning-channel-and-two-node-sources.md) (additive `channels` array in the results, 2026-10-01)
+- **Amended by**: [ADR 0025](0025-lightning-channel-and-two-node-sources.md) (additive `channels` array in the results, 2026-10-01); [ADR 0027](0027-observation-potentials-and-safety-outputs.md) (spatial outputs — potentials, GPR, touch, step — in a separate `<base>_potentials.*` file, 2026-10-01)
 
 ## Context
 

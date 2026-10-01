@@ -9,6 +9,18 @@ numerics, which move result files.
 
 ### Added
 
+- **Grounding-safety outputs** (ROADMAP Phase 11,
+  [ADR 0027](docs/adr/0027-observation-potentials-and-safety-outputs.md),
+  theory.md §3.1): an optional `observation` input block asks for the potential
+  ψ at explicit points and on a rectangular surface grid, the ground potential
+  rise and the touch voltage (legacy geometric definition: maximum
+  `|ψ − u_node|` over a 1 m, 36-point circle at the surface) at designated
+  nodes, step pairs and a step-voltage map. Evaluated from the solved sweep, no
+  new unknowns; written to `<case>_potentials.csv`/`.json`, leaving the
+  existing result files unchanged. Fortran (`mObservation`, `mPotentials`,
+  `tPotentials`/`tMagnitudes`) and Rust (`observation`, `potentials`) —
+  matching at 2e-8 on the new fixtures `grid_safety*`; Julia refuses the block.
+  Harmonic only: transient maps, the field vector and path voltages are open.
 - **Independent transient signals** (`signal.signals`,
   [ADR 0026](docs/adr/0026-independent-transient-signals.md)): the legacy
   `sinal` list. Several waveforms, optionally each at its own node, are applied

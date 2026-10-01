@@ -520,6 +520,164 @@ pub fn transient_signals_json(
     out
 }
 
+// ---------------------------------------------------------------------
+// Observation results (potentials, GPR, touch and step), ADR 0027
+// ---------------------------------------------------------------------
+
+fn require_observation(study: &Study, who: &str) -> Result<()> {
+    if study.observation_results.potentials.frequency_count() == 0 {
+        return Err(TupaError::new(format!(
+            "{who}: study has no observation results (computeObservations first)"
+        )));
+    }
+    Ok(())
+}
+
+fn site_position_csv(study: &Study, i: usize) -> String {
+    let p = study.observation_results.site_pos[i];
+    format!("{},{},{}", fmt_real(p[0]), fmt_real(p[1]), fmt_real(p[2]))
+}
+
+/// Tidy CSV of the observation results: `frequency_hz,quantity,id,x,y,z,re,im`
+/// with quantities `potential`, `stepMap`, `gpr`, `touch` and `step` (real
+/// quantities carry the magnitude in `re` and 0 in `im`; x, y, z are filled
+/// only for the site quantities).
+pub fn observation_csv(study: &Study) -> Result<String> {
+    require_observation(study, "writeObservationCsv")?;
+    let r = &study.observation_results;
+    let nf = r.potentials.frequency_count();
+    let n_sites = r.potentials.entity_count();
+    let n_map = r.step_map.entity_count();
+    let zero = fmt_real(0.0);
+    let mut out = String::from("frequency_hz,quantity,id,x,y,z,re,im\n");
+    for k in 0..nf {
+        let f = fmt_real(r.freq_hz[k]);
+        for i in 0..n_sites {
+            let v = r.potentials.get(i, k);
+            let _ = writeln!(
+                out,
+                "{f},potential,{},{},{},{}",
+                r.potentials.entity_id(i),
+                site_position_csv(study, i),
+                fmt_real(v.re),
+                fmt_real(v.im)
+            );
+        }
+        for i in 0..n_map {
+            let _ = writeln!(
+                out,
+                "{f},stepMap,{},{},{},{zero}",
+                r.step_map.entity_id(i),
+                site_position_csv(study, n_sites - n_map + i),
+                fmt_real(r.step_map.get(i, k).re)
+            );
+        }
+        for i in 0..r.gpr.entity_count() {
+            let id = r.gpr.entity_id(i);
+            let u = r.gpr.get(i, k);
+            let _ = writeln!(out, "{f},gpr,{id},,,,{},{}", fmt_real(u.re), fmt_real(u.im));
+            let _ = writeln!(
+                out,
+                "{f},touch,{id},,,,{},{zero}",
+                fmt_real(r.touch.get(i, k).re)
+            );
+        }
+        for i in 0..r.steps.entity_count() {
+            let v = r.steps.get(i, k);
+            let _ = writeln!(
+                out,
+                "{f},step,{},,,,{},{}",
+                r.steps.entity_id(i),
+                fmt_real(v.re),
+                fmt_real(v.im)
+            );
+        }
+    }
+    Ok(out)
+}
+
+fn real_list(values: impl Iterator<Item = f64>) -> String {
+    values.map(fmt_real).collect::<Vec<_>>().join(", ")
+}
+
+/// JSON counterpart of [`observation_csv`] (ADR 0027): `{title, frequencies,
+/// sites[{id, position, potential[, step]}], grid{id, nx, ny}, touch[{id,
+/// node, gpr, touch}], steps[{id, difference, magnitude}]}`.
+pub fn observation_json(study: &Study) -> Result<String> {
+    require_observation(study, "writeObservationJson")?;
+    let r = &study.observation_results;
+    let nf = r.potentials.frequency_count();
+    let n_sites = r.potentials.entity_count();
+    let n_map = r.step_map.entity_count();
+    let mut out = String::from("{\n");
+    let _ = writeln!(out, "  \"title\": \"{}\",", json_escape(&study.title));
+    let _ = writeln!(
+        out,
+        "  \"frequencies\": [{}],",
+        real_list(r.freq_hz.iter().copied())
+    );
+
+    let mut sites = Vec::new();
+    for i in 0..n_sites {
+        let mut s = format!(
+            "    {{ \"id\": \"{}\", \"position\": [{}], \"potential\": [{}]",
+            json_escape(r.potentials.entity_id(i)),
+            site_position_csv(study, i),
+            join_complex(&r.potentials, i, nf)
+        );
+        if n_map > 0 && i >= n_sites - n_map {
+            let j = i - (n_sites - n_map);
+            let _ = write!(
+                s,
+                ", \"step\": [{}]",
+                real_list((0..nf).map(|k| r.step_map.get(j, k).re))
+            );
+        }
+        s.push_str(" }");
+        sites.push(s);
+    }
+    let _ = write!(out, "  \"sites\": [\n{}\n  ]", sites.join(",\n"));
+
+    if n_map > 0 {
+        if let Some(g) = &study.observation.grid {
+            let _ = write!(
+                out,
+                ",\n  \"grid\": {{ \"id\": \"{}\", \"nx\": {}, \"ny\": {} }}",
+                json_escape(&g.id),
+                g.nx,
+                g.ny
+            );
+        }
+    }
+    if r.gpr.entity_count() > 0 {
+        let mut items = Vec::new();
+        for i in 0..r.gpr.entity_count() {
+            items.push(format!(
+                "    {{ \"id\": \"{}\", \"node\": \"{}\", \"gpr\": [{}], \"touch\": [{}] }}",
+                json_escape(r.gpr.entity_id(i)),
+                json_escape(&study.observation.touch[i].node),
+                join_complex(&r.gpr, i, nf),
+                real_list((0..nf).map(|k| r.touch.get(i, k).re))
+            ));
+        }
+        let _ = write!(out, ",\n  \"touch\": [\n{}\n  ]", items.join(",\n"));
+    }
+    if r.steps.entity_count() > 0 {
+        let mut items = Vec::new();
+        for i in 0..r.steps.entity_count() {
+            items.push(format!(
+                "    {{ \"id\": \"{}\", \"difference\": [{}], \"magnitude\": [{}] }}",
+                json_escape(r.steps.entity_id(i)),
+                join_complex(&r.steps, i, nf),
+                real_list((0..nf).map(|k| r.steps.get(i, k).norm()))
+            ));
+        }
+        let _ = write!(out, ",\n  \"steps\": [\n{}\n  ]", items.join(",\n"));
+    }
+    out.push_str("\n}\n");
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

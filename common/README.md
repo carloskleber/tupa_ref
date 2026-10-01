@@ -31,6 +31,7 @@ when it reproduces every case within the stated tolerance.
 | `channel_unloaded.json` | ROADMAP Phase 10b ([ADR 0025](../docs/adr/0025-lightning-channel-and-two-node-sources.md)): Baba & Rakov's configuration — an unloaded, perfectly conducting 2 km channel (r0 = 0.23 m, 200 segments of 10 m, free-standing) over **ideal** ground, driven at its base by a 5 MV, 1 µs ramp voltage (`quantity: "voltage"`, `portela` waveform with `alpha: 0`), NLT, 512 samples to 5 MHz; observes `ch_e1/e31/e61/e91` (z = 5, 305, 605, 905 m). Segment currents follow Chen's analytic current to ≈ 1 % after the front ([validation/channel-validation.md](../docs/validation/channel-validation.md)) | `channel_unloaded_expected.csv` (transient shape) |
 | `channel_loaded.json` | ROADMAP Phase 10b: 3 km, r0 = 3 cm channel over ideal ground loaded to c/2 (`speed: 1.5e8`, `resistance: 0.5`, `calibrate: true`), segments graded from 5 m at the foot (`growth: 1.15`, ≤ 20 m), 10 kA 1 µs ramp current source at `ch-base`, NLT. The fixture pins the **calibrated** loading too (the `channels` block of its results records it) | `channel_loaded_expected.csv` (transient shape) |
 | `channel_tower.json`, `channel_tower_gap.json` | ROADMAP Phase 10b: strike to a 30 m tower (0.3 m radius) with a 3 m rod footing in σ = 1 mS/m soil, and a 1 km channel above the tower top (`strike: "Ttop"`, c/2, 0.5 Ω/m, graded). Source between the tower top and `ch-base` (a two-node source, ADR 0025): a 1 A current source in `channel_tower.json`, a 1 kV ideal voltage source (delta gap) in `channel_tower_gap.json`; each carries a harmonic sweep (10 kHz–1 MHz, 3/decade) and a transient (10 kA / 1 MV, 1 µs ramp, NLT, 256 samples to 2 MHz) | `channel_tower_expected.csv`, `channel_tower_transient_expected.csv`, `channel_tower_gap_expected.csv`, `channel_tower_gap_transient_expected.csv` |
+| `grid_safety.json` | ROADMAP Phase 11 ([ADR 0027](../docs/adr/0027-observation-potentials-and-safety-outputs.md)): grounding-safety outputs — a 16 × 16 m grid (`mesh`, 2 × 2 bays, 0.5 m deep, 4 segments/bar) in σ = 5 mS/m soil with a 1 m tower riser (`Riser_1` in soil, `Riser_2` in air) at the corner, 1 kA at `Tower_top`, 50 Hz–50 kHz (1/decade). The `observation` block asks for two points (grid centre, a remote point 40 m away), a 13 × 13 surface grid spanning 24 × 24 m with the step map, a touch site at `Tower_top` (36 points, 1 m) and a step pair at the grid edge. `outputs` limits the harmonic results to `Tower_top` and `Riser_1_e1`. Writes `grid_safety_results.*` and `grid_safety_potentials.*` | `grid_safety_expected.csv` (harmonic) and `grid_safety_potentials_expected.csv` (observation shape `frequency_hz,quantity,id,x,y,z,re,im`) |
 | `lima_fig6.json` | Lima et al. 2020 (IEEE TEMC, references.md [11]) §III-B Case #9: distribution tower grounding — 4 horizontal electrodes (6 m) radiating 90° apart from a center node, each ending in a vertical rod (3 m), plus a 5th vertical rod at the center (injection point); homogeneous soil (σ1 = 1 mS/m, εr = 10); 12.5 mm radius, arms at -0.5 m with rods to -3.5 m (both inferred — see writeup), 0.5 m segments, 1∠0° A at `Node_C`, 150 log-spaced points 100 Hz–10 MHz (`pointsPerDecade: 29.8`). For comparison against the paper's Fig. 6 MHEM curve — see [`docs/validation/lima-fig6.md`](../docs/validation/lima-fig6.md) | none yet (plausibility check only; case geometry only partially specified by the paper) |
 
 ### Legacy TUPÃ cases (`linha*.json`, `torre*.json`, ADR 0023)
@@ -119,7 +120,7 @@ ports in [`rust/`](../rust/README.md) and [`julia/`](../julia/README.md) —
 must reproduce within tolerance: the Rust port matches every fixture at 1e-6
 (worst 1.3e-10 harmonic, 1.5e-8 NLT); the Julia port matches the harmonic ones (`grid`, `portela1997`,
 `portela1997_ideal`, `rod`, `portelaMesh`; worst 2.4e-10) and still lags on
-the Phase 9 transient and Phase 10b channel ones. All fixtures
+the Phase 9 transient, Phase 10b channel and Phase 11 `grid_safety` ones. All fixtures
 were regenerated once for ROADMAP Phase 10 (single-integral kernel, `Γ(ω)`
 images; [ADR 0024](../docs/adr/0024-phase10-numerics.md)). `fortran/test/test_common_cases.f90` diffs a fresh run against
 each fixture (relative tolerance 1e-6) and re-checks passivity
@@ -149,6 +150,14 @@ affordable is `portelaMesh.json` (200 electrodes, Phase 10 item 6).
   "frequencies": { "min": 100.0, "max": 1.0e6, "pointsPerDecade": 3 },
   "outputs": { "nodes": ["Node_1"], "electrodes": ["Line_1"],
                "quantities": ["voltage", "i1", "i2", "inputImpedance"] },
+
+  "observation": {
+    "points": [ { "id": "P1", "position": [5.0, 5.0, 0.0] } ],
+    "grid":   { "id": "surface", "origin": [-2.0, -2.0], "z": 0.0, "lengthX": 14.0, "lengthY": 14.0,
+                "nx": 8, "ny": 8, "step": { "length": 1.0, "directions": 8 } },
+    "touch":  [ { "id": "T1", "node": "Node_1", "radius": 1.0, "points": 36 } ],
+    "steps":  [ { "id": "S1", "from": [12.0, 5.0, 0.0], "to": [13.0, 5.0, 0.0] } ]
+  },
 
   "signal": {
     "waveform": "doubleExp", "imax": 30000.0, "front": "f1_2_50", "jones": false,
@@ -253,6 +262,18 @@ Semantics:
 - `nodes`/`elements` may each be omitted entirely (equivalent to an empty
   array) — e.g. a case built from a single `"mesh"` element needs no
   top-level `nodes` at all, since the element creates its own.
+- `observation` is **optional** ([ADR 0027](../docs/adr/0027-observation-potentials-and-safety-outputs.md),
+  ROADMAP Phase 11) and needs a harmonic sweep (`sources` + `frequencies`);
+  alongside a transient-only case it is an error. Members, all optional:
+  `points[]` (`id`, `position` `[x, y, z]`), `grid` (`id`, `origin` `[x, y]`,
+  `z` default 0, `lengthX`, `lengthY`, `nx`, `ny`, and `step` {`length` default
+  1 m, `directions` default 8} for a step-voltage map), `touch[]` (`id`,
+  `node`, `radius` default 1 m, `points` default 36, `z` default 0) and
+  `steps[]` (`id`, `from`, `to`). Points at `z ≤ 0` are in soil, above it in
+  air; `touch[].node` must name a node. It writes `<case>_potentials.csv`/`.json`
+  (tidy columns `frequency_hz,quantity,id,x,y,z,re,im`; quantities `potential`,
+  `stepMap`, `gpr`, `touch`, `step`) next to the unchanged `_results.*` files.
+  Fortran and Rust implement it; Julia refuses the block.
 - `sources`, `frequencies`, `outputs` are **optional** (a structure-only
   case file, like `buried_conductor_short.json`/`buried_conductor_long.json`, stays valid) but
   required together to run a sweep. A `sources[]` entry carries **either**

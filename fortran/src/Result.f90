@@ -8,16 +8,18 @@ module mResult
   !! `tStructure`/`tMesh`, so a result set stays valid even if the study is mutated
   !! afterwards.
   !!
-  !! Three concrete types are provided:
+  !! Five concrete types are provided:
   !! - `tVoltages`: complex node voltages V_i(ω) — shape (nNodes, nFrequencies)
   !! - `tLongCurrents`: longitudinal electrode currents I_long(ω) — shape (nElectrodes, nFrequencies)
   !! - `tTransCurrents`: transverse (earth-leakage) electrode currents I_trans(ω) — shape (nElectrodes, nFrequencies)
+  !! - `tPotentials`: complex potentials ψ(ω) at observation sites (ROADMAP Phase 11) — shape (nSites, nFrequencies)
+  !! - `tMagnitudes`: real phasor magnitudes at observation sites (touch/step voltage) — shape (nSites, nFrequencies)
   !!
-  !! `tStudy%runSweep` (Study.f90) fills these; `mResultsWriter` reads them back out.
+  !! `tStudy%runSweep` (Study.f90) fills the first three; `mResultsWriter` reads them back out.
   implicit none
   private
 
-  public :: tResult, tVoltages, tLongCurrents, tTransCurrents
+  public :: tResult, tVoltages, tLongCurrents, tTransCurrents, tPotentials, tMagnitudes
 
   type, abstract :: tResult
     !! Abstract base type for frequency-domain results.
@@ -130,6 +132,39 @@ module mResult
     !! Constructor interface for tTransCurrents results.
     module procedure newResultTransCurrents
   end interface
+
+  type, extends(tResult) :: tPotentials
+    !! Result type for complex potentials at observation sites ψ(ω) (theory.md
+    !! §3.1, ROADMAP Phase 11): the entities are observation points, grid
+    !! points, touch-voltage sites or step pairs, depending on the result
+    !! set. Shape: (nSites, nFrequencies).
+    private
+    complex(8), allocatable :: values(:,:)
+    !! Complex array: values(iSite, iFreq)
+  contains
+    procedure :: alloc => allocPotentials
+    !! Allocate `values` with dimensions (nSites, nFrequencies)
+    procedure :: get => getPotential
+    !! Read ψ(iSite, iFreq)
+    procedure :: set => setPotential
+    !! Write ψ(iSite, iFreq)
+  end type tPotentials
+
+  type, extends(tResult) :: tMagnitudes
+    !! Result type for real, non-negative phasor magnitudes at observation
+    !! sites (touch and step voltage maps, ROADMAP Phase 11). Shape:
+    !! (nSites, nFrequencies).
+    private
+    real(8), allocatable :: values(:,:)
+    !! Real array: values(iSite, iFreq)
+  contains
+    procedure :: alloc => allocMagnitudes
+    !! Allocate `values` with dimensions (nSites, nFrequencies)
+    procedure :: get => getMagnitude
+    !! Read the magnitude at (iSite, iFreq)
+    procedure :: set => setMagnitude
+    !! Write the magnitude at (iSite, iFreq)
+  end type tMagnitudes
 
 contains
 
@@ -318,5 +353,67 @@ contains
 
     this%currents(iElectrode, iFreq) = i2
   end subroutine setTransCurrent
+
+  subroutine allocPotentials(this, ids, omega)
+    !! Allocate the potentials array with dimensions (nSites, nFrequencies).
+    class(tPotentials), intent(inout) :: this
+    character(len=*), intent(in) :: ids(:)
+    !! Site IDs — determines first dimension
+    real(8), intent(in) :: omega(:)
+    !! Angular frequencies — determines second dimension
+
+    call this%storeAxes(ids, omega)
+    if (allocated(this%values)) deallocate(this%values)
+    allocate(this%values(size(ids), size(omega)))
+    this%values = (0.0d0, 0.0d0)
+  end subroutine allocPotentials
+
+  complex(8) function getPotential(this, iSite, iFreq) result(v)
+    !! Read ψ(iSite, iFreq).
+    class(tPotentials), intent(in) :: this
+    integer(4), intent(in) :: iSite, iFreq
+
+    v = this%values(iSite, iFreq)
+  end function getPotential
+
+  subroutine setPotential(this, iSite, iFreq, v)
+    !! Write ψ(iSite, iFreq).
+    class(tPotentials), intent(inout) :: this
+    integer(4), intent(in) :: iSite, iFreq
+    complex(8), intent(in) :: v
+
+    this%values(iSite, iFreq) = v
+  end subroutine setPotential
+
+  subroutine allocMagnitudes(this, ids, omega)
+    !! Allocate the magnitudes array with dimensions (nSites, nFrequencies).
+    class(tMagnitudes), intent(inout) :: this
+    character(len=*), intent(in) :: ids(:)
+    !! Site IDs — determines first dimension
+    real(8), intent(in) :: omega(:)
+    !! Angular frequencies — determines second dimension
+
+    call this%storeAxes(ids, omega)
+    if (allocated(this%values)) deallocate(this%values)
+    allocate(this%values(size(ids), size(omega)))
+    this%values = 0.0d0
+  end subroutine allocMagnitudes
+
+  real(8) function getMagnitude(this, iSite, iFreq) result(v)
+    !! Read the magnitude at (iSite, iFreq).
+    class(tMagnitudes), intent(in) :: this
+    integer(4), intent(in) :: iSite, iFreq
+
+    v = this%values(iSite, iFreq)
+  end function getMagnitude
+
+  subroutine setMagnitude(this, iSite, iFreq, v)
+    !! Write the magnitude at (iSite, iFreq).
+    class(tMagnitudes), intent(inout) :: this
+    integer(4), intent(in) :: iSite, iFreq
+    real(8), intent(in) :: v
+
+    this%values(iSite, iFreq) = v
+  end subroutine setMagnitude
 
 end module mResult

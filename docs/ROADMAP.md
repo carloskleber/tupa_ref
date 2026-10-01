@@ -32,10 +32,10 @@ implementation**; usability as an engineering tool is secondary.
 | Solver | Augmented `Zeq` assembly + `ZGESV` (ADR 0003); multi-RHS variant for superposition (ADR 0016); frequencies solved in parallel on thread-private meshes, bit-identical to serial (Phase 10 item 4) |
 | Sources | Current injections at named nodes (ADR 0010); ideal voltage sources via unit-injection superposition, mixable with current sources (ADR 0016); several simultaneous transient injections, each with its own waveform (Phase 9 item 4) |
 | Materials | `tLinear`, `tPortelaSoil` (ADR 0007), `tVisacroAlipioSoil` (mean set, theory.md §7); air hardcoded to vacuum (ADR 0019) |
-| Sweep & results | `runSweep` (OpenMP over frequencies) + `tResult` storage, `inputImpedance`/`maxVoltageMagnitude`; CSV/JSON writers (ADR 0012) with `outputs` filtering |
+| Sweep & results | `runSweep` (OpenMP over frequencies) + `tResult` storage, `inputImpedance`/`maxVoltageMagnitude`; CSV/JSON writers (ADR 0012) with `outputs` filtering; surface potentials, GPR, touch and step voltage from the solved currents (`observation` block, `mPotentials`, `<case>_potentials.*`, Phase 11, ADR 0027) |
 | Time domain | `mSignal` (Heidler — legacy 6-term [38] and standard parametrised form [37, 39]; double-exp ± Jones; Portela concave front; switched-on sine), tail taper, in-repo FFT (ADR 0014), transfer-function transient driver (`mTransient`) with opt-in scan-fed (pchip-interpolated) transfer function, half-Hann window (spectral or time placement), multiple injections and Numerical Laplace Transform (Phase 9, ADR 0015 amendment 2026-09-30) |
-| JSON I/O | json-fortran parser (ADR 0006, superseded-in-place 2026-08-01); schema v1: structure + `sources`/`frequencies`/`outputs` (ADR 0013) + `signal` (ADR 0015) + voltage sources/Heidler terms (ADR 0016/0015 amendment) + `mesh` composite element (ADR 0020) + optional `signal.antialiasStart` (ADR 0021) + `catenary` element and `portela` waveform (ADR 0023) + `signal.sources`/`window`/`transferFunction`/`transform`/`nltDamping` and the `sine` waveform (ADR 0015 amendment 2026-09-30); the optional `numerics` block (`kernel`, `imageModel`, `maxSegmentLength`) and optional `segments` (ADR 0024); pre-run reference validation (`validateStudyReferences`) and CLI verbosity levels |
-| Cases & tests | `common/` regression fixtures (golden; four harmonic — `portela1997`, `rod`, `grid`, `portela1997_ideal` — five transient since Phase 9, and the 32 × 32 m `portelaMesh` harmonic + scan-fed transient since Phase 10; **all regenerated once for Phase 10**) plus ten cases imported from the legacy Matlab case library (`linha*.json`, `torre*.json`, ADR 0023), 18 test programs under `fpm test --profile release` — all green (re-run 2026-10-01, gfortran 13; `test_impedance`'s coincident-segment divergence check is defeated by `-ffast-math`, as before). Plain `fpm test` needs `-ffree-line-length-none` and, on shared LAPACK, `--no-as-needed -llapack -lblas` (fortran/README.md) |
+| JSON I/O | json-fortran parser (ADR 0006, superseded-in-place 2026-08-01); schema v1: structure + `sources`/`frequencies`/`outputs` (ADR 0013) + `signal` (ADR 0015) + voltage sources/Heidler terms (ADR 0016/0015 amendment) + `mesh` composite element (ADR 0020) + optional `signal.antialiasStart` (ADR 0021) + optional `observation` block (ADR 0027) + `catenary` element and `portela` waveform (ADR 0023) + `signal.sources`/`window`/`transferFunction`/`transform`/`nltDamping` and the `sine` waveform (ADR 0015 amendment 2026-09-30); the optional `numerics` block (`kernel`, `imageModel`, `maxSegmentLength`) and optional `segments` (ADR 0024); pre-run reference validation (`validateStudyReferences`) and CLI verbosity levels |
+| Cases & tests | `common/` regression fixtures (golden; four harmonic — `portela1997`, `rod`, `grid`, `portela1997_ideal` — five transient since Phase 9, and the 32 × 32 m `portelaMesh` harmonic + scan-fed transient since Phase 10; **all regenerated once for Phase 10**; `grid_safety` harmonic + observation since Phase 11) plus ten cases imported from the legacy Matlab case library (`linha*.json`, `torre*.json`, ADR 0023), 19 test programs under `fpm test --profile release` — all green except `test_common_cases` on the `channel_loaded` fixture, which predates the case's later change to 2048 samples and fails in Fortran and Rust alike until regenerated (re-run 2026-10-01, gfortran 13; `test_impedance`'s coincident-segment divergence check is defeated by `-ffast-math`, as before). Plain `fpm test` needs `-ffree-line-length-none` and, on shared LAPACK, `--no-as-needed -llapack -lblas` (fortran/README.md) |
 | Validation | [`docs/validation/`](validation/README.md): digitized published-curve comparisons — Grcev et al. 2018 Fig. 12 (6 cases), Lima et al. 2020 Figs. 6/7, Poljak & Doric 2006 Fig. 4, Silva et al. 2025 Figs. 3/4 (harmonic + transient) — accepted as the release-bar oracle (§4) |; since Phase 10 also the cross-code check against TAGS ([`validation/tags-xval.md`](validation/tags-xval.md): ≤ 0.3 % below 1 MHz on six cases) and the effect of the `Γ(ω)` default on every comparison ([`phase10-image-model.md`](validation/phase10-image-model.md))
 | GUI | Python/PySide6 view-only module (`gui/`, ADR 0011): study tree, 3-D view, results/transient plots |
 | Other implementations | **Julia port (`julia/`, contributed 2026-09-29, realigned 2026-09-30, Phase 8J)** — module-by-module mirror of the Fortran code, golden fixtures met at 1e-6 and every runnable `common/` case within 1e-6 of Rust/Fortran (bar two round-off rows Rust shares); **Rust port (`rust/`, 2026-09-30, [ADR 0022](adr/0022-rust-implementation.md))** — harmonic conformance met on the three golden fixtures at 1e-6, transient path implemented, Phase 8 item 1 (Fortran fixture widening) still open; **Phase 10 update 2026-10-01: Rust implements the whole phase and matches every regenerated fixture (worst 1.3e-10 harmonic, 1.5e-8 NLT); Julia ported items 1–3 and 6 the same day** (single-integral kernel, Γ(ω) images, `numerics` block; the five harmonic fixtures it can run match at 1e-6, worst 2.4e-10; the threaded sweep stays unported) — it still lags on Phase 9 and Phase 10b |
@@ -196,7 +196,7 @@ Where the former Phase 7 items went:
 | Portela concave-front signal | Phase 9 item 3 — done 2026-09-30 |
 | Multiple injections (transient) | Phase 9 item 4 — done 2026-09-30 |
 | Numerical Laplace Transform (§7 P4) | Phase 9 item 5 — done 2026-09-30 |
-| GPR, touch and step voltage (§7 P7) | Phase 11 items 1–2 |
+| GPR, touch and step voltage (§7 P7) | Phase 11 items 1–2 — done 2026-10-01 (harmonic) |
 | `tCircumference` (grounding rings) | Phase 12 item 1 |
 | Tubular conductor | Phase 12 item 2 |
 | Series RLC element | Phase 12 item 3 |
@@ -713,8 +713,8 @@ only the geometry generator `canal.m`.
 sources); Fortran and Rust agree on every fixture; the channel reproduces
 Chen's unloaded current and Baba & Rakov's loaded speeds.
 
-Out of scope here: fields from the channel (Phase 11 item 1 supplies the
-post-processing), induced-voltage work over lossy ground (post-MVP), and
+Out of scope here: fields from the channel (Phase 11 supplies the scalar
+potential post-processing; the field vector is its open remainder), induced-voltage work over lossy ground (post-MVP), and
 the HEM option of an enlarged transversal radius to lower the channel
 impedance (theory.md §4.5, optional extension).
 
@@ -735,25 +735,50 @@ one waveform (`sources` superposes). [ADR 0026](adr/0026-independent-transient-s
    every `sinal`; `linha*` regenerated; `portela1997_transient_signals`
    fixture (Fortran golden, Rust 2.4e-13, Julia 1e-6).
 
-### Phase 11 — Grounding-safety outputs
+### Phase 11 — Grounding-safety outputs — **done 2026-10-01 (harmonic)**
 
 The headline engineering output for the MVP application (tower-footing
 grounding); placed after Phase 10 because surface maps over real footings
-need the P1 kernel's speed and Γ(ω)-consistent potentials.
+need the P1 kernel's speed and Γ(ω)-consistent potentials. Design:
+theory.md §3.1, [ADR 0027](adr/0027-observation-potentials-and-safety-outputs.md).
 
-1. **Field/potential post-processing** (§7 P7) — **M**. Scalar
-   potential, electric field and path voltages at arbitrary points from
-   the solved I_t/I_ℓ, including image contributions; prioritise `tResult`
-   subtypes from the Matlab output-class inventory (ADR 0017 finding 6).
-2. **GPR, touch and step voltage** — **M**. *Both input forms from the
-   start: explicit observation-points array plus an optional auto
-   surface-grid block.* Formula and legacy/TAGS correlation in theory.md
-   §3.1; ADR 0012 results-schema extension. *Decided (2026-07-17 Q&A):
-   legacy-geometric definitions (touch = max |ψ − u_node| on a 1 m
-   circle, step = ψ difference at 1 m spacing), citing IEEE Std 80 [42]
-   as normative context; body-circuit / surface-layer derating factors
-   stay out of the solver.* Single-frequency first; transient maps reuse
-   the Phase 9 driver.
+1. **Field/potential post-processing** (§7 P7) — **M** — **done
+   2026-10-01**, scalar potential. `mPotentials::potentialsAt` evaluates the
+   potential of the solved `i1 + i2` at arbitrary points — closed-form geometry
+   factor, the solver's `Γ(ω)` images, only the segments of the point's medium
+   (the impedance fill's own mixed-media rule) — with no new unknowns; the
+   `tResult` family gained `tPotentials` and `tMagnitudes`. Checked against
+   Simpson quadrature of the factor, the far-field point-source value of a
+   rod's injected current, and the rod's own node voltages (surface potential
+   within 0.3 % at 10 Hz). **Open**: the electric field vector
+   (`−∇ψ − jωA`) and path voltages along an arbitrary route (the legacy
+   `camposdif`/`calctensoes` line integral); the legacy output-class
+   inventory (ADR 0017 finding 6) is otherwise covered — soil potential on a
+   line and on a rectangle (`points`, `grid`), touch potential (`touch`); its
+   `potsolonovo.m` is wrong by a factor of the segment length (finding 9).
+2. **GPR, touch and step voltage** — **M** — **done 2026-10-01**, harmonic.
+   *Both input forms from the start*: the `observation` block's explicit
+   `points[]` and its auto surface `grid`. Legacy-geometric definitions,
+   as decided (2026-07-17 Q&A): touch = max |ψ − u_node| on a 1 m, 36-point
+   circle at the surface; step = ψ difference at 1 m (`steps[]` pairs and a
+   step map over the grid); IEEE Std 80 [42] as normative context, no
+   derating factors in the solver. Results in `<case>_potentials.csv`/`.json`
+   (ADR 0027 — ADR 0012's shape stays untouched). Case and fixtures
+   `grid_safety` (16 × 16 m grid with a tower riser, 13 × 13 surface grid).
+   **Open**: transient maps — *single-frequency first* was the roadmap's
+   plan; the potential is linear in the solved currents, so a per-site
+   transfer function through the Phase 9 driver is the natural next step —
+   an `observation` block beside a transient-only case raises an error.
+
+**Follow-along.** Rust implements items 1–2 (harmonic) and matches the
+fixtures to 2e-8; Julia refuses the `observation` block (lag recorded in
+`julia/README.md`, port guide in the Rust sources); the GUI does not show the
+potentials yet.
+
+**Exit criteria — met** for the harmonic outputs: a footing case yields
+surface potentials, GPR, touch and step voltages from one run (`grid_safety`:
+≈ 25 ms), Fortran and Rust agree on the fixtures, and the potential of a
+solved rod is consistent with its node voltages and the point-source limit.
 
 ### Phase 12 — Tower-footing electrode library
 
@@ -901,6 +926,10 @@ shielded-wire segment.
   segment-length target, threaded sweep, TAGS cross-validation and the 32 × 32 m
   grid fixtures; all golden fixtures regenerated once and matched by Rust;
   Fortran package version **0.6.0**.
+- **Phase 11 — met (2026-10-01), harmonic**: `observation` block,
+  surface potentials, GPR, touch and step voltage (ADR 0027), fixtures
+  `grid_safety*` matched by Rust; transient maps, the field vector and path
+  voltages are the remainder.
 - **Phase 10b — met (2026-10-01)**: lightning channel element in air
   (series-loaded, graded, speed-calibrated), two-node current and voltage
   sources, four `common/` fixtures matched by Rust, validation against Chen
@@ -910,7 +939,7 @@ shielded-wire segment.
   fixture set; it closes Milestone 8b and gives the Julia port a sharper
   target), then Phase 8 item 9 (report); Phase 8J follow-along for Phases 9
   and 10b (Julia: Phase 10 done 2026-10-01 on the 1.13 toolchain; Phase 9
-  — transfer-function/NLT transients — is next there, and Phase 10b follows it); then Phase 11.
+  — transfer-function/NLT transients — is next there, and Phase 10b follows it, then Phase 11); then Phase 12 (`tCircumference` first), with transient potential maps as the Phase 11 remainder.
 
 ---
 
@@ -1032,13 +1061,17 @@ supersede the fill-loop OpenMP pencilled in Phase 3 item 4
 *Outcome:* both measured; the LU is ≈ 100 % of a frequency, the fill-loop
 OpenMP is superseded and the frequency loop is threaded (ADR 0024 §4).
 
-### P7 — Field/potential post-processing (new feature) — Phase 11
+### P7 — Field/potential post-processing (new feature) — Phase 11 — **done 2026-10-01 (scalar potential, harmonic)**
 
 Scalar potential, electric field and path voltages at arbitrary points
 from the solved `I_t`/`I_ℓ` (touch and step voltages, GPR profiles), as
 TAGS and the Matlab reference both provide — use the Matlab output-class
 inventory (ADR 0017 finding 6) to prioritise `tResult` subtypes. Scheduled
 together with GPR, touch and step voltage as Phase 11.
+
+*Outcome:* the `observation` block and `mPotentials` (ADR 0027): potentials
+at points and on a surface grid, GPR, touch and step voltage. The field
+vector, path voltages and transient maps remain open.
 
 ### P8 — Criteria-based segmentation defaults (low effort) — Phase 10 item 3 — **done 2026-10-01**
 

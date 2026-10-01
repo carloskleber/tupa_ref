@@ -18,6 +18,7 @@ module mResultsWriter
   public :: writeResultsCsv, writeResultsJson
   public :: writeTransientResultsCsv, writeTransientResultsJson
   public :: writeTransientSignalsCsv, writeTransientSignalsJson
+  public :: writeObservationCsv, writeObservationJson
 
 contains
 
@@ -599,6 +600,190 @@ contains
     write(unit, '(A)') "}"
     close(unit)
   end subroutine writeTransientSignalsJson
+
+  ! =====================================================================
+  ! Observation results (potentials, GPR, touch and step), ADR 0027
+  ! =====================================================================
+
+  subroutine writeObservationCsv(study, filename)
+    !! Tidy CSV of `study%observationResults`: one row per (frequency,
+    !! quantity, id), columns `frequency_hz,quantity,id,x,y,z,re,im`.
+    !! Quantities: `potential` (complex, per site), `stepMap` (grid step
+    !! voltage, real: `re` holds the magnitude, `im` is 0), `gpr` (complex
+    !! node potential per touch site), `touch` (real magnitude) and `step`
+    !! (complex Δψ per step pair). x, y, z are filled only for the site
+    !! quantities (`potential`, `stepMap`).
+    type(tStudy), intent(in) :: study
+    character(len=*), intent(in) :: filename
+    integer :: unit, nf, k, i
+    character(len=24) :: zero
+    character(len=256) :: id
+    complex(8) :: v
+
+    nf = study%observationResults%potentials%frequencyCount()
+    if (nf == 0) then
+      call raiseError("writeObservationCsv: study has no observation results (computeObservations first)")
+      return
+    end if
+    zero = fmtReal(0.0d0)
+
+    open(newunit=unit, file=filename, status="replace", action="write")
+    write(unit, '(A)') "frequency_hz,quantity,id,x,y,z,re,im"
+    do k = 1, nf
+      do i = 1, study%observationResults%potentials%entityCount()
+        id = study%observationResults%potentials%entityId(i)
+        v  = study%observationResults%potentials%get(i, k)
+        write(unit, '(A)') trim(fmtReal(study%observationResults%freqHz(k))) // ",potential," // trim(id) // "," // &
+          trim(sitePositionCsv(study, i)) // "," // trim(fmtReal(real(v))) // "," // trim(fmtReal(aimag(v)))
+      end do
+      do i = 1, study%observationResults%stepMap%entityCount()
+        id = study%observationResults%stepMap%entityId(i)
+        write(unit, '(A)') trim(fmtReal(study%observationResults%freqHz(k))) // ",stepMap," // trim(id) // "," // &
+          trim(sitePositionCsv(study, study%observationResults%potentials%entityCount() - &
+            study%observationResults%stepMap%entityCount() + i)) // "," // &
+          trim(fmtReal(study%observationResults%stepMap%get(i, k))) // "," // trim(zero)
+      end do
+      do i = 1, study%observationResults%gpr%entityCount()
+        id = study%observationResults%gpr%entityId(i)
+        v  = study%observationResults%gpr%get(i, k)
+        write(unit, '(A)') trim(fmtReal(study%observationResults%freqHz(k))) // ",gpr," // trim(id) // ",,,," // &
+          trim(fmtReal(real(v))) // "," // trim(fmtReal(aimag(v)))
+        write(unit, '(A)') trim(fmtReal(study%observationResults%freqHz(k))) // ",touch," // trim(id) // ",,,," // &
+          trim(fmtReal(study%observationResults%touch%get(i, k))) // "," // trim(zero)
+      end do
+      do i = 1, study%observationResults%steps%entityCount()
+        id = study%observationResults%steps%entityId(i)
+        v  = study%observationResults%steps%get(i, k)
+        write(unit, '(A)') trim(fmtReal(study%observationResults%freqHz(k))) // ",step," // trim(id) // ",,,," // &
+          trim(fmtReal(real(v))) // "," // trim(fmtReal(aimag(v)))
+      end do
+    end do
+    close(unit)
+  end subroutine writeObservationCsv
+
+  function sitePositionCsv(study, i) result(s)
+    !! `x,y,z` of potential site `i`.
+    type(tStudy), intent(in) :: study
+    integer, intent(in) :: i
+    character(len=:), allocatable :: s
+
+    s = trim(fmtReal(study%observationResults%sitePos(1, i))) // "," // &
+        trim(fmtReal(study%observationResults%sitePos(2, i))) // "," // &
+        trim(fmtReal(study%observationResults%sitePos(3, i)))
+  end function sitePositionCsv
+
+  subroutine writeObservationJson(study, filename)
+    !! JSON counterpart of `writeObservationCsv` (ADR 0027):
+    !! `{title, frequencies, sites[{id, position, potential[, step]}],
+    !! grid{id, nx, ny}, touch[{id, node, gpr, touch}], steps[{id,
+    !! difference, magnitude}]}`. Complex values are `{"re", "im"}` pairs;
+    !! `touch`, `step` and `magnitude` are real arrays; `grid` and the sites'
+    !! `step` appear only when the grid asked for a step map; blocks without
+    !! entries are omitted.
+    type(tStudy), intent(in) :: study
+    character(len=*), intent(in) :: filename
+    integer :: unit, nf, i, k, nSites, nStepMap, nTouch, nSteps
+    logical :: first
+    real(8), allocatable :: mags(:)
+
+    nf = study%observationResults%potentials%frequencyCount()
+    if (nf == 0) then
+      call raiseError("writeObservationJson: study has no observation results (computeObservations first)")
+      return
+    end if
+    nSites   = study%observationResults%potentials%entityCount()
+    nStepMap = study%observationResults%stepMap%entityCount()
+    nTouch   = study%observationResults%gpr%entityCount()
+    nSteps   = study%observationResults%steps%entityCount()
+    allocate(mags(nf))
+
+    open(newunit=unit, file=filename, status="replace", action="write")
+    write(unit, '(A)') "{"
+    write(unit, '(A)') '  "title": "' // trim(study%title) // '",'
+    write(unit, '(A)', advance="no") '  "frequencies": ['
+    call writeRealList(unit, study%observationResults%freqHz)
+    write(unit, '(A)') "],"
+
+    write(unit, '(A)', advance="no") '  "sites": ['
+    first = .true.
+    do i = 1, nSites
+      if (.not. first) write(unit, '(A)', advance="no") ","
+      first = .false.
+      write(unit, '(A)') ""
+      write(unit, '(A)', advance="no") '    { "id": "' // trim(study%observationResults%potentials%entityId(i)) // &
+        '", "position": [' // trim(sitePositionCsv(study, i)) // '], "potential": ['
+      do k = 1, nf
+        write(unit, '(A)', advance="no") fmtComplexJson(study%observationResults%potentials%get(i, k))
+        if (k < nf) write(unit, '(A)', advance="no") ", "
+      end do
+      write(unit, '(A)', advance="no") "]"
+      if (i > nSites - nStepMap) then
+        do k = 1, nf
+          mags(k) = study%observationResults%stepMap%get(i - (nSites - nStepMap), k)
+        end do
+        write(unit, '(A)', advance="no") ', "step": ['
+        call writeRealList(unit, mags)
+        write(unit, '(A)', advance="no") "]"
+      end if
+      write(unit, '(A)', advance="no") " }"
+    end do
+    write(unit, '(A)') ""
+    write(unit, '(A)', advance="no") "  ]"
+
+    if (nStepMap > 0) then
+      write(unit, '(A)') ","
+      write(unit, '(A)', advance="no") '  "grid": { "id": "' // trim(study%observation%grid%id) // '", "nx": '
+      write(unit, '(I0,A,I0,A)', advance="no") study%observation%grid%nx, ', "ny": ', study%observation%grid%ny, ' }'
+    end if
+
+    if (nTouch > 0) then
+      write(unit, '(A)') ","
+      write(unit, '(A)', advance="no") '  "touch": ['
+      do i = 1, nTouch
+        if (i > 1) write(unit, '(A)', advance="no") ","
+        write(unit, '(A)') ""
+        write(unit, '(A)', advance="no") '    { "id": "' // trim(study%observationResults%gpr%entityId(i)) // &
+          '", "node": "' // trim(study%observation%touch(i)%node) // '", "gpr": ['
+        do k = 1, nf
+          write(unit, '(A)', advance="no") fmtComplexJson(study%observationResults%gpr%get(i, k))
+          if (k < nf) write(unit, '(A)', advance="no") ", "
+        end do
+        do k = 1, nf
+          mags(k) = study%observationResults%touch%get(i, k)
+        end do
+        write(unit, '(A)', advance="no") '], "touch": ['
+        call writeRealList(unit, mags)
+        write(unit, '(A)', advance="no") "] }"
+      end do
+      write(unit, '(A)') ""
+      write(unit, '(A)', advance="no") "  ]"
+    end if
+
+    if (nSteps > 0) then
+      write(unit, '(A)') ","
+      write(unit, '(A)', advance="no") '  "steps": ['
+      do i = 1, nSteps
+        if (i > 1) write(unit, '(A)', advance="no") ","
+        write(unit, '(A)') ""
+        write(unit, '(A)', advance="no") '    { "id": "' // trim(study%observationResults%steps%entityId(i)) // &
+          '", "difference": ['
+        do k = 1, nf
+          write(unit, '(A)', advance="no") fmtComplexJson(study%observationResults%steps%get(i, k))
+          if (k < nf) write(unit, '(A)', advance="no") ", "
+          mags(k) = abs(study%observationResults%steps%get(i, k))
+        end do
+        write(unit, '(A)', advance="no") '], "magnitude": ['
+        call writeRealList(unit, mags)
+        write(unit, '(A)', advance="no") "] }"
+      end do
+      write(unit, '(A)') ""
+      write(unit, '(A)', advance="no") "  ]"
+    end if
+
+    write(unit, '(A)') ""
+    write(unit, '(A)') "}"
+    close(unit)
+  end subroutine writeObservationJson
 
   subroutine writeRealList(unit, x)
     !! Comma-separated reals on the current line (no brackets, no newline).

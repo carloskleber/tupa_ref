@@ -14,6 +14,7 @@ use crate::geometry::GeometryKernel;
 use crate::material::{AlipioVisacroSoil, Linear, Medium, PortelaSoil};
 use crate::mesh::ImageModel;
 use crate::node::Node;
+use crate::observation::{GridSpec, Observation, ObservationPoint, StepSpec, TouchSpec};
 use crate::signal::{
     Signal, new_double_exp_signal, new_heidler_signal, new_heidler_signal_terms,
     new_portela_signal, new_sine_signal,
@@ -263,6 +264,189 @@ struct NumericsSpec {
     max_segment_length: Option<f64>,
 }
 
+/// `observation` block (ADR 0027, ROADMAP Phase 11).
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct ObservationSpec {
+    points: Vec<ObsPointSpec>,
+    grid: Option<ObsGridSpec>,
+    touch: Vec<ObsTouchSpec>,
+    steps: Vec<ObsStepSpec>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct ObsPointSpec {
+    id: String,
+    position: Vec<f64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+struct ObsGridSpec {
+    id: String,
+    origin: Vec<f64>,
+    z: f64,
+    #[serde(rename = "lengthX")]
+    length_x: f64,
+    #[serde(rename = "lengthY")]
+    length_y: f64,
+    nx: f64,
+    ny: f64,
+    step: Option<ObsGridStepSpec>,
+}
+
+impl Default for ObsGridSpec {
+    fn default() -> Self {
+        Self {
+            id: "grid".into(),
+            origin: Vec::new(),
+            z: 0.0,
+            length_x: 0.0,
+            length_y: 0.0,
+            nx: 0.0,
+            ny: 0.0,
+            step: None,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+struct ObsGridStepSpec {
+    length: f64,
+    directions: f64,
+}
+
+impl Default for ObsGridStepSpec {
+    fn default() -> Self {
+        Self {
+            length: 1.0,
+            directions: 8.0,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+struct ObsTouchSpec {
+    id: String,
+    node: String,
+    radius: f64,
+    points: f64,
+    z: f64,
+}
+
+impl Default for ObsTouchSpec {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            node: String::new(),
+            radius: 1.0,
+            points: 36.0,
+            z: 0.0,
+        }
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct ObsStepSpec {
+    id: String,
+    from: Vec<f64>,
+    to: Vec<f64>,
+}
+
+fn vec3(v: &[f64]) -> Option<[f64; 3]> {
+    (v.len() == 3).then(|| [v[0], v[1], v[2]])
+}
+
+fn build_observation(spec: Option<ObservationSpec>) -> Result<Observation> {
+    let Some(spec) = spec else {
+        return Ok(Observation::default());
+    };
+    let mut obs = Observation::default();
+    for p in spec.points {
+        let pos = vec3(&p.position)
+            .filter(|_| !p.id.is_empty())
+            .ok_or_else(|| {
+                TupaError::new("mTupa: observation.points[] needs an id and a 3-component position")
+            })?;
+        obs.points.push(ObservationPoint { id: p.id, p: pos });
+    }
+    if let Some(g) = spec.grid {
+        if g.origin.len() == 1 {
+            return Err(TupaError::new(
+                "mTupa: observation.grid.origin needs [x, y]",
+            ));
+        }
+        let (nx, ny) = (g.nx as i64, g.ny as i64);
+        if nx < 1 || ny < 1 {
+            return Err(TupaError::new(
+                "mTupa: observation.grid needs nx >= 1 and ny >= 1",
+            ));
+        }
+        let mut grid = GridSpec {
+            id: g.id,
+            origin: [
+                g.origin.first().copied().unwrap_or(0.0),
+                g.origin.get(1).copied().unwrap_or(0.0),
+            ],
+            z: g.z,
+            length_x: g.length_x,
+            length_y: g.length_y,
+            nx: nx as usize,
+            ny: ny as usize,
+            step: false,
+            step_length: 1.0,
+            step_directions: 8,
+        };
+        if let Some(st) = g.step {
+            if st.length <= 0.0 || (st.directions as i64) < 1 {
+                return Err(TupaError::new(
+                    "mTupa: observation.grid.step needs length > 0 and directions >= 1",
+                ));
+            }
+            grid.step = true;
+            grid.step_length = st.length;
+            grid.step_directions = st.directions as usize;
+        }
+        obs.grid = Some(grid);
+    }
+    for t in spec.touch {
+        if t.node.is_empty() || t.radius <= 0.0 || (t.points as i64) < 3 {
+            return Err(TupaError::new(
+                "mTupa: observation.touch[] needs a node, radius > 0 and at least 3 points",
+            ));
+        }
+        obs.touch.push(TouchSpec {
+            id: if t.id.is_empty() {
+                t.node.clone()
+            } else {
+                t.id
+            },
+            node: t.node,
+            radius: t.radius,
+            n_points: t.points as usize,
+            z: t.z,
+        });
+    }
+    for s in spec.steps {
+        let (Some(from), Some(to)) = (vec3(&s.from), vec3(&s.to)) else {
+            return Err(TupaError::new(
+                "mTupa: observation.steps[] needs an id and 3-component from/to",
+            ));
+        };
+        if s.id.is_empty() {
+            return Err(TupaError::new(
+                "mTupa: observation.steps[] needs an id and 3-component from/to",
+            ));
+        }
+        obs.steps.push(StepSpec { id: s.id, from, to });
+    }
+    Ok(obs)
+}
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 struct CaseSpec {
@@ -275,6 +459,7 @@ struct CaseSpec {
     sources: Option<Vec<SourceSpec>>,
     frequencies: Option<FrequencySpec>,
     outputs: Option<OutputsSpec>,
+    observation: Option<ObservationSpec>,
     signal: Option<SignalSpec>,
 }
 
@@ -502,6 +687,7 @@ fn build(spec: CaseSpec) -> Result<LoadedCase> {
     study.kernel = kernel;
     study.image_model = image_model;
     study.max_segment_length = max_segment_length;
+    study.observation = build_observation(spec.observation)?;
 
     let sources = spec.sources.as_ref().map(|list| {
         list.iter()
@@ -934,6 +1120,9 @@ pub fn validate_study_references(case: &mut LoadedCase) -> Result<()> {
         for id in ids {
             require_electrode(study, id, "outputs.electrodes")?;
         }
+    }
+    for t in &study.observation.touch {
+        require_node(study, &t.node, "observation.touch[].node")?;
     }
     Ok(())
 }

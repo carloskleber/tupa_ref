@@ -2,7 +2,7 @@
 
 - **Status**: Recorded (informational — findings, not a single decision;
   moved here from ROADMAP.md §8 when the roadmap was tidied, 2026-07-17)
-- **Date**: 2026-07-05 .. 2026-07-17 (finding 8 added 2026-09-30)
+- **Date**: 2026-07-05 .. 2026-07-17 (finding 8 added 2026-09-30, finding 9 on 2026-10-01)
 
 ## Context
 
@@ -83,6 +83,16 @@ other documents and code comments cite them as "ADR 0017 finding N"
    `julia/test/unit.jl` check the pair above against quadrature. The golden
    fixtures do not change: every opposite-direction pair in them has equal
    lengths.
+9. **Two legacy potential routines disagree** (found 2026-10-01, Phase 11,
+   ADR 0027). `potsolonovo.m` multiplies the transversal current per unit
+   length (`it`, which `solver.m` divides by `lb`) by a constant that already
+   holds `1/lb`, and by `1/lb` again: the potential of a segment comes out
+   short by its length. The class-based `PotencialToque` is right (per-length
+   current, `1/(4π(σ+jωε))`, the geometry factor, ideal images) but unfinished —
+   its `coletaDadosFrequencia` takes `varargin` arguments the solver's call
+   (`calcfreq.m`) no longer passes. TUPÃ implements the latter's model; the
+   legacy touch voltage is the maximum of `|ψ − u|` over 36 points on a 1 m
+   circle at `z = 0` around the node.
 
 ## Consequences
 

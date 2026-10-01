@@ -4,7 +4,8 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use tupa::results_writer::{results_csv, transient_csv, transient_signals_csv};
+use tupa::potentials::compute_observations;
+use tupa::results_writer::{observation_csv, results_csv, transient_csv, transient_signals_csv};
 use tupa::transient::{transient_response, transient_signals};
 use tupa::{load_study, validate_study_references};
 
@@ -309,6 +310,77 @@ fn channel_tower_gap_matches_fixtures() {
     check_transient_case_as("channel_tower_gap", "channel_tower_gap_transient");
 }
 
+/// ROADMAP Phase 11 (ADR 0027): harmonic sweep and observation results of a
+/// 16x16 m grid with a tower riser. The observation CSV has the shape
+/// `frequency_hz,quantity,id,x,y,z,re,im`; rows are matched by position with
+/// textually equal key fields.
+#[test]
+fn grid_safety_matches_fixtures() {
+    let json = common().join("grid_safety.json");
+    let mut case = load_study(&json).expect("load");
+    validate_study_references(&mut case).expect("validate");
+    let sources = case.sources.clone().expect("sources");
+    let freq = case.freq_hz.clone().expect("frequencies");
+    case.study.run_sweep(&freq, &sources).expect("sweep");
+    let o = &case.outputs;
+    let fresh = results_csv(
+        &case.study,
+        o.nodes.as_deref(),
+        o.electrodes.as_deref(),
+        o.quantities.as_deref(),
+    )
+    .expect("csv");
+    let expected =
+        fs::read_to_string(common().join("grid_safety_expected.csv")).expect("expected csv");
+    if let Err(msg) = diff_csv(&fresh, &expected, 1.0e-6) {
+        panic!("grid_safety: harmonic results differ from fixture: {msg}");
+    }
+
+    compute_observations(&mut case.study).expect("observations");
+    let fresh = observation_csv(&case.study).expect("observation csv");
+    let expected = fs::read_to_string(common().join("grid_safety_potentials_expected.csv"))
+        .expect("expected observation csv");
+    if let Err(msg) = diff_observation_csv(&fresh, &expected, 1.0e-6) {
+        panic!("grid_safety: observation results differ from fixture: {msg}");
+    }
+}
+
+fn diff_observation_csv(fresh: &str, expected: &str, reltol: f64) -> Result<(), String> {
+    let (mut fl, mut el) = (fresh.lines(), expected.lines());
+    let (fh, eh) = (fl.next(), el.next());
+    if fh != eh {
+        return Err(format!("header mismatch: {fh:?} vs {eh:?}"));
+    }
+    let split = |line: &str| -> Result<(String, f64, f64), String> {
+        let f: Vec<&str> = line.split(',').collect();
+        if f.len() != 8 {
+            return Err(format!("malformed row: {line}"));
+        }
+        let p = |s: &str| s.trim().parse::<f64>().map_err(|x| format!("{line}: {x}"));
+        Ok((f[..6].join(","), p(f[6])?, p(f[7])?))
+    };
+    let mut n = 0;
+    loop {
+        match (fl.next(), el.next()) {
+            (None, None) => return Ok(()),
+            (Some(f), Some(e)) => {
+                n += 1;
+                let ((fk, fre, fim), (ek, ere, eim)) = (split(f)?, split(e)?);
+                if fk != ek {
+                    return Err(format!("row {n}: key {fk} vs {ek}"));
+                }
+                let scale = 1.0e-6_f64.max(ere.abs()).max(eim.abs());
+                if (fre - ere).abs() >= reltol * scale || (fim - eim).abs() >= reltol * scale {
+                    return Err(format!(
+                        "{ek}: fresh ({fre}, {fim}) vs expected ({ere}, {eim})"
+                    ));
+                }
+            }
+            _ => return Err("row count differs".to_string()),
+        }
+    }
+}
+
 #[test]
 fn every_expected_fixture_has_a_test() {
     let mut names: Vec<String> = fs::read_dir(common())
@@ -331,6 +403,8 @@ fn every_expected_fixture_has_a_test() {
             "channel_tower_transient",
             "channel_unloaded",
             "grid",
+            "grid_safety",
+            "grid_safety_potentials",
             "portela1997",
             "portela1997_ideal",
             "portela1997_transient_hann",

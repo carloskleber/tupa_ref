@@ -165,7 +165,10 @@ like `portela1997.json`/`rod.json`/`grid.json`/`rod_air.json`), it
 additionally runs the frequency sweep and writes
 `<basename>_results.csv`/`.json` (tidy CSV + ADR 0012 JSON,
 `mResultsWriter`) into the *current working directory* — e.g. running from
-`fortran/` writes `fortran/portela1997_results.csv`. A structure-only case
+`fortran/` writes `fortran/portela1997_results.csv`. A case with an `observation` block
+(ADR 0027, e.g. `grid_safety.json`) also writes
+`<basename>_potentials.csv`/`.json` — surface potentials, GPR, touch and step
+voltages. A structure-only case
 (`buried_conductor_short.json`/`buried_conductor_long.json`) stops after
 the report; there is nothing to sweep, and no output files are written.
 `outputs.nodes`/`electrodes`/`quantities`, if present in the case file,

@@ -68,7 +68,15 @@ entries.
   set; the legacy `sinal` list. Contrast `signal.sources`, whose injections
   superpose into one response. The transfer function is solved once and shared.
 - **GPR (Ground Potential Rise)** — potential of the grounding structure vs
-  remote earth under injected current; a primary engineering output.
+  remote earth under injected current; a primary engineering output (the
+  solved node voltage; reported per touch site in `<case>_potentials.*`).
+- **Observation point / surface potential** — a point off the conductors where
+  the scalar potential ψ is evaluated from the solved currents (theory.md §3.1,
+  the `observation` block, ADR 0027).
+- **Touch / step voltage** — here the legacy geometric definitions: touch =
+  max |ψ − u_node| over a 1 m, 36-point circle around a node at the surface;
+  step = ψ difference between points a 1 m stride apart. IEEE Std 80's
+  body-circuit and surface-layer factors are not applied.
 - **LEMP (Lightning ElectroMagnetic Pulse)** — the field radiated by the
   return-stroke channel; its coupling to line conductors raises insulator
   voltages beyond the conducted-current response [52]. Captured naturally

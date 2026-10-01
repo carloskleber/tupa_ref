@@ -208,7 +208,7 @@ GPLv3 — see [LICENSE](LICENSE).
 Fortran is the reference implementation; Rust follows it to the 1e-6
 conformance rule on every golden fixture; Julia is a lag-guarded third port
 (it refuses the schema features it does not implement rather than ignoring
-them). State as of 2026-10-01 (Phase 10b, Fortran package 0.7.0).
+them). State as of 2026-10-01 (Phase 11, Fortran package 0.7.0 plus unreleased work).
 
 | Feature | Fortran (`fortran/`) | Rust (`rust/`) | Julia (`julia/`) |
 | --- | --- | --- | --- |
@@ -222,7 +222,8 @@ them). State as of 2026-10-01 (Phase 10b, Fortran package 0.7.0).
 | Lightning `channel` element, speed calibration (Phase 10b, ADR 0025) | ✔ | ✔ | lag (refuses the element) |
 | Two-node sources: `returnNode` current dipole, delta-gap voltage, `quantity` (ADR 0025) | ✔ | ✔ | lag (refuses the fields) |
 | `channels` block in the results JSON | ✔ | ✔ | — |
-| Golden fixtures in `common/` met at 1e-6 | all | all | harmonic ones (`grid`, `portela1997`, `portela1997_ideal`, `rod`, `portelaMesh`); the Phase 9 transient and Phase 10b channel ones lag (`julia/README.md`) |
-| Test suite (2026-10-01) | 18 programs, all pass | 111 tests, all pass | 252 tests, all pass |
+| Grounding-safety outputs (Phase 11, ADR 0027): `observation` block — surface potentials, GPR, touch and step voltage, step map — and `<case>_potentials.*` | ✔ (harmonic) | ✔ (harmonic) | lag (ignores the block) |
+| Golden fixtures in `common/` met at 1e-6 | all but `channel_loaded` (its fixture predates the case's later 2048-sample setting; fails in Fortran and Rust alike until regenerated) | all but `channel_loaded` (same) | harmonic ones (`grid`, `portela1997`, `portela1997_ideal`, `rod`, `portelaMesh`); the Phase 9 transient and Phase 10b channel ones lag (`julia/README.md`) |
+| Test suite (2026-10-01) | 19 programs; 18 pass, `test_common_cases` fails on the stale `channel_loaded` fixture only | 112 tests; all pass but `channel_loaded` | 253 tests, all pass |
 | Linear algebra / quadrature | LAPACK, SLATEC | in-repo LU, line-by-line GK 7/15 port, no external numerics | LAPACK LU via `LinearAlgebra`, line-by-line GK 7/15 port |
 | Role | reference; also builds the CLI used by the GUI | conformance port (ADR 0022) | contributed prototype, follow-along port (Phase 8J) |

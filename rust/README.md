@@ -31,7 +31,8 @@ the ideal ±1 limit) — ROADMAP Phase 10, [ADR 0024](../docs/adr/0024-phase10-n
 `--output-dir <dir>`. A case's own `numerics` block overrides the two
 Phase 10 flags. Result files are named
 like the Fortran ones (`<case>_results.csv|json`,
-`<case>_transient_results.csv|json`) and are read unchanged by the GUI.
+`<case>_transient_results.csv|json`, and `<case>_potentials.csv|json` for a case
+with an `observation` block, ADR 0027) and are read unchanged by the GUI.
 
 Local merge gate (no hosted CI, ADR 0018):
 
@@ -78,6 +79,7 @@ Tolerance and comparison rule: 1e-6 relative on the row scale
 | `portela1997_transient`, `silva2025_*_transient` | none | vs fresh Fortran runs (2026-09-30, after Phase 9): 3e-12 and 2e-9 (`silva2025_rho100_transient`) under the transient rule |
 | `silva2025_*`, `grcev_*`, `lima_*`, `poljak_fig4`, `rod_air`, … | none | load, validate, assemble; sweeps run |
 | `channel_{unloaded,loaded,tower,tower_gap}` (ROADMAP Phase 10b, ADR 0025: `channel` element, two-node sources; `channel_loaded` runs the calibration) | `channel_*_expected.csv`; `channel_tower*` also `*_transient_expected.csv` | **match** under the 1e-6 rules (`tests/conformance.rs`: `check_harmonic` and the transient comparison; 2026-10-01) |
+| `grid_safety` (ROADMAP Phase 11, ADR 0027: `observation` block — surface potentials, GPR, touch and step voltage, step map) | `grid_safety_expected.csv` (harmonic), `grid_safety_potentials_expected.csv` (observation shape `frequency_hz,quantity,id,x,y,z,re,im`) | **match** (2e-8 of the Fortran potentials; `grid_safety_matches_fixtures`) |
 | `linha*`, `torre*` (ADR 0023: `catenary` element, `portela` waveform) | none | load, validate, assemble; vs fresh Fortran runs: `linha1` 3e-10, `linha4` 1e-5 (quadrature-tolerance level, same with zero sag) — see `common/README.md` |
 
 **Cross-code check on Grcev ℓ = 10 m** (`grcev_fig12_l10_rho{30,300,3000}`,
@@ -112,6 +114,16 @@ item 9) still needs Fortran outputs for the non-golden cases.
 Each later contract change (schema, `common/` case, default numerics)
 carries a Rust item; lags are recorded in the conformance table above.
 
+- **ROADMAP Phase 11** ([ADR 0027](../docs/adr/0027-observation-potentials-and-safety-outputs.md),
+  grounding-safety outputs) — **implemented (harmonic), no lag**: `observation.rs`
+  (the parsed block and result containers), `potentials.rs`
+  (`segment_potential_factor`, `potentials_at`, `compute_observations`),
+  `MediumConstants::from_immittance` (the per-frequency constants without a
+  mesh), `results_writer::observation_csv/json`, the `observation` block in
+  `json.rs`, `Study::{observation, observation_results, sweep_damping}`. The
+  CLI writes `<case>_potentials.{csv,json}` after a sweep. Fixture
+  `grid_safety`: potentials within 2e-8 of the Fortran ones. Serial, like the
+  rest of the sweep.
 - **ADR 0026** (independent transient signals) — **implemented, no lag**:
   `Study::run_sweep_units` (multi-RHS unit terminals, observed rows only),
   `transient::transient_signals` over `TransientSpec::signal_names`,

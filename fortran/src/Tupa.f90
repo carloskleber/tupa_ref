@@ -42,8 +42,15 @@ module tupa
   !!   `growth` (graded from the foot). Plants `<id>-base` (separate from
   !!   the strike node), `<id>_n<k>` and `<id>-top`.
   !!
+  !! - `"observation"` (optional, ADR 0027): potentials, GPR, touch and step
+  !!   voltages from the solved sweep — `points`, `grid`, `touch`, `steps`
+  !!   (`mObservation`, evaluated by `mPotentials`; written to
+  !!   `<case>_potentials.csv/.json`).
+  !!
   !! Future versions will add tCircumference, tTower.
   use mStudy
+  use mObservation, only: tObservation, tObservationPoint, tGridSpec, tTouchSpec, tStepSpec
+  use mPotentials, only: computeObservations
   use mMesh, only: IMAGE_FREQ_DEPENDENT, IMAGE_IDEAL
   use mGeometry, only: GEOM_KERNEL_SINGLE, GEOM_KERNEL_DOUBLE
   use mNode
@@ -59,7 +66,8 @@ module tupa
   use mTransient, only: transientResponseSources, transientResponseSignals, tTransientOptions
   use mResultsWriter, only: writeResultsCsv, writeResultsJson, &
                              writeTransientResultsCsv, writeTransientResultsJson, &
-                             writeTransientSignalsCsv, writeTransientSignalsJson
+                             writeTransientSignalsCsv, writeTransientSignalsJson, &
+                             writeObservationCsv, writeObservationJson
   use mError, only: raiseError
   use mVerbosity
   implicit none
@@ -561,6 +569,8 @@ contains
       end if
     end if
 
+    if (json_has(root, "observation")) call parseObservation(json_child(root, "observation"), study%observation)
+
     ! ------------------------------------------------------------------
     ! Optional signal block (ADR 0015): time-domain excitation, independent
     ! of sources/frequencies (a case may carry either, both, or neither).
@@ -787,6 +797,125 @@ contains
     end if
   end subroutine loadStudy
 
+  subroutine readVec3(parent, key, v, ok)
+    !! Read a JSON `[x, y, z]` array member `key` of `parent` into `v`;
+    !! `ok` is false (and `v` zero) if it is absent or not three numbers.
+    type(tJsonValue), intent(in), target :: parent
+    character(len=*), intent(in) :: key
+    real(8), intent(out) :: v(3)
+    logical, intent(out) :: ok
+    type(tJsonValue), pointer :: arr, item
+    integer :: i
+
+    v = 0.0d0
+    ok = .false.
+    if (.not. json_has(parent, key)) return
+    arr => json_child(parent, key)
+    if (json_size(arr) /= 3) return
+    do i = 1, 3
+      item => json_item(arr, i)
+      v(i) = json_value_real(item)
+    end do
+    ok = .true.
+  end subroutine readVec3
+
+  subroutine parseObservation(obs_obj, obs)
+    !! Parse the optional `"observation"` block (ADR 0027, theory.md §3.1):
+    !! `points[]` (`id`, `position`), `grid` (`id`, `origin` [x, y], `z`,
+    !! `lengthX`, `lengthY`, `nx`, `ny`, optional `step` {`length`,
+    !! `directions`}), `touch[]` (`id`, `node`, `radius`, `points`, `z`) and
+    !! `steps[]` (`id`, `from`, `to`).
+    type(tJsonValue), intent(in), target :: obs_obj
+    type(tObservation), intent(out) :: obs
+    type(tJsonValue), pointer :: arr, item, grid_obj, step_obj, org
+    integer :: i, n
+    logical :: ok
+
+    if (json_has(obs_obj, "points")) then
+      arr => json_child(obs_obj, "points")
+      n = json_size(arr)
+      allocate(obs%points(n))
+      do i = 1, n
+        item => json_item(arr, i)
+        obs%points(i)%id = json_str(item, "id")
+        call readVec3(item, "position", obs%points(i)%p, ok)
+        if (len_trim(obs%points(i)%id) == 0 .or. .not. ok) then
+          call raiseError("mTupa: observation.points[] needs an id and a 3-component position")
+          return
+        end if
+      end do
+    end if
+
+    if (json_has(obs_obj, "grid")) then
+      grid_obj => json_child(obs_obj, "grid")
+      obs%hasGrid = .true.
+      if (json_has(grid_obj, "id")) obs%grid%id = json_str(grid_obj, "id")
+      if (json_has(grid_obj, "origin")) then
+        org => json_child(grid_obj, "origin")
+        if (json_size(org) < 2) then
+          call raiseError("mTupa: observation.grid.origin needs [x, y]")
+          return
+        end if
+        item => json_item(org, 1); obs%grid%origin(1) = json_value_real(item)
+        item => json_item(org, 2); obs%grid%origin(2) = json_value_real(item)
+      end if
+      obs%grid%z       = json_real(grid_obj, "z")
+      obs%grid%lengthX = json_real(grid_obj, "lengthX")
+      obs%grid%lengthY = json_real(grid_obj, "lengthY")
+      obs%grid%nx      = json_int(grid_obj, "nx")
+      obs%grid%ny      = json_int(grid_obj, "ny")
+      if (obs%grid%nx < 1 .or. obs%grid%ny < 1) then
+        call raiseError("mTupa: observation.grid needs nx >= 1 and ny >= 1")
+        return
+      end if
+      if (json_has(grid_obj, "step")) then
+        obs%grid%step = .true.
+        step_obj => json_child(grid_obj, "step")
+        if (json_has(step_obj, "length")) obs%grid%stepLength = json_real(step_obj, "length")
+        if (json_has(step_obj, "directions")) obs%grid%stepDirections = json_int(step_obj, "directions")
+        if (obs%grid%stepLength <= 0.0d0 .or. obs%grid%stepDirections < 1) then
+          call raiseError("mTupa: observation.grid.step needs length > 0 and directions >= 1")
+          return
+        end if
+      end if
+    end if
+
+    if (json_has(obs_obj, "touch")) then
+      arr => json_child(obs_obj, "touch")
+      n = json_size(arr)
+      allocate(obs%touch(n))
+      do i = 1, n
+        item => json_item(arr, i)
+        obs%touch(i)%node = json_str(item, "node")
+        obs%touch(i)%id   = json_str(item, "id")
+        if (len_trim(obs%touch(i)%id) == 0) obs%touch(i)%id = obs%touch(i)%node
+        if (json_has(item, "radius")) obs%touch(i)%radius = json_real(item, "radius")
+        if (json_has(item, "points")) obs%touch(i)%nPoints = json_int(item, "points")
+        obs%touch(i)%z = json_real(item, "z")
+        if (len_trim(obs%touch(i)%node) == 0 .or. obs%touch(i)%radius <= 0.0d0 .or. obs%touch(i)%nPoints < 3) then
+          call raiseError("mTupa: observation.touch[] needs a node, radius > 0 and at least 3 points")
+          return
+        end if
+      end do
+    end if
+
+    if (json_has(obs_obj, "steps")) then
+      arr => json_child(obs_obj, "steps")
+      n = json_size(arr)
+      allocate(obs%steps(n))
+      do i = 1, n
+        item => json_item(arr, i)
+        obs%steps(i)%id = json_str(item, "id")
+        call readVec3(item, "from", obs%steps(i)%from, ok)
+        if (ok) call readVec3(item, "to", obs%steps(i)%to, ok)
+        if (len_trim(obs%steps(i)%id) == 0 .or. .not. ok) then
+          call raiseError("mTupa: observation.steps[] needs an id and 3-component from/to")
+          return
+        end if
+      end do
+    end if
+  end subroutine parseObservation
+
   function readFrequencyAxis(freq_obj) result(freqHz)
     !! Log-spaced axis of a "frequencies" block (`min`/`max`/
     !! `pointsPerDecade`, ADR 0013): nPoints = round(ppd·log10(max/min)) + 1.
@@ -1009,6 +1138,12 @@ contains
         call requireElectrodeReference(study, trim(outputElectrodeIds(i)), "outputs.electrodes")
       end do
     end if
+
+    if (allocated(study%observation%touch)) then
+      do i = 1, size(study%observation%touch)
+        call requireNodeReference(study, trim(study%observation%touch(i)%node), "observation.touch[].node")
+      end do
+    end if
   end subroutine validateStudyReferences
 
   subroutine requireNodeReference(study, nodeId, fieldName)
@@ -1140,6 +1275,19 @@ contains
       call writeResultsJson(study, trim(jsonFile), nodeIds=outputNodeIds, &
                              electrodeIds=outputElectrodeIds, quantities=outputQuantities)
       call verbose(VERB_NORMAL, "Wrote " // trim(csvFile) // " and " // trim(jsonFile))
+
+      if (.not. study%observation%isEmpty()) then
+        call computeObservations(study)
+        csvFile  = trim(base) // "_potentials.csv"
+        jsonFile = trim(base) // "_potentials.json"
+        call writeObservationCsv(study, trim(csvFile))
+        call writeObservationJson(study, trim(jsonFile))
+        call verbose(VERB_NORMAL, "Wrote " // trim(csvFile) // " and " // trim(jsonFile))
+      end if
+    else if (.not. study%observation%isEmpty()) then
+      call raiseError("tupa: the observation block needs a harmonic sweep (sources + frequencies); " // &
+                      "transient observation is not supported yet (ADR 0027)")
+      return
     end if
 
     if (ranTransient .and. allocated(signalNames)) then

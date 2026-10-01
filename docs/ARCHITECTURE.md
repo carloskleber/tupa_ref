@@ -84,8 +84,10 @@ oracle kept, the geometry cache, the threaded sweep — [ADR 0024](adr/0024-phas
 | `mFft` | `fortran/src/Fft.f90` | Double-precision radix-2 FFT (ADR 0014) | working |
 | `mTransient` | `fortran/src/Transient.f90` | Transfer-function transient driver: `transientResponse` (one source), `transientResponseSources` (superposed), `transientResponseSignals` (independent signals, ADR 0026); scan-fed pchip H(f), Hann window, anti-alias filter (ADR 0021), NLT | working |
 | `mChannelCalibration` | `fortran/src/ChannelCalibration.f90` | Scales a channel's closed-form L′(z) so its simulated return-stroke speed hits the target (Baba–Rakov metric, NLT ramp response on a throw-away `tStudy`) | working |
-| `tResult` family | `fortran/src/Result.f90` | `tVoltages`, `tLongCurrents`, `tTransCurrents`: own copies of entity IDs and ω axis, `get`/`set`/`entityId` accessors | working, filled by `runSweep` |
-| `mResultsWriter` | `fortran/src/ResultsWriter.f90` | Harmonic CSV/JSON (ADR 0012) and transient CSV/JSON (single/multi-source, and the independent-signals form, ADR 0015/0026) | working, tested |
+| `tResult` family | `fortran/src/Result.f90` | `tVoltages`, `tLongCurrents`, `tTransCurrents`: own copies of entity IDs and ω axis, `get`/`set`/`entityId` accessors; `tPotentials`, `tMagnitudes` for the observation outputs | working, filled by `runSweep` / `computeObservations` |
+| `mObservation` | `fortran/src/Observation.f90` | The parsed `observation` block (`tObservation`: points, grid, touch, step pairs) and the `tObservationResults` container; depends only on `mResult` so `tStudy` can own both | working |
+| `mPotentials` | `fortran/src/Potentials.f90` | Phase 11 post-processing (theory.md §3.1, ADR 0027): `potentialsAt` (ψ at arbitrary points from the solved `i1 + i2`, closed-form geometry factor, Γ(ω) images), `computeObservations` (potentials, GPR, touch and step voltage, step map); read-only on the study, OpenMP over points | working, tested |
+| `mResultsWriter` | `fortran/src/ResultsWriter.f90` | Harmonic CSV/JSON (ADR 0012), transient CSV/JSON (single/multi-source, and the independent-signals form, ADR 0015/0026) and the observation CSV/JSON (ADR 0027) | working, tested |
 | `mCtes`, `mError`, `mVerbosity` | `Ctes.f90`, `Error.f90`, `Verbosity.f90` | Constants (`dp`, μ₀, ε₀, …); feh error boundary; global quiet/normal/verbose level | working |
 
 ## 3. Execution flow
@@ -197,6 +199,7 @@ directory, named from the case basename:
 | --- | --- | --- |
 | harmonic | `<case>_results.csv`, `<case>_results.json` | tidy/long CSV; JSON per [ADR 0012](adr/0012-results-json-schema.md) (also lists channels) |
 | transient | `<case>_transient_results.csv`, `…json` | ADR 0015; independent-signal form per ADR 0026 |
+| observation (potentials, GPR, touch, step) | `<case>_potentials.csv`, `…json` | ADR 0027; written after a harmonic sweep when the case has an `observation` block |
 
 Both honour the case's `outputs` selection (nodes, electrodes, quantities).
 Nothing is written as a side effect of `runSweep` itself. The GUI reads these
@@ -239,7 +242,7 @@ files, never solver internals (§8).
 | New geometry (ring, tower, …) | Extend `tElement`, implement `assemble` + `report`; add a case to the `elements` dispatch in `loadStudy` | Priority order in ROADMAP Phases 12–13 (ring next; grid done — Phase 7 item 3; catenary done — ADR 0023; lightning channel done — Phase 10b, ADR 0025) |
 | New soil/conductor model | Extend `tMaterial`, implement `admittance`, `admittanceLaplace`, `report` (`calcPropagationConstant` is inherited) | One subtype per literature reference, named after it (ADR 0007). Conductor internal impedance is still `tLinear`-only (§7) |
 | New excitation waveform | Extend `tSignal`, implement `waveform(t)`; add a constructor and a `signal.waveform` case in `parseSignalWaveform` | Must be sampled on the transient time axis and tail-tapered like the others |
-| New output | Extend `tResult`, implement `alloc`/`get`/`set`; wire into `runSweep` and `mResultsWriter` | Use the legacy output-class inventory to prioritise (ROADMAP P7, Phase 11) |
+| New output | Extend `tResult`, implement `alloc`/`get`/`set`; wire into `runSweep` and `mResultsWriter` — or, for a quantity derived from the solved currents, add it to `mPotentials` and the `<case>_potentials.*` writers (ADR 0027) | Spatial outputs done in Phase 11 (potentials, GPR, touch, step); the field vector and path voltages are open (ROADMAP Phase 11 remainder) |
 | Alternate geometry-factor kernel | `mGeometry%setGeometryKernel`; the mHEM 1-D form is the default (`mImpedance%geometryFactor1D`), the 2-D quadrature stays as test oracle and is selectable (`numerics.kernel`, `--kernel`) | ROADMAP P1 (done, Phase 10 item 1); ADR 0004, 0024 |
 | Image reflection model | `mMesh%calcImageCoefficients` fills `gammaAir`/`gammaSoil` (Γ(ω) default, ideal ±1 selectable via `numerics.imageModel`, `--image-model`); `calcZSelf`/`calcZMutual` multiply the image parcel by them | ROADMAP P2 (done, Phase 10 item 2); ADR 0009 keeps call sites untouched, ADR 0024 |
 | Series loading of a segment | `tElectrode%loaded` + `loadResistance`/`loadInductance` replace the skin-effect impedance in `mStudy%segmentInternalImpedance` (used by the lightning channel; also the slot for generic internal-impedance models, ROADMAP Phase 13 item 2) | ADR 0025 |

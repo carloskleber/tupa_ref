@@ -22,6 +22,8 @@ pub mod linalg;
 pub mod material;
 pub mod mesh;
 pub mod node;
+pub mod observation;
+pub mod potentials;
 pub mod result;
 pub mod results_writer;
 pub mod signal;
@@ -115,6 +117,24 @@ pub fn run_from_file(filename: &str, opts: &RunOptions) -> Result<()> {
             VERB_NORMAL,
             &format!("Wrote {} and {}", csv_file.display(), json_file.display()),
         );
+
+        if !case.study.observation.is_empty() {
+            potentials::compute_observations(&mut case.study)?;
+            let csv = results_writer::observation_csv(&case.study)?;
+            let json = results_writer::observation_json(&case.study)?;
+            let (csv_file, json_file) = (out_path("_potentials.csv"), out_path("_potentials.json"));
+            std::fs::write(&csv_file, csv)?;
+            std::fs::write(&json_file, json)?;
+            verbose(
+                VERB_NORMAL,
+                &format!("Wrote {} and {}", csv_file.display(), json_file.display()),
+            );
+        }
+    } else if !case.study.observation.is_empty() {
+        return Err(TupaError::new(
+            "tupa: the observation block needs a harmonic sweep (sources + frequencies); \
+             transient observation is not supported yet (ADR 0027)",
+        ));
     }
 
     if run_transient {

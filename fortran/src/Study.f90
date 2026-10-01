@@ -17,6 +17,7 @@ module mStudy
   use mElement
   use mMaterial
   use mResult
+  use mObservation, only: tObservation, tObservationResults
   use mGeometry, only: buildGeometryMatrices, setGeometryKernel, getGeometryKernel
   use mGeometryCache, only: geomCacheStats
   use mImpedance, only: internalImpedance, internalImpedanceLaplace, warmUpMachineConstants
@@ -81,6 +82,12 @@ module mStudy
     !! mGeometry; ROADMAP Phase 10 item 1). 0 = the process default
     !! (`mGeometry%getGeometryKernel`, the single-integral form unless
     !! `--kernel double`).
+    type(tObservation) :: observation
+    !! Parsed `"observation"` block (ROADMAP Phase 11, ADR 0027); empty when
+    !! the case asks for no potentials
+    type(tObservationResults) :: observationResults
+    !! Potentials, GPR, touch and step voltages of the last
+    !! `mPotentials::computeObservations` call
     real(8) :: maxSegmentLength = 0.0d0
     !! Per-study segment-length target (m), ROADMAP Phase 10 item 3; 0 = none
     !! (each element keeps its own `segments` count). Applied while loading.

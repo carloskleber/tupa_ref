@@ -48,6 +48,7 @@ ARCHITECTURE → theory.md; contributors add CONVENTIONS and ROADMAP.
 | [0024](adr/0024-phase10-numerics.md) | Phase 10 numerics: single-integral kernel, Γ(ω) images, segment-length target, threaded sweep (`numerics` block) | Accepted |
 | [0025](adr/0025-lightning-channel-and-two-node-sources.md) | Lightning channel element (`"type": "channel"`), two-node sources (`returnNode`, transient `quantity`) and speed calibration | Accepted |
 | [0026](adr/0026-independent-transient-signals.md) | Independent transient signals (`signal.signals`): one transfer function, one response set per signal; multi-terminal solve | Accepted |
+| [0027](adr/0027-observation-potentials-and-safety-outputs.md) | Grounding-safety outputs: the `observation` block (points, surface grid, touch, step) and `<case>_potentials.*` results | Accepted |
 
 Language-specific build documentation stays with each implementation
 (e.g. [../fortran/README.md](../fortran/README.md),

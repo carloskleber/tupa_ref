@@ -1,0 +1,62 @@
+{
+  "title": "Grounding-safety outputs: 16x16 m grid with a tower riser (potentials, touch, step)",
+  "soil": {
+    "conductivity": 0.005,
+    "permittivity": 10.0,
+    "permeability": 1.0
+  },
+  "nodes": [
+    { "id": "Tower_foot", "position": [0.0, 0.0, 0.0] },
+    { "id": "Tower_top",  "position": [0.0, 0.0, 1.0] }
+  ],
+  "materials": [
+    { "id": "copper", "epsilonr": 1.0, "mur": 1.0, "sigma": 5.96e7 }
+  ],
+  "elements": [
+    {
+      "type": "mesh",
+      "id": "g",
+      "position": [0.0, 0.0, -0.5],
+      "lengthX": 16.0,
+      "lengthY": 16.0,
+      "rowsX": 3,
+      "rowsY": 3,
+      "radius": 0.005,
+      "segments": 4,
+      "material": "copper"
+    },
+    { "type": "line", "id": "Riser_1", "from": "g-0000", "to": "Tower_foot", "radius": 0.01, "segments": 1, "material": "copper" },
+    { "type": "line", "id": "Riser_2", "from": "Tower_foot", "to": "Tower_top", "radius": 0.01, "segments": 1, "material": "copper" }
+  ],
+
+  "sources": [ { "node": "Tower_top", "current": { "re": 1000.0, "im": 0.0 } } ],
+  "frequencies": { "min": 50.0, "max": 5.0e4, "pointsPerDecade": 1 },
+  "outputs": {
+    "nodes": ["Tower_top"],
+    "electrodes": ["Riser_1_e1"],
+    "quantities": ["voltage", "i1", "i2", "inputImpedance"]
+  },
+
+  "observation": {
+    "points": [
+      { "id": "centre",  "position": [8.0, 8.0, 0.0] },
+      { "id": "remote",  "position": [40.0, 0.0, 0.0] }
+    ],
+    "grid": {
+      "id": "surface",
+      "origin": [-4.0, -4.0],
+      "z": 0.0,
+      "lengthX": 24.0,
+      "lengthY": 24.0,
+      "nx": 13,
+      "ny": 13,
+      "step": { "length": 1.0, "directions": 8 }
+    },
+    "touch": [
+      { "id": "tower", "node": "Tower_top", "radius": 1.0, "points": 36 }
+    ],
+    "steps": [
+      { "id": "edge", "from": [16.0, 8.0, 0.0], "to": [17.0, 8.0, 0.0] }
+    ]
+  }
+}

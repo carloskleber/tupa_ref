@@ -125,6 +125,10 @@ program test_common_cases
   call compareHarmonicAndTransientCase("channel_tower", "channel_tower: two-node current source")
   call compareHarmonicAndTransientCase("channel_tower_gap", "channel_tower_gap: delta-gap voltage source")
 
+  ! ROADMAP Phase 11: grounding-safety outputs — the harmonic sweep and the
+  ! observation results (potentials, GPR, touch, step) of a 16x16 m grid
+  call compareObservationCase("grid_safety")
+
   call test_summary()
 
 contains
@@ -200,6 +204,112 @@ contains
       end if
     end do
   end subroutine compareHarmonicAndTransientCase
+
+  subroutine compareObservationCase(stem)
+    !! Run `../common/<stem>.json` through `runFromFile` and diff the harmonic
+    !! CSV against `<stem>_expected.csv` and the observation CSV
+    !! (`frequency_hz,quantity,id,x,y,z,re,im`) against
+    !! `<stem>_potentials_expected.csv`.
+    character(len=*), intent(in) :: stem
+    logical :: exists
+    integer :: u, k
+    character(len=256) :: outFiles(4)
+
+    outFiles = [character(len=256) :: trim(stem) // "_results.csv", trim(stem) // "_results.json", &
+                trim(stem) // "_potentials.csv", trim(stem) // "_potentials.json"]
+
+    call test_init("Regression (observation): " // trim(stem))
+    call setVerbosity(VERB_QUIET)
+    call runFromFile("../common/" // stem // ".json")
+    call setVerbosity(VERB_NORMAL)
+
+    call test_ok("harmonic CSV matches expected fixture within tolerance", &
+                 csvMatches(trim(stem) // "_results.csv", "../common/" // stem // "_expected.csv", 1.0d-6), &
+                 "numeric drift between a fresh run and the checked-in fixture")
+    call test_ok("observation CSV matches expected fixture within tolerance", &
+                 observationCsvMatches(trim(stem) // "_potentials.csv", &
+                                       "../common/" // stem // "_potentials_expected.csv", 1.0d-6), &
+                 "numeric drift between a fresh run and the checked-in fixture")
+
+    do k = 1, size(outFiles)
+      inquire(file=trim(outFiles(k)), exist=exists)
+      if (exists) then
+        open(newunit=u, file=trim(outFiles(k)), status="old")
+        close(u, status="delete")
+      end if
+    end do
+  end subroutine compareObservationCase
+
+  logical function observationCsvMatches(freshFile, expectedFile, reltol) result(ok)
+    !! Row-by-row comparison of two observation CSVs: the first six fields
+    !! (frequency, quantity, id, x, y, z) must be textually equal and `re`/`im`
+    !! within `reltol` of the row scale (floored at 1e-6, as `rowMatches`).
+    character(len=*), intent(in) :: freshFile, expectedFile
+    real(8), intent(in) :: reltol
+    integer :: uF, uE, iosF, iosE, pF, pE
+    character(len=4096) :: lineF, lineE
+    real(8) :: fRe, fIm, eRe, eIm, scaleVal
+
+    ok = .true.
+    open(newunit=uF, file=freshFile, status="old", action="read")
+    open(newunit=uE, file=expectedFile, status="old", action="read")
+    read(uF, '(A)', iostat=iosF) lineF
+    read(uE, '(A)', iostat=iosE) lineE
+    if (trim(lineF) /= trim(lineE)) ok = .false.
+    do
+      read(uF, '(A)', iostat=iosF) lineF
+      read(uE, '(A)', iostat=iosE) lineE
+      if (iosF /= 0 .or. iosE /= 0) then
+        if (iosF /= iosE) ok = .false.
+        exit
+      end if
+      pF = lastCommaPair(lineF)
+      pE = lastCommaPair(lineE)
+      if (pF /= pE .or. lineF(1:pF) /= lineE(1:pE)) then
+        ok = .false.
+        exit
+      end if
+      call splitReIm(lineF(pF+1:), fRe, fIm)
+      call splitReIm(lineE(pE+1:), eRe, eIm)
+      scaleVal = max(1.0d-6, abs(eRe), abs(eIm))
+      if (abs(fRe - eRe) >= reltol * scaleVal .or. abs(fIm - eIm) >= reltol * scaleVal) then
+        ok = .false.
+        exit
+      end if
+    end do
+    close(uF)
+    close(uE)
+  end function observationCsvMatches
+
+  integer function lastCommaPair(row) result(p)
+    !! Position of the sixth comma of an observation row (the end of the
+    !! frequency, quantity, id, x, y, z fields).
+    character(len=*), intent(in) :: row
+    integer :: n, i
+
+    n = 0
+    p = 0
+    do i = 1, len_trim(row)
+      if (row(i:i) == ",") then
+        n = n + 1
+        if (n == 6) then
+          p = i
+          return
+        end if
+      end if
+    end do
+  end function lastCommaPair
+
+  subroutine splitReIm(text, re, im)
+    !! `re,im` of an observation row's tail.
+    character(len=*), intent(in) :: text
+    real(8), intent(out) :: re, im
+    integer :: c
+
+    c = index(text, ",")
+    read(text(1:c-1), *) re
+    read(text(c+1:), *) im
+  end subroutine splitReIm
 
   subroutine compareTransientCase(caseName)
     !! Run `../common/<caseName>.json` through the CLI entry point

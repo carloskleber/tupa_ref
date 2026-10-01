@@ -9,6 +9,7 @@ use crate::geometry::{GeometryKernel, GeometryMatrices, GeometryOptions, build_g
 use crate::impedance::{internal_impedance, internal_impedance_laplace};
 use crate::linalg::{CMatrix, solve_in_place};
 use crate::mesh::{AIR, ImageModel, Mesh, SOIL};
+use crate::observation::{Observation, ObservationResults};
 use crate::result::ResultSet;
 use crate::structure::Structure;
 use crate::verbosity::{VERB_NORMAL, VERB_VERBOSE, verbose, verbosity_level};
@@ -88,6 +89,14 @@ pub struct Study {
     pub trans_current_results: ResultSet,
     /// Last sweep frequency axis (Hz)
     pub sweep_freq_hz: Vec<f64>,
+    /// Damping `c` (1/s) of the last sweep: nonzero only for the Numerical
+    /// Laplace Transform driver
+    pub sweep_damping: f64,
+    /// Parsed `"observation"` block (ROADMAP Phase 11, ADR 0027)
+    pub observation: Observation,
+    /// Potentials, GPR, touch and step voltages of the last
+    /// `potentials::compute_observations` call
+    pub observation_results: ObservationResults,
     /// Last sweep source node ids
     pub sweep_source_ids: Vec<String>,
     /// Last sweep return node ids (`None` = no return node)
@@ -137,6 +146,9 @@ impl Study {
             long_current_results: ResultSet::default(),
             trans_current_results: ResultSet::default(),
             sweep_freq_hz: Vec::new(),
+            sweep_damping: 0.0,
+            observation: Observation::default(),
+            observation_results: ObservationResults::default(),
             sweep_source_ids: Vec::new(),
             sweep_return_ids: Vec::new(),
             sweep_source_currents_freq: Vec::new(),
@@ -425,6 +437,7 @@ impl Study {
         self.long_current_results = i1;
         self.trans_current_results = i2;
         self.sweep_freq_hz = freq_hz.to_vec();
+        self.sweep_damping = damping;
         self.sweep_source_ids = sources.iter().map(|s| s.node.clone()).collect();
         self.sweep_return_ids = sources
             .iter()

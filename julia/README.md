@@ -259,6 +259,15 @@ the conformance table above.
   drivers on several nodes), `transient_signals_csv/json`. `returnNode`/`quantity`
   on a `signals` entry are refused (Phase 10b lag). The fixture
   `portela1997_transient_signals` is run by `test/conformance.jl` at 1e-6.
+- **ROADMAP Phase 11** ([ADR 0027](../docs/adr/0027-observation-potentials-and-safety-outputs.md),
+  grounding-safety outputs) — **lagging.** `load_study_string` refuses the
+  `observation` block with a `TupaError` naming ROADMAP Phase 11, so a case
+  never silently runs without its potentials. The case `grid_safety` is in
+  `PHASE11_LAG_CASES` and its two fixtures (`grid_safety`,
+  `grid_safety_potentials`) in `PHASE11_LAG_FIXTURES` (`test/runtests.jl`).
+  The port is short (≈ 150 lines in `rust/src/potentials.rs`: closed-form
+  segment factor, medium constants per frequency, one pass over the segments)
+  and needs only the stored sweep.
 - **ROADMAP Phase 10b** ([ADR 0025](../docs/adr/0025-lightning-channel-and-two-node-sources.md)) —
   **lagging** (it also needs Phase 9: the channel fixtures use the NLT). `load_study_string` refuses the `channel` element,
   `sources[].returnNode` and `signal.returnNode`/`quantity` with a `TupaError`

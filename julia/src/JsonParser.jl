@@ -100,6 +100,11 @@ function load_study_string(text::AbstractString)
     root isa AbstractDict || raise_error("JSON error: the case file must be a JSON object")
 
     kernel, image_model, max_segment_length = load_numerics(field(root, "numerics"))
+    # ROADMAP Phase 11 (ADR 0027): rejected rather than skipped, so a case never
+    # runs without the potentials it asks for
+    field(root, "observation") === nothing ||
+        raise_error("mTupa: the observation block (ROADMAP Phase 11) is not implemented in the Julia " *
+                    "port yet (follow-along lag, see julia/README.md)")
 
     soil_spec = field(root, "soil")
     soil_type = json_str(soil_spec, "type", "linear")
