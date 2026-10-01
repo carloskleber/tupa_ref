@@ -51,13 +51,15 @@ julia bin/tupa.jl --dump-structure ../common/portelaMesh.json   # nodes/electrod
 ```
 
 Options — the Fortran executable's, the Rust port's two extras, and one
-Julia-only flag:
+Julia-only flag (`--threads` is not offered: sweeps are serial here):
 
 | Option | Meaning |
 | --- | --- |
 | `-v`, `--verbose` / `-q`, `--quiet` | verbosity levels (`mVerbosity`); errors always print |
 | `--epsrel <x>` | relative-error factor of the geometry-factor quadrature, default `1e-6` |
 | `--no-cache` | disable the geometry-factor memo table (`mGeometryCache`) |
+| `--kernel single\|double` | geometry-factor quadrature of the pairs without a closed form: the single integral (default) or the nested 2-D one (ADR 0024); a study's `numerics.kernel` overrides it |
+| `--image-model frequency-dependent\|ideal` | image reflection coefficient of studies that do not state one: `Γ(ω)` (default) or the ideal `±1` (ADR 0024); a study's `numerics.imageModel` overrides it |
 | `--dump-structure` | print the assembled nodes/electrodes and stop (byte-identical to the Rust dump) |
 | `--output-dir <dir>` | where result files go (default: current directory) |
 | `--plot` | also write `<case>_transient_plot.png` (Julia only; needs `Plots`) |
@@ -129,20 +131,15 @@ the wrong type is an error (the Fortran reader yields 0).
 
 ## Conformance status
 
-> **ROADMAP Phase 10 (2026-10-01) — this port lags.** The Fortran and Rust
-> defaults changed (single-integral geometry kernel, `Γ(ω)` image
-> coefficients) and every harmonic golden fixture was regenerated; the Julia
-> port still computes the pre-Phase-10 numerics (nested 2-D quadrature, ideal
-> `Γ = ±1` images). Its results therefore now differ from the fixtures and
-> from Fortran by the Phase 10 effects: up to ~2e-3 relative at 1 MHz on a
-> buried conductor, growing as f², and ~1e-7 from the kernel
-> ([ADR 0024](../docs/adr/0024-phase10-numerics.md)). The tables below are
-> the **2026-09-30** measurements, valid up to that date; `test/runtests.jl`
-> lists the three regenerated harmonic fixtures in `PHASE10_LAG_FIXTURES`
-> (not run) and `portela1997_ideal` in `PHASE10_LAG_CASES`. See the Phase 10
-> bullet under "Follow-along rule" for what to port.
+> **ROADMAP Phase 10 (ADR 0024) — met 2026-10-01** (single-integral
+> geometry kernel, `Γ(ω)` image coefficients, `numerics` block with
+> `maxSegmentLength`). The three regenerated harmonic fixtures,
+> `portela1997_ideal` and the harmonic half of `portelaMesh` now run at
+> 1e-6 (table below). The frequency-level threading of Phase 10 item 4 is
+> not ported (sweeps stay serial). Phases 9 and 10b still lag (see "Follow-along
+> rule").
 
-Measured on 2026-09-30 (Linux, Julia 1.13.1, AMD Ryzen 5 8500G). Rule of
+Measured on 2026-10-01 (Linux, Julia 1.13.1, AMD Ryzen 5 8500G). Rule of
 the golden fixtures: 1e-6 relative on the row scale `max(1e-6, |re|, |im|)`,
 rows keyed by `(frequency_hz, quantity, id)` (`test/conformance.jl`, same as
 `rust/tests/conformance.rs`).
@@ -240,30 +237,53 @@ the conformance table above.
   `transferFunction` is present; `test/runtests.jl` lists the five Phase 9
   cases in `PHASE9_LAG` (the fixture guard accepts them, and
   `test/physics.jl` checks the loader refuses them). These test edits were
-  made without running Julia — run `Pkg.test()` before relying on them.
-  Porting guide: `rust/src/transient.rs` (same structure as the Fortran
+  made without running Julia; the suite has since been run (2026-10-01) and
+  passes. Porting guide: `rust/src/transient.rs` (same structure as the Fortran
   `mTransient`, ~300 lines), plus the `admittance_laplace`/
   `calc_param_laplace`/`internal_impedance_laplace` counterparts; remove
   names from `PHASE9_LAG` as their fixtures pass. The Phase 10 grid case
   `portelaMesh` (its `signal` uses `transferFunction`) is in `PHASE9_LAG` too;
-  `test/physics.jl` loads its structure with that field removed.
+  `test/conformance.jl` runs its harmonic fixture and `test/physics.jl` loads
+  its structure with that field removed.
+- **ROADMAP Phase 10b** ([ADR 0025](../docs/adr/0025-lightning-channel-and-two-node-sources.md)) —
+  **lagging** (it also needs Phase 9: the channel fixtures use the NLT). `load_study_string` refuses the `channel` element,
+  `sources[].returnNode` and `signal.returnNode`/`quantity` with a `TupaError`
+  naming ROADMAP Phase 10b, so a case never silently runs without its channel
+  or return node. The four cases `channel_{unloaded,loaded,tower,tower_gap}`
+  are in `PHASE10B_LAG_CASES` and their six fixtures in
+  `PHASE10B_LAG_FIXTURES` (`test/runtests.jl`); the suite passes with them
+  skipped. Porting guide (all in `rust/src`): `element/channel.rs` →
+  `Element/Channel.jl`; `channel_calibration.rs`; the loaded-electrode
+  internal impedance in `study.rs`; `injection_patterns` and the dipole
+  constraint of `solve_with_voltage_sources`.
 - **ROADMAP Phase 10** ([ADR 0024](../docs/adr/0024-phase10-numerics.md)) —
-  **lagging**, for the same reason (no Julia toolchain reachable: the egress
-  policy denied `julialang.org`). `load_study_string` raises a `TupaError`
-  naming `numerics (ROADMAP Phase 10)` when the block is present, so a
-  case never silently runs with the wrong kernel or image model. The edits
-  to `src/JsonParser.jl` and the three test files were made **without
-  running Julia** — run `Pkg.test()` before relying on them. Porting guide
-  (all in `rust/src`, ~150 lines): `impedance::geometry_factor_1d` →
-  `Impedance.jl` and the kernel switch in `mutual_geometry_factor`;
-  `mesh::ImageModel`, `MediumConstants::set_image_coefficients` and the
-  complex image factor in `calc_z_self`/`calc_z_mutual` → `Mesh.jl`
-  (note the ideal ±1 → `gamma_soil`/`gamma_air` change in the multiplication
-  order, `s * fpropi * gi`); the `numerics` block, optional `segments` and
-  `maxSegmentLength` → `JsonParser.jl`. Then regenerate the cross-check table
-  below and the Julia columns of
-  [`docs/validation/tupa-vs-mhem.md`](../docs/validation/tupa-vs-mhem.md),
-  and remove the `PHASE10_LAG_*` lists.
+  **ported 2026-10-01**, items 1–3 and 6 (item 4, the threaded sweep, is not
+  ported). `geometry_factor_1d` (`src/Impedance.jl`) is the default kernel,
+  switched by `GeometryOptions.kernel` (`:single`/`:double`; CLI `--kernel`,
+  `numerics.kernel`); `image_coefficients` and the `gamma_air`/`gamma_soil`
+  fields of `MediumConstants` (`src/Mesh.jl`) give the `Γ(ω)` images, with
+  `:ideal` as the pre-Phase-10 pin (`--image-model`, `numerics.imageModel`);
+  the `numerics` block, optional `segments` and `maxSegmentLength` are read by
+  `load_numerics`/`load_study_string`, and a study's own choices override the
+  process defaults (`Study.kernel`, `Study.image_model`,
+  `Study.default_image_model`). The fixtures `portela1997`, `rod`, `grid`,
+  `portela1997_ideal` and the harmonic half of `portelaMesh` pass at 1e-6
+  (worst 2.4e-10, i.e. the CSV's own rounding); with
+  `kernel = :double` + `imageModel = :ideal` the same cases sit 3e-4 to 2e-3 from
+  the fixtures, which is what the new defaults changed. Unit tests: kernel vs
+  the 2-D oracle on four pairs and the T-junction end-point singularity,
+  `Γ` against the closed form and its two limits, the `numerics` block and
+  segment counts, and that a study's choices reach the solver
+  (`test/unit.jl`).
+- **Known issue shared with the reference (`numerics.maxSegmentLength` on a
+  `mesh`).** All three implementations size a mesh's bars as
+  `lengthX/rowsX` and `lengthY/rowsY`, but the bars span `rows − 1`
+  intervals (`assemble!` places the main nodes at `length/(rows − 1)`), so
+  the target is undershot: with `rowsX = 3, rowsY = 2, lengthX = 8,
+  lengthY = 4` and a 1 m target the longest electrode is 2.67 m. Julia
+  mirrors Fortran/Rust deliberately so the three stay identical; no fixture
+  sets a target on a mesh, and `line`/`catenary` are exact. Fix all three
+  together (and add a mesh case to `test_segmentation.f90`).
 
 ## History
 

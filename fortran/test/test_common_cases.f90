@@ -113,7 +113,16 @@ program test_common_cases
 
   ! ROADMAP Phase 10 item 6: the 32x32 m grid (185 nodes, 200 electrodes) end
   ! to end, harmonic sweep and scan-fed transient, through the CLI path
-  call compareMeshGridCase()
+  call compareHarmonicAndTransientCase("portelaMesh", "portelaMesh (32x32 m grid) harmonic sweep and scan-fed transient")
+
+  ! ROADMAP Phase 10b: lightning channel — pure transient cases (the
+  ! Chen/Baba configuration, and a speed-calibrated graded channel, whose
+  ! fixture therefore pins the calibration too), then a tower strike with
+  ! two-node current and voltage sources, harmonic and transient
+  call compareTransientCase("channel_unloaded")
+  call compareTransientCase("channel_loaded")
+  call compareHarmonicAndTransientCase("channel_tower", "channel_tower: two-node current source")
+  call compareHarmonicAndTransientCase("channel_tower_gap", "channel_tower_gap: delta-gap voltage source")
 
   call test_summary()
 
@@ -156,29 +165,30 @@ contains
     end block
   end subroutine compareCase
 
-  subroutine compareMeshGridCase()
-    !! Run `../common/portelaMesh.json` through `runFromFile` — which honours
-    !! its `outputs` filter and writes both result sets — and diff the
-    !! harmonic CSV against `portelaMesh_expected.csv` and the transient CSV
-    !! against `portelaMesh_transient_expected.csv`.
-    character(len=*), parameter :: stem = "portelaMesh"
+  subroutine compareHarmonicAndTransientCase(stem, label)
+    !! Run `../common/<stem>.json` through `runFromFile` — which honours its
+    !! `outputs` filter and writes both result sets — and diff the harmonic
+    !! CSV against `<stem>_expected.csv` and the transient CSV against
+    !! `<stem>_transient_expected.csv`.
+    character(len=*), intent(in) :: stem, label
     logical :: exists
-    integer :: u
-    character(len=64), parameter :: outFiles(4) = [character(len=64) :: &
-      "portelaMesh_results.csv", "portelaMesh_results.json", &
-      "portelaMesh_transient_results.csv", "portelaMesh_transient_results.json"]
-    integer :: k
+    integer :: u, k
+    character(len=256) :: outFiles(4)
 
-    call test_init("Regression: portelaMesh (32x32 m grid) harmonic sweep and scan-fed transient")
+    outFiles = [character(len=256) :: trim(stem) // "_results.csv", trim(stem) // "_results.json", &
+                trim(stem) // "_transient_results.csv", trim(stem) // "_transient_results.json"]
+
+    call test_init("Regression: " // label)
     call setVerbosity(VERB_QUIET)
     call runFromFile("../common/" // stem // ".json")
     call setVerbosity(VERB_NORMAL)
 
-    call test_ok("grid harmonic CSV matches expected fixture within tolerance", &
-                 csvMatches("portelaMesh_results.csv", "../common/portelaMesh_expected.csv", 1.0d-6), &
+    call test_ok("harmonic CSV matches expected fixture within tolerance", &
+                 csvMatches(trim(stem) // "_results.csv", "../common/" // stem // "_expected.csv", 1.0d-6), &
                  "numeric drift between a fresh run and the checked-in fixture")
-    call test_ok("grid transient CSV matches expected fixture within tolerance", &
-                 transientCsvMatches("portelaMesh_transient_results.csv", "../common/portelaMesh_transient_expected.csv", 1.0d-6), &
+    call test_ok("transient CSV matches expected fixture within tolerance", &
+                 transientCsvMatches(trim(stem) // "_transient_results.csv", &
+                                     "../common/" // stem // "_transient_expected.csv", 1.0d-6), &
                  "numeric drift between a fresh run and the checked-in fixture")
 
     do k = 1, size(outFiles)
@@ -188,7 +198,7 @@ contains
         close(u, status="delete")
       end if
     end do
-  end subroutine compareMeshGridCase
+  end subroutine compareHarmonicAndTransientCase
 
   subroutine compareTransientCase(caseName)
     !! Run `../common/<caseName>.json` through the CLI entry point

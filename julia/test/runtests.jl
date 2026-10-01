@@ -12,12 +12,12 @@ const COMMON = normpath(joinpath(@__DIR__, "..", "..", "common"))
 const PHASE9_LAG = ["portela1997_transient_hann", "portela1997_transient_hann_time",
                     "portela1997_transient_interpolated", "portela1997_transient_multi",
                     "portela1997_transient_nlt", "portelaMesh", "portelaMesh_transient"]
-# ROADMAP Phase 10 (ADR 0024), not ported: the case uses the `numerics` block, which
-# the loader refuses; and the three harmonic golden fixtures were regenerated with
-# the Phase 10 defaults (single-integral kernel, Γ(ω) images) while this port still
-# computes the pre-Phase-10 numerics, so they are not run here (julia/README.md)
-const PHASE10_LAG_CASES = ["portela1997_ideal"]
-const PHASE10_LAG_FIXTURES = ["grid", "portela1997", "rod"]
+# ROADMAP Phase 10b (ADR 0025, lightning channel and two-node sources), not ported:
+# the loader refuses the `channel` element, `returnNode` and `quantity`. The fixtures
+# of these cases (each also uses Phase 9 features: the NLT) are not run.
+const PHASE10B_LAG_CASES = ["channel_loaded", "channel_tower", "channel_tower_gap", "channel_unloaded"]
+const PHASE10B_LAG_FIXTURES = ["channel_loaded", "channel_tower", "channel_tower_gap",
+                               "channel_tower_gap_transient", "channel_tower_transient", "channel_unloaded"]
 
 set_verbosity(VERB_QUIET)
 

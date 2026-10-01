@@ -559,10 +559,16 @@ contains
     allocate(transferFunction(nBins), sweepRow(size(solveFreqHz)))
 
     do iSrc = 1, nSrc
+      ! A unit current, or unit voltage, at source k (ADR 0025: across the
+      ! node pair when the slot has a return node)
       if (nlt) then
-        call study%runSweep(solveFreqHz, [sourceNodeIds(iSrc)], [cmplx(1.0_dp, 0.0_dp, kind=dp)], damping=c)
+        call study%runSweep(solveFreqHz, [sourceNodeIds(iSrc)], [cmplx(1.0_dp, 0.0_dp, kind=dp)], &
+                            sourceIsVoltage=[signals(iSrc)%isVoltage], damping=c, &
+                            returnNodeIds=[signals(iSrc)%returnNode])
       else
-        call study%runSweep(solveFreqHz, [sourceNodeIds(iSrc)], [cmplx(1.0_dp, 0.0_dp, kind=dp)])
+        call study%runSweep(solveFreqHz, [sourceNodeIds(iSrc)], [cmplx(1.0_dp, 0.0_dp, kind=dp)], &
+                            sourceIsVoltage=[signals(iSrc)%isVoltage], &
+                            returnNodeIds=[signals(iSrc)%returnNode])
       end if
 
       do iObs = 1, nObsNodes

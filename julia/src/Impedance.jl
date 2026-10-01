@@ -1,11 +1,14 @@
 # Adaptive quadrature and solid-conductor internal impedance (`mImpedance`).
 #
-# The mutual geometry factor g(a,b) = ∬ ds_a ds_b / r is evaluated by two
-# nested calls of a line-by-line port of `dqag_k15` (adaptive Gauss–Kronrod
-# 7/15, at most `MAXINT` subintervals, same tolerances and subdivision
-# strategy as the Fortran code). A different rule (the prototype's fixed
-# 64×64 midpoint grid) sits ~0.09 % away — three orders above the golden
-# 1e-6 tolerance (ROADMAP Phase 8, "Quadrature").
+# The mutual geometry factor g(a,b) = ∬ ds_a ds_b / r is evaluated by a
+# line-by-line port of `dqag_k15` (adaptive Gauss–Kronrod 7/15, at most
+# `MAXINT` subintervals, same tolerances and subdivision strategy as the
+# Fortran code): once, over the field segment, with the inner integral in
+# closed form (`geometry_factor_1d`, the default, ROADMAP Phase 10 item 1,
+# ADR 0024), or by two nested calls (`geometry_factor_2d`, the test oracle
+# and the `numerics.kernel: "double"` choice). A different rule (the
+# prototype's fixed 64×64 midpoint grid) sits ~0.09 % away — three orders
+# above the golden 1e-6 tolerance (ROADMAP Phase 8, "Quadrature").
 
 "Maximum number of subintervals in the adaptive quadrature."
 const MAXINT = 500
@@ -139,6 +142,48 @@ function geometry_factor_2d(a1::Vec3, va::Vec3, la::Float64, b1::Vec3, vb::Vec3,
     end
     errrel = min(la, lb) * eps_rel
     return first(twodq(integrand, 0.0, la, _ -> 0.0, _ -> lb, 0.0, errrel))
+end
+
+"""
+    geometry_factor_1d(a1, va, la, b1, vb, lb, eps_rel) -> Float64
+
+Geometry factor g(a,b) by the single-integral (mHEM) form of theory.md §4.2
+(ROADMAP Phase 10 item 1, ADR 0024): the inner integral over segment `b` in
+closed form, `∫ dl_b/R = ln((r1 + r2 + lb)/(r1 + r2 − lb))` with `r1`, `r2`
+the distances from the field point on `a` to the two ends of `b`, then one
+adaptive Gauss–Kronrod integral over `a` (`epsabs = 0`, `epsrel = eps_rel`;
+no nesting, so no scaling by the segment length). Line-by-line the Fortran
+`geometryFactor1D`; `geometry_factor_2d` stays as the oracle.
+"""
+function geometry_factor_1d(a1::Vec3, va::Vec3, la::Float64, b1::Vec3, vb::Vec3, lb::Float64,
+                            eps_rel::Float64)
+    b2 = (b1[1] + lb * vb[1], b1[2] + lb * vb[2], b1[3] + lb * vb[3])
+    inner(x) = begin
+        p = (a1[1] + va[1] * x, a1[2] + va[2] * x, a1[3] + va[3] * x)
+        w1 = (p[1] - b1[1], p[2] - b1[2], p[3] - b1[3])
+        w2 = (p[1] - b2[1], p[2] - b2[2], p[3] - b2[3])
+        w1sq = w1[1] * w1[1] + w1[2] * w1[2] + w1[3] * w1[3]
+        r1 = sqrt(w1sq)
+        r2 = sqrt(w2[1] * w2[1] + w2[2] * w2[2] + w2[3] * w2[3])
+        s = w1[1] * vb[1] + w1[2] * vb[2] + w1[3] * vb[3]
+        diff = if 0.0 <= s <= lb
+            # r1 + r2 − lb without cancellation: r1 − s = ρ²/(r1 + s) and
+            # r2 − (lb − s) = ρ²/(r2 + lb − s)
+            den1 = r1 + s
+            den2 = r2 + lb - s
+            if den1 > 0.0 && den2 > 0.0
+                max(w1sq - s * s, 0.0) * (1.0 / den1 + 1.0 / den2)
+            else
+                0.0
+            end
+        else
+            r1 + r2 - lb
+        end
+        # field point exactly on b (a shared end point): integrand +Inf on a
+        # single point — clamp, as in the Fortran code
+        log((r1 + r2 + lb) / max(diff, 1.0e-300))
+    end
+    return first(dqag_k15(inner, 0.0, la, 0.0, eps_rel))
 end
 
 """

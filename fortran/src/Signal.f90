@@ -120,6 +120,11 @@ module mSignal
     !! Phase 9 item 4): a polymorphic waveform, so each source can have its
     !! own waveform type.
     class(tSignal), allocatable :: sig
+    character(len=256) :: returnNode = ''
+    !! Return node of a two-node source (ADR 0025); blank = none
+    logical :: isVoltage = .false.
+    !! The waveform is a source voltage (V) across the node pair instead of
+    !! an injected current (A) (ADR 0025)
   end type tSignalSlot
 
 contains

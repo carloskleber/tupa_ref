@@ -33,6 +33,15 @@ module tupa
   !! - `"catenary"` — parabolic sagging span (`mElementCatenary`, ADR 0023):
   !!   the `"line"` fields plus `sag` (midspan drop below the chord, m).
   !!
+  !! - `"channel"` — lightning return-stroke channel in air
+  !!   (`mElementChannel`, ADR 0025, theory.md §4.5): `id`, `strike` (node),
+  !!   `length`, `radius`, optional `incidence`/`azimuth` (degrees), loading
+  !!   `speed` (m/s, number or `[{upTo, value}]` profile) or `inductance`
+  !!   (H/m), `resistance` (Ω/m, number or profile), `calibrate`, and either
+  !!   `segments` (uniform) or `maxSegment` with optional `firstSegment` and
+  !!   `growth` (graded from the foot). Plants `<id>-base` (separate from
+  !!   the strike node), `<id>_n<k>` and `<id>-top`.
+  !!
   !! Future versions will add tCircumference, tTower.
   use mStudy
   use mMesh, only: IMAGE_FREQ_DEPENDENT, IMAGE_IDEAL
@@ -42,6 +51,8 @@ module tupa
   use mElementLine
   use mElementMesh
   use mElementCatenary
+  use mElementChannel
+  use mChannelCalibration, only: calibrateChannels
   use mJsonParser
   use mSignal, only: tSignal, tSignalSlot, newHeidlerSignal, newHeidlerSignalTerms, newDoubleExpSignal, &
                      newPortelaSignal, newSineSignal
@@ -91,6 +102,47 @@ contains
     if (maxLen > 0.0d0 .and. length > 0.0d0) n = max(n, ceiling(length / maxLen - 1.0d-9))
   end function readSegments
 
+  subroutine readPiecewise(obj, key, p, ok)
+    !! Read a profile along the channel: a number (uniform) or an array of
+    !! `{upTo, value}` pieces in ascending `upTo` (the last piece extends
+    !! beyond its break). `p` stays unallocated when `key` is absent.
+    type(tJsonValue), pointer, intent(in) :: obj
+    character(len=*), intent(in) :: key
+    type(tPiecewise), intent(out) :: p
+    logical, intent(out) :: ok
+    type(tJsonValue), pointer :: child, item
+    integer :: i, n
+
+    ok = .true.
+    if (.not. json_has(obj, key)) return
+    child => json_child(obj, key)
+    if (json_value_type(child) == JSON_ARRAY) then
+      n = json_size(child)
+      if (n < 1) then
+        call raiseError("mTupa: channel '" // key // "' profile must hold at least one piece")
+        ok = .false.
+        return
+      end if
+      allocate(p%upTo(n), p%value(n))
+      do i = 1, n
+        item => json_item(child, i)
+        p%upTo(i)  = json_real(item, "upTo")
+        p%value(i) = json_real(item, "value")
+        if (i > 1) then
+          if (p%upTo(i) <= p%upTo(i - 1)) then
+            call raiseError("mTupa: channel '" // key // "' profile breaks must be ascending")
+            ok = .false.
+            return
+          end if
+        end if
+      end do
+    else
+      allocate(p%upTo(1), p%value(1))
+      p%upTo(1)  = huge(1.0d0)
+      p%value(1) = json_value_real(child)
+    end if
+  end subroutine readPiecewise
+
   ! =====================================================================
   ! JSON parsing and study loading
   ! =====================================================================
@@ -99,7 +151,7 @@ contains
                         outputNodeIds, outputElectrodeIds, outputQuantities, &
                         signal, signalSourceNode, signalObserveNodeIds, signalObserveElectrodeIds, &
                         signalNyquistHz, signalFftPoints, signalFreqZeroHz, signalAntialiasStart, &
-                        signalSources, signalSourceNodeIds, signalOptions)
+                        signalSources, signalSourceNodeIds, signalOptions, sourceReturnNodeIds)
     !! Parse a JSON study file and populate all fields of a tStudy object.
     !!
     !! Performs the following steps:
@@ -172,6 +224,10 @@ contains
     type(tTransientOptions), intent(out), optional :: signalOptions
     !! Phase 9 transient options, including `antialiasStart` and, for
     !! "transferFunction": "interpolated", the scan axis
+    character(len=256), allocatable, intent(out), optional :: sourceReturnNodeIds(:)
+    !! "sources[].returnNode" (ADR 0025), one per injection, blank where the
+    !! source has none; allocated together with `sourceNodeIds`. Transient
+    !! sources carry theirs in `signalSources(:)%returnNode`.
 
     type(tJsonValue), target  :: root
     !! Root of the parsed JSON tree (must be TARGET for child pointers)
@@ -326,6 +382,92 @@ contains
           elem = newElementCatenary(trim(id), trim(from_id), trim(to_id), &
                                     sag, radius, nseg, trim(mat_id))
           call study%structure%addElement(elem)
+        case ("channel")
+          block
+            class(tElement), allocatable :: chElem
+            type(tPiecewise) :: spd, res
+            real(8), allocatable :: brk(:)
+            real(8) :: chLen, chFirst, chGrowth, chMax, incDeg, azDeg
+            logical :: okProfile
+            integer :: nUniform, kBrk
+
+            id      = json_str(elem_obj, "id")
+            from_id = json_str(elem_obj, "strike")
+            radius  = json_real(elem_obj, "radius")
+            chLen   = json_real(elem_obj, "length")
+            if ((len_trim(from_id) == 0) .eqv. (.not. json_has(elem_obj, "position"))) then
+              call raiseError("mTupa: channel '" // trim(id) // "' needs exactly one of strike (node) and position")
+              return
+            end if
+            incDeg  = 0.0d0
+            azDeg   = 0.0d0
+            if (json_has(elem_obj, "incidence")) incDeg = json_real(elem_obj, "incidence")
+            if (json_has(elem_obj, "azimuth"))   azDeg  = json_real(elem_obj, "azimuth")
+            if (chLen <= 0.0d0 .or. radius <= 0.0d0) then
+              call raiseError("mTupa: channel '" // trim(id) // "' needs positive length and radius")
+              return
+            end if
+            if (json_has(elem_obj, "speed") .and. json_has(elem_obj, "inductance")) then
+              call raiseError("mTupa: channel '" // trim(id) // "': give either speed or inductance, not both")
+              return
+            end if
+            call readPiecewise(elem_obj, "speed", spd, okProfile)
+            if (.not. okProfile) return
+            call readPiecewise(elem_obj, "resistance", res, okProfile)
+            if (.not. okProfile) return
+
+            if (json_has(elem_obj, "segments")) then
+              ! Uniform chain; the study target can only refine it
+              nUniform = readSegments(elem_obj, study%maxSegmentLength, chLen)
+              allocate(brk(nUniform + 1))
+              do kBrk = 0, nUniform
+                brk(kBrk + 1) = chLen * real(kBrk, kind=8) / real(nUniform, kind=8)
+              end do
+            else
+              chMax = huge(1.0d0)
+              if (json_has(elem_obj, "maxSegment")) chMax = json_real(elem_obj, "maxSegment")
+              if (study%maxSegmentLength > 0.0d0) chMax = min(chMax, study%maxSegmentLength)
+              if (chMax >= huge(1.0d0) .or. chMax <= 0.0d0) then
+                call raiseError("mTupa: channel '" // trim(id) // &
+                                "' needs segments, maxSegment or numerics.maxSegmentLength")
+                return
+              end if
+              chFirst = chMax
+              if (json_has(elem_obj, "firstSegment")) chFirst = json_real(elem_obj, "firstSegment")
+              chGrowth = 1.0d0
+              if (json_has(elem_obj, "growth")) chGrowth = json_real(elem_obj, "growth")
+              if (chFirst <= 0.0d0 .or. chGrowth < 1.0d0) then
+                call raiseError("mTupa: channel '" // trim(id) // "' needs firstSegment > 0 and growth >= 1")
+                return
+              end if
+              brk = gradedBreaks(chLen, chFirst, chGrowth, chMax)
+            end if
+
+            chElem = newElementChannel(trim(id), trim(from_id), chLen, incDeg, azDeg, radius, brk)
+            select type (c => chElem)
+            type is (tChannel)
+              if (json_has(elem_obj, "position")) then
+                pos_arr  => json_child(elem_obj, "position")
+                pos_item => json_item(pos_arr, 1); c%footPosition(1) = json_value_real(pos_item)
+                pos_item => json_item(pos_arr, 2); c%footPosition(2) = json_value_real(pos_item)
+                pos_item => json_item(pos_arr, 3); c%footPosition(3) = json_value_real(pos_item)
+              end if
+              c%speed      = spd
+              c%resistance = res
+              if (json_has(elem_obj, "inductance")) then
+                c%hasInductance = .true.
+                c%inductance    = json_real(elem_obj, "inductance")
+              end if
+              if (json_getbool(elem_obj, "calibrate")) then
+                if (.not. allocated(c%speed%value)) then
+                  call raiseError("mTupa: channel '" // trim(id) // "': calibrate needs a target speed")
+                  return
+                end if
+                c%wantCalibration = .true.
+              end if
+            end select
+            call study%structure%addElement(chElem)
+          end block
         case ("mesh")
           id       = json_str(elem_obj, "id")
           pos_arr  => json_child(elem_obj, "position")
@@ -350,6 +492,10 @@ contains
       end do
     end if
 
+    ! Channels that asked for it are calibrated now, once their elements and
+    ! the study's segment-length target are known (ADR 0025)
+    call calibrateChannels(study)
+
     ! ------------------------------------------------------------------
     ! Optional sources / frequencies / outputs blocks (ADR 0013,
     ! ROADMAP Phase 5). Each is independently optional; the corresponding
@@ -361,6 +507,7 @@ contains
       sources_arr => json_child(root, "sources")
       n = json_size(sources_arr)
       allocate(sourceNodeIds(n), sourceCurrents(n))
+      if (present(sourceReturnNodeIds)) allocate(sourceReturnNodeIds(n))
       if (present(sourceIsVoltage)) then
         allocate(sourceIsVoltage(n))
         sourceIsVoltage = .false.
@@ -368,6 +515,7 @@ contains
       do i = 1, n
         src_obj     => json_item(sources_arr, i)
         sourceNodeIds(i) = json_str(src_obj, "node")
+        if (present(sourceReturnNodeIds)) sourceReturnNodeIds(i) = json_str(src_obj, "returnNode")
         ! A source carries either "current" (A) or "voltage" (V) — ADR
         ! 0013/0016. "voltage" wins if both are present (a malformed case);
         ! neither present defaults to a zero current injection.
@@ -440,11 +588,15 @@ contains
             srcNodes(iSrc) = json_str(srcObj, "node")
             call parseSignalWaveform(srcObj, slots(iSrc)%sig)
             if (.not. allocated(slots(iSrc)%sig)) return
+            call parseSlotTerminals(srcObj, slots(iSrc))
+            if (.not. allocated(slots(iSrc)%sig)) return
           end do
         else
           allocate(slots(1), srcNodes(1))
           srcNodes(1) = json_str(signal_obj, "sourceNode")
           call parseSignalWaveform(signal_obj, slots(1)%sig)
+          if (.not. allocated(slots(1)%sig)) return
+          call parseSlotTerminals(signal_obj, slots(1))
           if (.not. allocated(slots(1)%sig)) return
         end if
 
@@ -587,6 +739,30 @@ contains
     freqHz = logFrequencyAxis(fMin, fMax, max(2, nPoints))
   end function readFrequencyAxis
 
+  subroutine parseSlotTerminals(obj, slot)
+    !! Read the two-node-source fields of a transient source (ADR 0025):
+    !! optional "returnNode" and "quantity" ("current", the default, or
+    !! "voltage": the waveform is then a source voltage in V across the node
+    !! pair). Deallocates `slot%sig` on error.
+    type(tJsonValue), pointer, intent(in) :: obj
+    type(tSignalSlot), intent(inout) :: slot
+    character(len=256) :: str
+
+    slot%returnNode = json_str(obj, "returnNode")
+    if (json_has(obj, "quantity")) then
+      str = json_str(obj, "quantity")
+      select case (trim(str))
+      case ("current")
+        slot%isVoltage = .false.
+      case ("voltage")
+        slot%isVoltage = .true.
+      case default
+        call raiseError("mTupa: unknown signal quantity '" // trim(str) // "' (expected current or voltage)")
+        deallocate(slot%sig)
+      end select
+    end if
+  end subroutine parseSlotTerminals
+
   subroutine parseSignalWaveform(obj, sig)
     !! Build one excitation waveform from a JSON object carrying
     !! "waveform" and its fields (ADR 0015 and amendments): the "signal"
@@ -670,7 +846,8 @@ contains
 
   subroutine validateStudyReferences(study, sourceNodeIds, signal, signalSourceNode, &
                                       signalObserveNodeIds, signalObserveElectrodeIds, &
-                                      outputNodeIds, outputElectrodeIds, signalSourceNodeIds)
+                                      outputNodeIds, outputElectrodeIds, signalSourceNodeIds, &
+                                      sourceReturnNodeIds, signalReturnNodeIds)
     !! Resolve every ID a case file references — `sources[].node`,
     !! `signal.sourceNode`/`observeNodes`/`observeElectrodes`,
     !! `outputs.nodes`/`electrodes` — against the assembled structure,
@@ -707,6 +884,10 @@ contains
     character(len=*), intent(in), optional :: signalSourceNodeIds(:)
     !! "signal.sources[].node" (ROADMAP Phase 9 item 4), or the single
     !! "signal.sourceNode"
+    character(len=*), intent(in), optional :: sourceReturnNodeIds(:)
+    !! "sources[].returnNode" (ADR 0025); blank entries are skipped
+    character(len=*), intent(in), optional :: signalReturnNodeIds(:)
+    !! "signal.sources[].returnNode" (ADR 0025); blank entries are skipped
     integer :: i
 
     call study%structure%assembleStructure()
@@ -714,6 +895,20 @@ contains
     if (present(sourceNodeIds)) then
       do i = 1, size(sourceNodeIds)
         call requireNodeReference(study, trim(sourceNodeIds(i)), "sources[].node")
+      end do
+    end if
+
+    if (present(sourceReturnNodeIds)) then
+      do i = 1, size(sourceReturnNodeIds)
+        if (len_trim(sourceReturnNodeIds(i)) > 0) &
+          call requireNodeReference(study, trim(sourceReturnNodeIds(i)), "sources[].returnNode")
+      end do
+    end if
+
+    if (present(signalReturnNodeIds)) then
+      do i = 1, size(signalReturnNodeIds)
+        if (len_trim(signalReturnNodeIds(i)) > 0) &
+          call requireNodeReference(study, trim(signalReturnNodeIds(i)), "signal.sources[].returnNode")
       end do
     end if
 
@@ -811,7 +1006,7 @@ contains
     !! Path to the JSON study file
     type(tStudy) :: study
     !! Local study object (created, reported, then destroyed)
-    character(len=256), allocatable :: sourceNodeIds(:)
+    character(len=256), allocatable :: sourceNodeIds(:), sourceReturnNodeIds(:)
     character(len=256), allocatable :: outputNodeIds(:), outputElectrodeIds(:), outputQuantities(:)
     complex(8), allocatable :: sourceCurrents(:)
     logical, allocatable :: sourceIsVoltage(:)
@@ -824,6 +1019,8 @@ contains
     type(tSignalSlot), allocatable :: signalSources(:)
     character(len=256), allocatable :: signalSourceNodeIds(:)
     type(tTransientOptions) :: signalOptions
+    character(len=256), allocatable :: signalReturnNodeIds(:)
+    integer :: i
     real(8), allocatable :: t(:), injectedCurrents(:,:), nodeResponses(:,:), i1Responses(:,:), i2Responses(:,:)
     logical :: ranSweep, ranTransient
     character(len=512) :: base, csvFile, jsonFile
@@ -845,20 +1042,29 @@ contains
                    signalNyquistHz=signalNyquistHz, signalFftPoints=signalFftPoints, &
                    signalFreqZeroHz=signalFreqZeroHz, signalAntialiasStart=signalAntialiasStart, &
                    signalSources=signalSources, signalSourceNodeIds=signalSourceNodeIds, &
-                   signalOptions=signalOptions)
+                   signalOptions=signalOptions, sourceReturnNodeIds=sourceReturnNodeIds)
+
+    if (allocated(signalSources)) then
+      allocate(signalReturnNodeIds(size(signalSources)))
+      do i = 1, size(signalSources)
+        signalReturnNodeIds(i) = signalSources(i)%returnNode
+      end do
+    end if
 
     call validateStudyReferences(study, sourceNodeIds=sourceNodeIds, signal=signal, &
                                   signalObserveNodeIds=signalObserveNodeIds, &
                                   signalObserveElectrodeIds=signalObserveElectrodeIds, &
                                   outputNodeIds=outputNodeIds, outputElectrodeIds=outputElectrodeIds, &
-                                  signalSourceNodeIds=signalSourceNodeIds)
+                                  signalSourceNodeIds=signalSourceNodeIds, &
+                                  sourceReturnNodeIds=sourceReturnNodeIds, signalReturnNodeIds=signalReturnNodeIds)
 
     ranSweep     = allocated(sourceNodeIds) .and. allocated(freqHz)
     ranTransient = allocated(signal)
     base = basenameNoExt(filename)
 
     if (ranSweep) then
-      call study%runSweep(freqHz, sourceNodeIds, sourceCurrents, sourceIsVoltage=sourceIsVoltage)
+      call study%runSweep(freqHz, sourceNodeIds, sourceCurrents, sourceIsVoltage=sourceIsVoltage, &
+                          returnNodeIds=sourceReturnNodeIds)
       call study%report()
 
       csvFile  = trim(base) // "_results.csv"
@@ -890,7 +1096,8 @@ contains
         observeElectrodeIds=signalObserveElectrodeIds, i1Responses=i1Responses, i2Responses=i2Responses)
       call writeTransientResultsJson(study%title, signalSourceNodeIds, t, injectedCurrents, &
         signalObserveNodeIds, nodeResponses, trim(jsonFile), &
-        observeElectrodeIds=signalObserveElectrodeIds, i1Responses=i1Responses, i2Responses=i2Responses)
+        observeElectrodeIds=signalObserveElectrodeIds, i1Responses=i1Responses, i2Responses=i2Responses, &
+        study=study)
       call verbose(VERB_NORMAL, "Wrote " // trim(csvFile) // " and " // trim(jsonFile))
     end if
 
@@ -976,15 +1183,16 @@ contains
     !! Path to the JSON study file
     type(tStudy), intent(out) :: study
     !! Output study object, with sweep results populated
-    character(len=256), allocatable :: sourceNodeIds(:)
+    character(len=256), allocatable :: sourceNodeIds(:), sourceReturnNodeIds(:)
     complex(8), allocatable :: sourceCurrents(:)
     logical, allocatable :: sourceIsVoltage(:)
     real(8), allocatable :: freqHz(:)
 
     call loadStudy(filename, study, sourceNodeIds=sourceNodeIds, &
-                   sourceCurrents=sourceCurrents, sourceIsVoltage=sourceIsVoltage, freqHz=freqHz)
+                   sourceCurrents=sourceCurrents, sourceIsVoltage=sourceIsVoltage, freqHz=freqHz, &
+                   sourceReturnNodeIds=sourceReturnNodeIds)
 
-    call validateStudyReferences(study, sourceNodeIds=sourceNodeIds)
+    call validateStudyReferences(study, sourceNodeIds=sourceNodeIds, sourceReturnNodeIds=sourceReturnNodeIds)
 
     if (.not. (allocated(sourceNodeIds) .and. allocated(freqHz))) then
       call raiseError("runStudyFromFile: '" // trim(filename) // &
@@ -992,7 +1200,8 @@ contains
       return
     end if
 
-    call study%runSweep(freqHz, sourceNodeIds, sourceCurrents, sourceIsVoltage=sourceIsVoltage)
+    call study%runSweep(freqHz, sourceNodeIds, sourceCurrents, sourceIsVoltage=sourceIsVoltage, &
+                        returnNodeIds=sourceReturnNodeIds)
   end subroutine runStudyFromFile
 
 end module tupa

@@ -6,7 +6,9 @@
 //! warning. (A *present* value of the wrong JSON type is an error here,
 //! where the Fortran reader silently yields 0.)
 
-use crate::element::{Catenary, Element, Line, MeshElement};
+use crate::channel_calibration::calibrate_channel;
+use crate::element::channel::{Piecewise, graded_breaks};
+use crate::element::{Catenary, Channel, Element, Line, MeshElement};
 use crate::error::{Result, TupaError};
 use crate::geometry::GeometryKernel;
 use crate::material::{AlipioVisacroSoil, Linear, Medium, PortelaSoil};
@@ -74,6 +76,60 @@ struct ElementSpec {
     #[serde(rename = "rowsY")]
     rows_y: f64,
     sag: f64,
+    // `channel` (ADR 0025)
+    strike: String,
+    length: f64,
+    incidence: f64,
+    azimuth: f64,
+    speed: Option<ProfileSpec>,
+    inductance: Option<f64>,
+    resistance: Option<ProfileSpec>,
+    calibrate: bool,
+    #[serde(rename = "maxSegment")]
+    max_segment: Option<f64>,
+    #[serde(rename = "firstSegment")]
+    first_segment: Option<f64>,
+    growth: Option<f64>,
+}
+
+/// A channel profile: one number, or `[{upTo, value}]` pieces.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum ProfileSpec {
+    Uniform(f64),
+    Pieces(Vec<PieceSpec>),
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct PieceSpec {
+    #[serde(rename = "upTo")]
+    up_to: f64,
+    value: f64,
+}
+
+impl ProfileSpec {
+    fn build(&self, key: &str) -> Result<Piecewise> {
+        match self {
+            ProfileSpec::Uniform(v) => Ok(Piecewise::uniform(*v)),
+            ProfileSpec::Pieces(p) => {
+                if p.is_empty() {
+                    return Err(TupaError::new(format!(
+                        "mTupa: channel '{key}' profile must hold at least one piece"
+                    )));
+                }
+                if p.windows(2).any(|w| w[1].up_to <= w[0].up_to) {
+                    return Err(TupaError::new(format!(
+                        "mTupa: channel '{key}' profile breaks must be ascending"
+                    )));
+                }
+                Ok(Piecewise {
+                    up_to: p.iter().map(|x| x.up_to).collect(),
+                    value: p.iter().map(|x| x.value).collect(),
+                })
+            }
+        }
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -87,6 +143,8 @@ struct ReIm {
 #[serde(default)]
 struct SourceSpec {
     node: String,
+    #[serde(rename = "returnNode")]
+    return_node: String,
     current: Option<ReIm>,
     voltage: Option<ReIm>,
 }
@@ -144,6 +202,9 @@ struct WaveformSpec {
 #[serde(default)]
 struct SignalSourceSpec {
     node: String,
+    #[serde(rename = "returnNode")]
+    return_node: String,
+    quantity: Option<String>,
     #[serde(flatten)]
     wave: WaveformSpec,
 }
@@ -170,6 +231,9 @@ struct SignalSpec {
     transfer_function: Option<String>,
     #[serde(rename = "sourceNode")]
     source_node: String,
+    #[serde(rename = "returnNode")]
+    return_node: String,
+    quantity: Option<String>,
     #[serde(rename = "observeNodes")]
     observe_nodes: Vec<String>,
     #[serde(rename = "observeElectrodes")]
@@ -413,7 +477,20 @@ fn build(spec: CaseSpec) -> Result<LoadedCase> {
                 segments: nseg,
                 id_material: e.material.clone(),
             })),
+            "channel" => {
+                structure.add_element(Element::Channel(build_channel(e, max_segment_length)?))
+            }
             other => eprintln!(" mTupa: unknown element type '{other}' — skipped"),
+        }
+    }
+
+    // Channels that asked for it are calibrated now, once their elements and
+    // the study's segment-length target are known (ADR 0025)
+    for el in &mut structure.elements {
+        if let Element::Channel(c) = el {
+            if c.want_calibration {
+                calibrate_channel(c)?;
+            }
         }
     }
 
@@ -426,24 +503,18 @@ fn build(spec: CaseSpec) -> Result<LoadedCase> {
         list.iter()
             .map(|s| {
                 // "voltage" wins if both are present; neither → zero current
-                if let Some(v) = &s.voltage {
-                    Source {
-                        node: s.node.clone(),
-                        value: num_complex::Complex64::new(v.re, v.im),
-                        is_voltage: true,
-                    }
+                let (value, is_voltage) = if let Some(v) = &s.voltage {
+                    (num_complex::Complex64::new(v.re, v.im), true)
                 } else if let Some(c) = &s.current {
-                    Source {
-                        node: s.node.clone(),
-                        value: num_complex::Complex64::new(c.re, c.im),
-                        is_voltage: false,
-                    }
+                    (num_complex::Complex64::new(c.re, c.im), false)
                 } else {
-                    Source {
-                        node: s.node.clone(),
-                        value: num_complex::Complex64::new(0.0, 0.0),
-                        is_voltage: false,
-                    }
+                    (num_complex::Complex64::new(0.0, 0.0), false)
+                };
+                Source {
+                    node: s.node.clone(),
+                    value,
+                    is_voltage,
+                    return_node: Some(s.return_node.clone()).filter(|r| !r.is_empty()),
                 }
             })
             .collect::<Vec<_>>()
@@ -510,6 +581,90 @@ fn build_waveform(w: &WaveformSpec) -> Result<Signal> {
     })
 }
 
+/// `quantity` of a transient source (ADR 0025): `current` (default) or
+/// `voltage`; returns whether the waveform is a voltage.
+fn parse_quantity(q: Option<&str>) -> Result<bool> {
+    match q {
+        None | Some("current") => Ok(false),
+        Some("voltage") => Ok(true),
+        Some(other) => Err(TupaError::new(format!(
+            "mTupa: unknown signal quantity '{other}' (expected current or voltage)"
+        ))),
+    }
+}
+
+/// Build a `channel` element from its JSON spec (ADR 0025).
+fn build_channel(e: &ElementSpec, max_segment_length: f64) -> Result<Channel> {
+    let has_position = !e.position.is_empty();
+    if e.strike.is_empty() != has_position {
+        return Err(TupaError::new(format!(
+            "mTupa: channel '{}' needs exactly one of strike (node) and position",
+            e.id
+        )));
+    }
+    if e.length <= 0.0 || e.radius <= 0.0 {
+        return Err(TupaError::new(format!(
+            "mTupa: channel '{}' needs positive length and radius",
+            e.id
+        )));
+    }
+    if e.speed.is_some() && e.inductance.is_some() {
+        return Err(TupaError::new(format!(
+            "mTupa: channel '{}': give either speed or inductance, not both",
+            e.id
+        )));
+    }
+    let breaks = if let Some(segments) = e.segments {
+        // Uniform chain; the study target can only refine it
+        let mut n = count(segments).max(1);
+        if max_segment_length > 0.0 {
+            n = n.max((e.length / max_segment_length - 1.0e-9).ceil() as usize);
+        }
+        (0..=n).map(|k| e.length * k as f64 / n as f64).collect()
+    } else {
+        let mut max_seg = e.max_segment.unwrap_or(f64::MAX);
+        if max_segment_length > 0.0 {
+            max_seg = max_seg.min(max_segment_length);
+        }
+        if max_seg >= f64::MAX || max_seg <= 0.0 {
+            return Err(TupaError::new(format!(
+                "mTupa: channel '{}' needs segments, maxSegment or numerics.maxSegmentLength",
+                e.id
+            )));
+        }
+        let first = e.first_segment.unwrap_or(max_seg);
+        let growth = e.growth.unwrap_or(1.0);
+        if first <= 0.0 || growth < 1.0 {
+            return Err(TupaError::new(format!(
+                "mTupa: channel '{}' needs firstSegment > 0 and growth >= 1",
+                e.id
+            )));
+        }
+        graded_breaks(e.length, first, growth, max_seg)
+    };
+    let mut ch = Channel::new(e.id.clone(), e.strike.clone(), e.length, e.radius, breaks);
+    ch.foot = pos3(&e.position);
+    ch.incidence_deg = e.incidence;
+    ch.azimuth_deg = e.azimuth;
+    if let Some(p) = &e.speed {
+        ch.speed = p.build("speed")?;
+    }
+    if let Some(p) = &e.resistance {
+        ch.resistance = p.build("resistance")?;
+    }
+    ch.inductance = e.inductance;
+    if e.calibrate {
+        if ch.speed.is_unset() {
+            return Err(TupaError::new(format!(
+                "mTupa: channel '{}': calibrate needs a target speed",
+                e.id
+            )));
+        }
+        ch.want_calibration = true;
+    }
+    Ok(ch)
+}
+
 fn build_signal(s: SignalSpec, freq_hz: Option<&[f64]>) -> Result<TransientSpec> {
     let sources = match &s.sources {
         Some(list) => {
@@ -528,6 +683,8 @@ fn build_signal(s: SignalSpec, freq_hz: Option<&[f64]>) -> Result<TransientSpec>
                     Ok(TransientSource {
                         node: src.node.clone(),
                         signal: build_waveform(&src.wave)?,
+                        return_node: Some(src.return_node.clone()).filter(|r| !r.is_empty()),
+                        is_voltage: parse_quantity(src.quantity.as_deref())?,
                     })
                 })
                 .collect::<Result<Vec<_>>>()?
@@ -535,6 +692,8 @@ fn build_signal(s: SignalSpec, freq_hz: Option<&[f64]>) -> Result<TransientSpec>
         None => vec![TransientSource {
             node: s.source_node.clone(),
             signal: build_waveform(&s.wave)?,
+            return_node: Some(s.return_node.clone()).filter(|r| !r.is_empty()),
+            is_voltage: parse_quantity(s.quantity.as_deref())?,
         }],
     };
 
@@ -665,6 +824,9 @@ pub fn validate_study_references(case: &mut LoadedCase) -> Result<()> {
     if let Some(sources) = &case.sources {
         for s in sources {
             require_node(study, &s.node, "sources[].node")?;
+            if let Some(r) = &s.return_node {
+                require_node(study, r, "sources[].returnNode")?;
+            }
         }
     }
     if let Some(t) = &case.transient {
@@ -675,6 +837,9 @@ pub fn validate_study_references(case: &mut LoadedCase) -> Result<()> {
         };
         for src in &t.sources {
             require_node(study, &src.node, field)?;
+            if let Some(r) = &src.return_node {
+                require_node(study, r, "signal.sources[].returnNode")?;
+            }
         }
         for id in &t.observe_nodes {
             require_node(study, id, "signal.observeNodes")?;

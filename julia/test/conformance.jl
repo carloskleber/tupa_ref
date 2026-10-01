@@ -30,16 +30,29 @@ end
 
 const SOURCE_NODE = Dict("grid" => "Node_A")
 
-# The harmonic fixtures were regenerated for ROADMAP Phase 10 (PHASE10_LAG_FIXTURES):
-# this port still computes the pre-Phase-10 numerics, so none is run until it is ported.
-@testset "golden fixture $name" for name in filter(n -> !(n in PHASE10_LAG_FIXTURES), ("portela1997", "rod", "grid"))
+# The harmonic fixtures carry the Phase 10 defaults (single-integral kernel, Γ(ω) images,
+# ADR 0024); `portela1997_ideal` pins `numerics.imageModel: "ideal"`.
+@testset "golden fixture $name" for name in ("portela1997", "portela1997_ideal", "rod", "grid")
     study = run_study_from_file(joinpath(COMMON, name * ".json"))
     @test diff_csv(results_csv(study), read(joinpath(COMMON, name * "_expected.csv"), String), 1e-6) === nothing
     zin = input_impedance(study, get(SOURCE_NODE, name, "Node_1"))
     @test all(real(z) >= -1e-9 * max(abs(z), 1.0) for z in zin)
 end
 
+# The 200-electrode grid: its harmonic sweep is Phase 10 (maxSegmentLength-free, filtered
+# `outputs`); the scan-fed transient (Phase 9 `transferFunction`) is not ported, so the
+# case is loaded from the text without that field. Its transient fixture stays lag.
+@testset "golden fixture portelaMesh (harmonic)" begin
+    text = replace(read(joinpath(COMMON, "portelaMesh.json"), String),
+                   r"\"transferFunction\"\s*:\s*\"interpolated\"\s*,\s*" => "")
+    c = validate_study_references!(load_study_string(text))
+    run_sweep!(c.study, c.freq_hz, c.sources)
+    o = c.outputs
+    fresh = results_csv(c.study; nodes = o.nodes, electrodes = o.electrodes, quantities = o.quantities)
+    @test diff_csv(fresh, read(joinpath(COMMON, "portelaMesh_expected.csv"), String), 1e-6) === nothing
+end
+
 @testset "every golden fixture has a test" begin
     names = sort([replace(f, "_expected.csv" => "") for f in readdir(COMMON) if endswith(f, "_expected.csv")])
-    @test names == sort(["grid", "portela1997", "rod", PHASE9_LAG..., PHASE10_LAG_CASES...])
+    @test names == sort(["grid", "portela1997", "portela1997_ideal", "rod", PHASE9_LAG..., PHASE10B_LAG_FIXTURES...])
 end

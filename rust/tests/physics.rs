@@ -40,6 +40,7 @@ fn unit_current(node: &str) -> Source {
         node: node.into(),
         value: Complex64::new(1.0, 0.0),
         is_voltage: false,
+        return_node: None,
     }
 }
 
@@ -109,6 +110,7 @@ fn voltage_source_pins_node_voltage_and_matches_current_injection() {
             node: "Node_1".into(),
             value: u,
             is_voltage: true,
+            return_node: None,
         }],
     )
     .unwrap();
@@ -133,11 +135,13 @@ fn mixed_voltage_and_current_sources_superpose() {
             node: "Node_1".into(),
             value: u,
             is_voltage: true,
+            return_node: None,
         },
         Source {
             node: "Node_2".into(),
             value: i2,
             is_voltage: false,
+            return_node: None,
         },
     ];
     let out = study.run(om, &mixed).unwrap();
@@ -154,11 +158,13 @@ fn mixed_voltage_and_current_sources_superpose() {
                     node: "Node_1".into(),
                     value: i1,
                     is_voltage: false,
+                    return_node: None,
                 },
                 Source {
                     node: "Node_2".into(),
                     value: i2,
                     is_voltage: false,
+                    return_node: None,
                 },
             ],
         )
@@ -175,6 +181,8 @@ fn transient_tracks_low_frequency_impedance_and_antialias_option() {
         sources: vec![TransientSource {
             node: "Node_1".into(),
             signal: new_double_exp_signal(1.0e3, "f250_2500", false).unwrap(),
+            return_node: None,
+            is_voltage: false,
         }],
         observe_nodes: vec!["Node_1".into()],
         observe_electrodes: vec!["Line_1_e1".into()],
@@ -230,6 +238,8 @@ fn slow_surge_spec(n: usize, observe: &[&str]) -> TransientSpec {
         sources: vec![TransientSource {
             node: "Node_1".into(),
             signal: new_double_exp_signal(1.0e3, "f250_2500", false).unwrap(),
+            return_node: None,
+            is_voltage: false,
         }],
         observe_nodes: observe.iter().map(|s| s.to_string()).collect(),
         observe_electrodes: vec![],
@@ -281,10 +291,14 @@ fn phase9_multiple_injections_superpose() {
         TransientSource {
             node: "Node_1".into(),
             signal: half.clone(),
+            return_node: None,
+            is_voltage: false,
         },
         TransientSource {
             node: "Node_1".into(),
             signal: half.clone(),
+            return_node: None,
+            is_voltage: false,
         },
     ];
     let two = transient_response(&mut study, &spec).unwrap();
@@ -299,21 +313,29 @@ fn phase9_multiple_injections_superpose() {
         TransientSource {
             node: "Node_1".into(),
             signal: half.clone(),
+            return_node: None,
+            is_voltage: false,
         },
         TransientSource {
             node: "Node_2".into(),
             signal: sine.clone(),
+            return_node: None,
+            is_voltage: false,
         },
     ];
     let both = transient_response(&mut study, &spec).unwrap();
     spec.sources = vec![TransientSource {
         node: "Node_1".into(),
         signal: half,
+        return_node: None,
+        is_voltage: false,
     }];
     let a = transient_response(&mut study, &spec).unwrap();
     spec.sources = vec![TransientSource {
         node: "Node_2".into(),
         signal: sine,
+        return_node: None,
+        is_voltage: false,
     }];
     let b = transient_response(&mut study, &spec).unwrap();
     let sum: Vec<Vec<f64>> = a
@@ -560,4 +582,236 @@ fn rod_air_is_nan_free_and_near_analytical_resistance() {
     let zin = case.study.input_impedance(&sources[0].node).unwrap();
     assert!(zin.iter().all(|z| z.re.is_finite() && z.im.is_finite()));
     assert!((zin[0].re - 20.9).abs() < 0.5, "Zin(10 Hz) = {}", zin[0]);
+}
+
+// ---------------------------------------------------------------------
+// ROADMAP Phase 10b — lightning channel (ADR 0025): ports of
+// `fortran/test/test_channel.f90`.
+// ---------------------------------------------------------------------
+
+use tupa::channel_calibration::calibrate_channel;
+use tupa::element::Channel;
+use tupa::element::channel::Piecewise;
+use tupa::mesh::ImageModel;
+
+fn uniform_breaks(length: f64, n: usize) -> Vec<f64> {
+    (0..=n).map(|k| length * k as f64 / n as f64).collect()
+}
+
+/// 30 m tower with a 3 m footing, 300 m loaded channel above its top.
+fn tower_with_channel() -> Study {
+    let mut st = Structure::new(Medium::Linear(Linear::new("soil", 10.0, 1.0, 0.001)));
+    st.add_node(Node::new("Tfoot", [0.0, 0.0, 0.0]));
+    st.add_node(Node::new("Ttop", [0.0, 0.0, 30.0]));
+    st.add_node(Node::new("Rend", [0.0, 0.0, -3.0]));
+    st.add_material(Linear::new("steel", 1.0, 1.0, 5.0e6));
+    st.add_element(Element::Line(Line::new(
+        "Tower", "Tfoot", "Ttop", 0.3, 6, "steel",
+    )));
+    st.add_element(Element::Line(Line::new(
+        "Rod", "Tfoot", "Rend", 0.0125, 3, "steel",
+    )));
+    let mut ch = Channel::new("ch", "Ttop", 300.0, 0.03, uniform_breaks(300.0, 15));
+    ch.speed = Piecewise::uniform(1.5e8);
+    ch.resistance = Piecewise::uniform(0.5);
+    st.add_element(Element::Channel(ch));
+    Study::new("tower with channel", st)
+}
+
+#[test]
+fn channel_assembly_tilted_and_profiled() {
+    let mut st = Structure::new(Medium::Linear(Linear::new("soil", 10.0, 1.0, 0.01)));
+    st.add_node(Node::new("S", [1.0, 2.0, 10.0]));
+    st.add_node(Node::new("T", [1.0, 2.0, 0.0]));
+    st.add_material(Linear::new("m", 1.0, 1.0, 5.0e6));
+    st.add_element(Element::Line(Line::new("L", "S", "T", 0.1, 2, "m")));
+    let mut ch = Channel::new("ch", "S", 100.0, 0.03, uniform_breaks(100.0, 4));
+    ch.incidence_deg = 30.0;
+    ch.azimuth_deg = 90.0;
+    ch.speed = Piecewise::uniform(1.5e8);
+    ch.resistance = Piecewise {
+        up_to: vec![40.0, 1000.0],
+        value: vec![2.0, 0.5],
+    };
+    st.add_element(Element::Channel(ch));
+    st.assemble().unwrap();
+
+    let base = st.find_node_index("ch-base").unwrap();
+    let top = st.find_node_index("ch-top").unwrap();
+    let s = st.find_node_index("S").unwrap();
+    assert_ne!(base, s, "the base is a separate node");
+    assert_eq!(st.nodes[base].p, st.nodes[s].p);
+    let d = [
+        st.nodes[top].p[0] - st.nodes[s].p[0],
+        st.nodes[top].p[1] - st.nodes[s].p[1],
+        st.nodes[top].p[2] - st.nodes[s].p[2],
+    ];
+    assert!(d[0].abs() < 1e-9 && (d[1] - 50.0).abs() < 1e-9);
+    assert!((d[2] - 50.0 * 3.0_f64.sqrt()).abs() < 1e-9);
+    assert_eq!(st.electrodes.len(), 6);
+    let e1 = &st.electrodes[st.find_electrode_index("ch_e1").unwrap()];
+    assert_eq!(e1.loading.unwrap().resistance, 2.0);
+    let e4 = &st.electrodes[st.find_electrode_index("ch_e4").unwrap()];
+    assert_eq!(e4.loading.unwrap().resistance, 0.5);
+    assert!(
+        st.electrodes[st.find_electrode_index("L_e1").unwrap()]
+            .loading
+            .is_none()
+    );
+}
+
+#[test]
+fn two_node_sources_current_dipole_and_voltage_gap() {
+    let freq = [1.0e5, 1.0e6];
+    let one = Complex64::new(1.0, 0.0);
+    let mut dip = tower_with_channel();
+    let mut dip_src = Source::new("Ttop", one, false);
+    dip_src.return_node = Some("ch-base".into());
+    dip.run_sweep(&freq, &[dip_src]).unwrap();
+
+    let mut two = tower_with_channel();
+    two.run_sweep(
+        &freq,
+        &[
+            Source::new("Ttop", one, false),
+            Source::new("ch-base", -one, false),
+        ],
+    )
+    .unwrap();
+    let i_top = dip.structure.find_node_index("Ttop").unwrap();
+    let i_base = dip.structure.find_node_index("ch-base").unwrap();
+    for k in 0..2 {
+        for i in [i_top, i_base] {
+            let (a, b) = (dip.voltage_results.get(i, k), two.voltage_results.get(i, k));
+            assert!((a - b).norm() < 1e-9 * b.norm().max(1.0));
+        }
+    }
+
+    let zin = dip.input_impedance("Ttop").unwrap();
+    let gap = dip.voltage_results.get(i_top, 0) - dip.voltage_results.get(i_base, 0);
+    assert!((zin[0] - gap).norm() < 1e-9);
+
+    let mut v = tower_with_channel();
+    let mut v_src = Source::new("Ttop", zin[0], true);
+    v_src.return_node = Some("ch-base".into());
+    v.run_sweep(&freq, &[v_src]).unwrap();
+    let g = v.voltage_results.get(i_top, 0) - v.voltage_results.get(i_base, 0);
+    assert!((g - zin[0]).norm() < 1e-8 * zin[0].norm(), "gap voltage");
+    assert!(
+        (v.sweep_source_currents_freq[0][0] - one).norm() < 1e-8,
+        "the gap draws the dipole current"
+    );
+    assert!(
+        (v.voltage_results.get(i_top, 0) - dip.voltage_results.get(i_top, 0)).norm()
+            < 1e-8 * zin[0].norm()
+    );
+
+    // Dipoles sharing the return node add up there
+    let om = 2.0 * PI * freq[0];
+    let mut a_src = vec![
+        Source::new("Ttop", one, false),
+        Source::new("Tfoot", one, false),
+    ];
+    for s in &mut a_src {
+        s.return_node = Some("ch-base".into());
+    }
+    let a = dip.run(om, &a_src).unwrap();
+    let b = two
+        .run(
+            om,
+            &[
+                Source::new("Ttop", one, false),
+                Source::new("Tfoot", one, false),
+                Source::new("ch-base", -2.0 * one, false),
+            ],
+        )
+        .unwrap();
+    assert!(
+        (a.voltage[i_base] - b.voltage[i_base]).norm() < 1e-9 * b.voltage[i_base].norm().max(1.0)
+    );
+}
+
+#[test]
+fn unloaded_channel_follows_chens_current() {
+    // Chen's analytic step response of a monopole over ground (x2 the dipole
+    // value, Baba & Rakov), convolved with the 1 us ramp
+    use tupa::signal::new_portela_signal;
+    const C0: f64 = 299_792_458.0;
+    let (eta, a0) = (376.730313668_f64, 0.23);
+    let step_integral = |z: f64, t: f64| -> f64 {
+        let t0 = z / C0;
+        if t <= t0 {
+            return 0.0;
+        }
+        let m = 4000;
+        let dt = (t - t0) / m as f64;
+        (1..=m)
+            .map(|k| {
+                let tau = t0 + (k as f64 - 0.5) * dt;
+                let arg = ((C0 * tau).powi(2) - z * z).sqrt() / a0;
+                if arg <= 1.0 {
+                    0.0
+                } else {
+                    2.0 * (2.0 / eta) * (PI / (2.0 * arg.ln())).atan() * dt
+                }
+            })
+            .sum()
+    };
+    let mut st = Structure::new(Medium::Linear(Linear::new("soil", 10.0, 1.0, 0.01)));
+    st.add_element(Element::Channel(Channel::new(
+        "ch",
+        "",
+        1000.0,
+        a0,
+        uniform_breaks(1000.0, 100),
+    )));
+    let mut study = Study::new("chen", st);
+    study.image_model = Some(ImageModel::Ideal);
+    let spec = TransientSpec {
+        sources: vec![TransientSource {
+            node: "ch-base".into(),
+            signal: new_portela_signal(5.0e6, 0.0, 1.0e-6, 1.0e3, 2.0e3).unwrap(),
+            return_node: None,
+            is_voltage: true,
+        }],
+        observe_nodes: vec!["ch-base".into()],
+        observe_electrodes: vec!["ch_e31".into()],
+        nyquist_hz: 5.0e6,
+        fft_points: 512,
+        freq_zero_hz: 1.0e-6,
+        options: TransientOptions {
+            transform: Transform::Nlt,
+            ..TransientOptions::default()
+        },
+    };
+    let r = transient_response(&mut study, &spec).unwrap();
+    let z = 305.0;
+    let (mut err, mut peak, mut n) = (0.0_f64, 0.0_f64, 0);
+    for (k, &t) in r.t.iter().enumerate() {
+        if !(3.0e-6..=4.5e-6).contains(&t) {
+            continue;
+        }
+        let reference = 5.0e6 / 1.0e-6 * (step_integral(z, t) - step_integral(z, t - 1.0e-6));
+        err = err.max((r.i1_responses[0][k] - reference).abs());
+        peak = peak.max(reference);
+        n += 1;
+    }
+    assert!(n >= 12);
+    assert!(err < 0.015 * peak, "worst deviation {err} of peak {peak}");
+}
+
+#[test]
+fn channel_calibration_reaches_target_speed() {
+    let mut ch = Channel::new("ch", "", 1500.0, 0.03, uniform_breaks(1500.0, 75));
+    ch.speed = Piecewise::uniform(1.5e8);
+    ch.resistance = Piecewise::uniform(0.5);
+    ch.want_calibration = true;
+    calibrate_channel(&mut ch).unwrap();
+    assert!(ch.calibrated);
+    assert!((ch.calibrated_speed - 1.5e8).abs() < 9.0e5);
+    assert!(
+        ch.load_scale > 0.8 && ch.load_scale < 1.3,
+        "{}",
+        ch.load_scale
+    );
 }

@@ -6,7 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tupa::results_writer::{results_csv, transient_csv};
 use tupa::transient::transient_response;
-use tupa::{load_study, run_study_from_file, validate_study_references};
+use tupa::{load_study, validate_study_references};
 
 fn common() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -78,15 +78,7 @@ fn diff_csv(fresh: &str, expected: &str, reltol: f64) -> Result<(), String> {
 }
 
 fn check_case(name: &str) {
-    let json = common().join(format!("{name}.json"));
-    let expected_path = common().join(format!("{name}_expected.csv"));
-    let study = run_study_from_file(json.to_str().unwrap()).expect("run");
-    let fresh = results_csv(&study, None, None, None).expect("csv");
-    let expected = fs::read_to_string(&expected_path).expect("expected csv");
-    if let Err(msg) = diff_csv(&fresh, &expected, 1.0e-6) {
-        panic!("{name}: fresh run differs from fixture: {msg}");
-    }
-
+    let study = check_harmonic(name);
     let zin = study.input_impedance(source_node_for(name)).expect("zin");
     for (k, z) in zin.iter().enumerate() {
         assert!(
@@ -95,6 +87,32 @@ fn check_case(name: &str) {
             k + 1
         );
     }
+}
+
+/// Harmonic sweep of `<name>.json` against `<name>_expected.csv`, rows
+/// filtered by the case's `outputs` block like the written results.
+fn check_harmonic(name: &str) -> tupa::Study {
+    let json = common().join(format!("{name}.json"));
+    let expected_path = common().join(format!("{name}_expected.csv"));
+    let mut case = load_study(&json).expect("load");
+    validate_study_references(&mut case).expect("validate");
+    let sources = case.sources.clone().expect("sources");
+    let freq = case.freq_hz.clone().expect("frequencies");
+    case.study.run_sweep(&freq, &sources).expect("sweep");
+    let o = &case.outputs;
+    let study = case.study;
+    let fresh = results_csv(
+        &study,
+        o.nodes.as_deref(),
+        o.electrodes.as_deref(),
+        o.quantities.as_deref(),
+    )
+    .expect("csv");
+    let expected = fs::read_to_string(&expected_path).expect("expected csv");
+    if let Err(msg) = diff_csv(&fresh, &expected, 1.0e-6) {
+        panic!("{name}: fresh run differs from fixture: {msg}");
+    }
+    study
 }
 
 /// Transient fixtures (`time_s,quantity,id,value`, ROADMAP Phase 9): rows
@@ -248,6 +266,32 @@ fn portela_mesh_transient_matches_fixture() {
     check_transient_case_as("portelaMesh", "portelaMesh_transient");
 }
 
+/// ROADMAP Phase 10b: the unloaded Chen/Baba configuration, and a graded,
+/// speed-calibrated channel (its fixture pins the calibration too).
+#[test]
+fn channel_unloaded_matches_fixture() {
+    check_transient_case("channel_unloaded");
+}
+
+#[test]
+fn channel_loaded_matches_fixture() {
+    check_transient_case("channel_loaded");
+}
+
+/// Tower strike with a two-node current source and a delta-gap voltage
+/// source (ADR 0025), harmonic and transient.
+#[test]
+fn channel_tower_matches_fixtures() {
+    check_harmonic("channel_tower");
+    check_transient_case_as("channel_tower", "channel_tower_transient");
+}
+
+#[test]
+fn channel_tower_gap_matches_fixtures() {
+    check_harmonic("channel_tower_gap");
+    check_transient_case_as("channel_tower_gap", "channel_tower_gap_transient");
+}
+
 #[test]
 fn every_expected_fixture_has_a_test() {
     let mut names: Vec<String> = fs::read_dir(common())
@@ -263,6 +307,12 @@ fn every_expected_fixture_has_a_test() {
     assert_eq!(
         names,
         vec![
+            "channel_loaded",
+            "channel_tower",
+            "channel_tower_gap",
+            "channel_tower_gap_transient",
+            "channel_tower_transient",
+            "channel_unloaded",
             "grid",
             "portela1997",
             "portela1997_ideal",

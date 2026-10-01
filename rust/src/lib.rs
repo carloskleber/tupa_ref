@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 pub mod bessel;
+pub mod channel_calibration;
 pub mod ctes;
 pub mod electrode;
 pub mod element;
@@ -135,6 +136,7 @@ pub fn run_from_file(filename: &str, opts: &RunOptions) -> Result<()> {
             &spec.observe_nodes,
             &spec.observe_electrodes,
             &result,
+            &results_writer::channels_json(&case.study),
         );
         let (csv_file, json_file) = (
             out_path("_transient_results.csv"),

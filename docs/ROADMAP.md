@@ -35,10 +35,10 @@ implementation**; usability as an engineering tool is secondary.
 | Sweep & results | `runSweep` (OpenMP over frequencies) + `tResult` storage, `inputImpedance`/`maxVoltageMagnitude`; CSV/JSON writers (ADR 0012) with `outputs` filtering |
 | Time domain | `mSignal` (Heidler — legacy 6-term [38] and standard parametrised form [37, 39]; double-exp ± Jones; Portela concave front; switched-on sine), tail taper, in-repo FFT (ADR 0014), transfer-function transient driver (`mTransient`) with opt-in scan-fed (pchip-interpolated) transfer function, half-Hann window (spectral or time placement), multiple injections and Numerical Laplace Transform (Phase 9, ADR 0015 amendment 2026-09-30) |
 | JSON I/O | json-fortran parser (ADR 0006, superseded-in-place 2026-08-01); schema v1: structure + `sources`/`frequencies`/`outputs` (ADR 0013) + `signal` (ADR 0015) + voltage sources/Heidler terms (ADR 0016/0015 amendment) + `mesh` composite element (ADR 0020) + optional `signal.antialiasStart` (ADR 0021) + `catenary` element and `portela` waveform (ADR 0023) + `signal.sources`/`window`/`transferFunction`/`transform`/`nltDamping` and the `sine` waveform (ADR 0015 amendment 2026-09-30); the optional `numerics` block (`kernel`, `imageModel`, `maxSegmentLength`) and optional `segments` (ADR 0024); pre-run reference validation (`validateStudyReferences`) and CLI verbosity levels |
-| Cases & tests | `common/` regression fixtures (golden; four harmonic — `portela1997`, `rod`, `grid`, `portela1997_ideal` — five transient since Phase 9, and the 32 × 32 m `portelaMesh` harmonic + scan-fed transient since Phase 10; **all regenerated once for Phase 10**) plus ten cases imported from the legacy Matlab case library (`linha*.json`, `torre*.json`, ADR 0023), 17 test programs under `fpm test --profile release` — all green (re-run 2026-10-01, gfortran 13; `test_impedance`'s coincident-segment divergence check is defeated by `-ffast-math`, as before). Plain `fpm test` needs `-ffree-line-length-none` and, on shared LAPACK, `--no-as-needed -llapack -lblas` (fortran/README.md) |
+| Cases & tests | `common/` regression fixtures (golden; four harmonic — `portela1997`, `rod`, `grid`, `portela1997_ideal` — five transient since Phase 9, and the 32 × 32 m `portelaMesh` harmonic + scan-fed transient since Phase 10; **all regenerated once for Phase 10**) plus ten cases imported from the legacy Matlab case library (`linha*.json`, `torre*.json`, ADR 0023), 18 test programs under `fpm test --profile release` — all green (re-run 2026-10-01, gfortran 13; `test_impedance`'s coincident-segment divergence check is defeated by `-ffast-math`, as before). Plain `fpm test` needs `-ffree-line-length-none` and, on shared LAPACK, `--no-as-needed -llapack -lblas` (fortran/README.md) |
 | Validation | [`docs/validation/`](validation/README.md): digitized published-curve comparisons — Grcev et al. 2018 Fig. 12 (6 cases), Lima et al. 2020 Figs. 6/7, Poljak & Doric 2006 Fig. 4, Silva et al. 2025 Figs. 3/4 (harmonic + transient) — accepted as the release-bar oracle (§4) |; since Phase 10 also the cross-code check against TAGS ([`validation/tags-xval.md`](validation/tags-xval.md): ≤ 0.3 % below 1 MHz on six cases) and the effect of the `Γ(ω)` default on every comparison ([`phase10-image-model.md`](validation/phase10-image-model.md))
 | GUI | Python/PySide6 view-only module (`gui/`, ADR 0011): study tree, 3-D view, results/transient plots |
-| Other implementations | **Julia port (`julia/`, contributed 2026-09-29, realigned 2026-09-30, Phase 8J)** — module-by-module mirror of the Fortran code, golden fixtures met at 1e-6 and every runnable `common/` case within 1e-6 of Rust/Fortran (bar two round-off rows Rust shares); **Rust port (`rust/`, 2026-09-30, [ADR 0022](adr/0022-rust-implementation.md))** — harmonic conformance met on the three golden fixtures at 1e-6, transient path implemented, Phase 8 item 1 (Fortran fixture widening) still open; **Phase 10 update 2026-10-01: Rust implements the whole phase and matches every regenerated fixture (worst 1.3e-10 harmonic, 1.5e-8 NLT); Julia lags** (no Julia toolchain reachable) — it still computes the pre-Phase-10 numerics, its loader refuses the `numerics` block, and the cross-check numbers above date from 2026-09-30 |
+| Other implementations | **Julia port (`julia/`, contributed 2026-09-29, realigned 2026-09-30, Phase 8J)** — module-by-module mirror of the Fortran code, golden fixtures met at 1e-6 and every runnable `common/` case within 1e-6 of Rust/Fortran (bar two round-off rows Rust shares); **Rust port (`rust/`, 2026-09-30, [ADR 0022](adr/0022-rust-implementation.md))** — harmonic conformance met on the three golden fixtures at 1e-6, transient path implemented, Phase 8 item 1 (Fortran fixture widening) still open; **Phase 10 update 2026-10-01: Rust implements the whole phase and matches every regenerated fixture (worst 1.3e-10 harmonic, 1.5e-8 NLT); Julia ported items 1–3 and 6 the same day** (single-integral kernel, Γ(ω) images, `numerics` block; the five harmonic fixtures it can run match at 1e-6, worst 2.4e-10; the threaded sweep stays unported) — it still lags on Phase 9 and Phase 10b |
 
 The original gap analysis (nine numbered gaps between this repository and
 the legacy pipeline) is fully resolved as of Phases 0–6; the historically
@@ -205,13 +205,15 @@ Where the former Phase 7 items went:
 | Insulated conductor | Phase 13 item 3 |
 | Multipolar cables | Phase 13 item 4 |
 | Mutual impedance between segments in different media | Phase 14 item 1 |
-| Lightning discharge channel | Phase 14 item 2 |
+| Lightning discharge channel | Phase 10b (in air) — done 2026-10-01; coupling to buried electrodes: Phase 14 item 2 |
 | Multi-layer soil and reflection-coefficient images | Phase 15 item 1 |
 
 ### Prioritisation of Phases 8–15
 
 Phase numbers give priority order. The order was set on 2026-09-30 by
-these rules, applied in turn:
+these rules, applied in turn (one exception, 2026-10-01: the lightning
+channel in air was pulled ahead of Phase 11 by author decision and is
+numbered 10b, rule 6 notwithstanding):
 
 1. **Second implementation first.** The project's role is a citable
    reference (ADR 0018); an independent implementation passing the public
@@ -452,10 +454,14 @@ Layout and status: [julia/README.md](../julia/README.md).
    and the five Phase 9 fixtures are listed as lag in `julia/test/`
    (`PHASE9_LAG`). Second instance: Phase 10 — **lagging**, same reason
    (the Julia host was denied by the egress policy again): the loader
-   refuses the `numerics` block, `portelaMesh` joins `PHASE9_LAG`,
-   `portela1997_ideal` is `PHASE10_LAG_CASES`, and the three regenerated
-   harmonic fixtures are `PHASE10_LAG_FIXTURES` (not run). These edits
-   were made without running Julia (`julia/README.md`).
+   refused the `numerics` block and the regenerated harmonic fixtures were
+   skipped. **Ported 2026-10-01** with Julia 1.13 (`geometry_factor_1d`,
+   `image_coefficients`, `load_numerics`; the threaded sweep not ported):
+   `portela1997`, `rod`, `grid`, `portela1997_ideal` and the harmonic half
+   of `portelaMesh` run in `Pkg.test()` (239 checks) at 1e-6; the Phase 9
+   transient fixtures and `portelaMesh_transient` stay lag. Found on the
+   way: the mesh segment target undershoots (ADR 0024 §8), open in all
+   three implementations (`julia/README.md`).
 
 **Optional, not required for conformance:** multi-threading over
 frequencies (`Threads.@threads`, with one BLAS thread per task — the
@@ -640,12 +646,74 @@ changed defaults).
 
 **Follow-along.** Rust implements items 1–3 and 6 and matches every fixture
 (worst 1.3e-10 harmonic, 1.5e-8 NLT, 3e-12 other transients); Julia
-**lags** (item 8J-9, `julia/README.md`).
+followed on 2026-10-01 for items 1–3 and 6 (item 8J-9, `julia/README.md`).
 
 **Exit criteria — met.** Fixtures regenerated once under P1 + P2 and matched
 by Rust; P3 writeup in `docs/validation/`; a real-sized grid sweep runs in
 seconds, not hours (the 200-electrode `portelaMesh`: 5.2 s serial for 41
 frequencies, 1.5 s on four threads).
+
+### Phase 10b — Lightning channel in air
+
+Moved ahead of Phase 11 on 2026-10-01 (author decision), splitting the
+former Phase 14 item 2. It is numbered 10b rather than 11 so that the
+Phase 11–15 cross-references in ADRs and the other implementations'
+READMEs stay valid. Everything here lives in air: with cross-media
+coupling neglected (theory.md §5) the channel needs nothing from Phase 14
+item 1, and it changes no buried-electrode output (GPR, touch and step
+voltages) until that item exists. Design basis: theory.md §4.5 (new,
+2026-09-30 review of Cooray [74] and Silveira [45]); the legacy provides
+only the geometry generator `canal.m`.
+
+1. **Channel element with series loading** — **M** — **done
+   2026-10-01** ([ADR 0025](adr/0025-lightning-channel-and-two-node-sources.md)).
+   *Decided (2026-07-17 Q&A): antenna-model route, with distributed series
+   impedance calibrated so the channel propagation matches a return-stroke
+   speed prescribed in the JSON.* The `"channel"` element: strike node (or a
+   free-standing position), length, incidence and azimuth, radius, `speed`
+   (number or `v(z)` profile) or explicit `inductance`, `R'` (number or
+   piecewise profile), segments uniform or graded from the foot with a
+   bounded adjacent-length ratio (`canal.m`'s spacing is not ported). A chain
+   of ordinary air segments with `z_ch = R' + jωL'` in the internal-impedance
+   slot (`tElectrode%loaded`); `L'` from the closed form, and with
+   `calibrate: true` **calibrated** on the lossless channel alone above
+   ideal ground with the 10–90 % tangent metric (`mChannelCalibration`); the
+   calibrated scale is recorded in the results (`channels` block). The
+   calibrated `L'` lies within 18 % of the closed form on the cases tried
+   (scale 0.82–1.05, docs/validation/channel-validation.md). Fortran and
+   Rust conform to the four new fixtures (the calibrated one included);
+   **Julia lags** (its loader refuses the element, `returnNode` and
+   `quantity`; it has followed Phase 10 but not Phase 9).
+2. **Channel excitation** — **S–M** — **done 2026-10-01** (ADR 0025).
+   Two-node sources: `returnNode` on `sources[]` and `signal`/
+   `signal.sources[]` entries — a current dipole (`+I` at the object node,
+   `−I` at `<channel>-base`, no kernel change, ADR 0010) or a delta-gap
+   voltage source (unit pattern the ±1 dipole, constraint on `u_a − u_b`,
+   amending ADR 0016); transient sources take `quantity: "voltage"`.
+   Channel cases run on the NLT path (`channel_*.json`). A cloud capacitance
+   at the top (the low-frequency limit in theory.md §4.5) was not added: no
+   case needed it.
+3. **Validation** — **S–M** — **done 2026-10-01 except the Ishii case**,
+   [validation/channel-validation.md](validation/channel-validation.md),
+   script `docs/validation/channel_checks.py`. Chen's analytic current on
+   a vertical cylinder over perfect ground (Baba & Rakov's configuration, run
+   with `imageModel: "ideal"`): within 1.5 % of the peak; loaded-channel speed
+   against Table 3 of [44] (0.23 m wire, 2/4/8 µH/m): 0.35–0.58c against
+   0.37–0.60c; base impedance against the TL estimate. **Open**: the Ishii
+   reduced-scale induced-voltage case as reproduced by Pokharel et al.
+   (all-air geometry) — the measured waveform exists here only as a
+   description, so it needs a digitised figure. Fixtures:
+   `channel_unloaded`, `channel_loaded`, `channel_tower`, `channel_tower_gap`.
+
+**Exit criteria — met (2026-10-01).** A tower strike runs end to end
+(`channel_tower*.json`: harmonic and transient, current and voltage
+sources); Fortran and Rust agree on every fixture; the channel reproduces
+Chen's unloaded current and Baba & Rakov's loaded speeds.
+
+Out of scope here: fields from the channel (Phase 11 item 1 supplies the
+post-processing), induced-voltage work over lossy ground (post-MVP), and
+the HEM option of an enlarged transversal radius to lower the channel
+impedance (theory.md §4.5, optional extension).
 
 ### Phase 11 — Grounding-safety outputs
 
@@ -724,7 +792,7 @@ pulled forward if a tower-footing case needs shield wires.
    element); refs: Ametani cable constants [43], Schelkunoff [40];
    PRTL-mHEM's tubular bundles are a partial analogue.
 
-### Phase 14 — Air–soil coupling and the lightning channel
+### Phase 14 — Air–soil coupling
 
 1. **Mutual impedance between segments in different media** — **L**.
    No legacy implementation to port (unfinished body, ADR 0017); the
@@ -733,18 +801,13 @@ pulled forward if a tower-footing case needs shield wires.
    App. B; validate on `rod_air`-class cases. *Decided (2026-07-17 Q&A):
    strictly after P2 (Phase 10 item 2) — both touch the same interface
    machinery and P2 restores reference behaviour first.*
-2. **Lightning discharge channel** — **M–L**. The legacy element class
-   is an empty placeholder; `canal.m` only generates channel geometry
-   (log-spaced segments from cloud height down to the strike point,
-   incidence/azimuth angles) — the channel is ordinary HEM segments in
-   air, an "electromagnetic return-stroke model" in Baba & Rakov's
-   classification [34,44]. *Decided (2026-07-17 Q&A): antenna-model
-   route, with added distributed series impedance calibrated so the
-   channel propagation matches a return-stroke speed prescribed in the
-   JSON* — the loading technique surveyed in [44]. Benefits from item 1
-   (channel in air above electrodes in soil). Opens the induced-voltage
-   route ([45,46]; lossy-ground coupling via Norton's approximation) and
-   the LEMP term plain EMT analysis misses [52] — both post-MVP.
+2. **Channel coupling to buried electrodes** — **M**. The channel
+   itself moved to Phase 10b (2026-10-01). What remains is its
+   interaction with electrodes in soil, which needs item 1: a channel
+   above buried electrodes then affects GPR, touch and step voltages
+   beyond the injected current. Also the post-MVP routes the channel
+   opens: induced voltages ([45,46]; lossy-ground coupling via Norton's
+   approximation) and the LEMP term plain EMT analysis misses [52].
 
 ### Phase 15 — Multi-layer soil
 
@@ -818,11 +881,16 @@ shielded-wire segment.
   segment-length target, threaded sweep, TAGS cross-validation and the 32 × 32 m
   grid fixtures; all golden fixtures regenerated once and matched by Rust;
   Fortran package version **0.6.0**.
+- **Phase 10b — met (2026-10-01)**: lightning channel element in air
+  (series-loaded, graded, speed-calibrated), two-node current and voltage
+  sources, four `common/` fixtures matched by Rust, validation against Chen
+  and Baba & Rakov (the Ishii case is open); ADR 0025; Fortran package **0.7.0**.
 - **Next engineering steps**: Phase 8 item 1 (the rest — widened fixtures, the
   structure dump and the conformance tag, which now falls on the Phase 10
   fixture set; it closes Milestone 8b and gives the Julia port a sharper
   target), then Phase 8 item 9 (report); Phase 8J follow-along for Phases 9
-  and 10 (Julia, needs a Julia toolchain); then Phase 11.
+  and 10b (Julia: Phase 10 done 2026-10-01 on the 1.13 toolchain; Phase 9
+  — transfer-function/NLT transients — is next there, and Phase 10b follows it); then Phase 11.
 
 ---
 

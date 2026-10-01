@@ -27,6 +27,9 @@ when it reproduces every case within the stated tolerance.
 | `silva2025_rho{100,300,1000,2400}_transient.json` | Same geometry/soil as the files above, but a `signal` block (ADR 0015): GPR at `Node_1` under De Conti & Visacro [38]'s **MCS_FST#2** double-peaked first-stroke current (7 `terms`, physical amplitudes, no `imax` rescale), `nyquistHz: 4e6`, `fftPoints: 4096`. For comparison against the paper's Fig. 4 (GPR(t)) — see [`docs/validation/silva2025-fig4.md`](../docs/validation/silva2025-fig4.md), including why MCS_FST#2 rather than the legacy 6-term MCS_FST#1 | none yet (plausibility check only, same caveat as the frequency-domain files above) |
 | `grcev_fig12_l{10,100}_rho{30,300,3000}.json` | Grcev et al. 2018 (IEEE TPWRD, references.md [23]) §IX-B case: buried horizontal electrode, ℓ = 10 or 100 m, 7 mm radius, 0.5 m depth, homogeneous non-dispersive soil (ρ1 = 30/300/3000 Ω·m, εr = 10), 0.25 m segments (theory.md §4.1 λ/10 bound at 10 MHz), 1∠0° A at `Node_1`, 101 log-spaced points 100 Hz–10 MHz (`pointsPerDecade: 20`). For comparison against the paper's Fig. 12 (rigorous full-wave model's \|Z(ω)\|, not a circuit-model approximation) — see [`docs/validation/grcev-fig12.md`](../docs/validation/grcev-fig12.md) | none yet (plausibility check only, same caveat as the Silva files above) |
 | `portelaMesh.json` | Native `"mesh"` element demo (ADR 0020): a single 32x32 m grounding grid, 5x5 main nodes (8 m pitch), 5 segments/bar (185 nodes, 200 electrodes), corner at `(0, -32, -1)` so the grid spans `x` in `[0, 32]`, `y` in `[-32, 0]`, from the classic layout in Portela's *Frequency and Transient Behavior of Grounding Systems* papers (references.md — the M2 point at x=30,y=-30 used there sits inside this mesh's footprint); 1∠0° A at `m-0000` (a corner), 100 Hz–10 MHz at 4 points/decade (21 points), `outputs` limited to three nodes and one electrode. ROADMAP Phase 10 item 6: affordable since the single-integral kernel (≈ 5 s serial, 1.5 s on 4 threads for 41 frequencies). Also carries a `signal` block — a 30 kA 1.2/50 µs surge, 512 samples to 500 kHz, `transferFunction: "interpolated"` (the sweep's axis is the scan grid, `freqZeroHz: 100`) | `portelaMesh_expected.csv` (harmonic: 3 node voltages, `i1`/`i2` of `m-0000-0001_e1`) and `portelaMesh_transient_expected.csv` (transient shape) |
+| `channel_unloaded.json` | ROADMAP Phase 10b ([ADR 0025](../docs/adr/0025-lightning-channel-and-two-node-sources.md)): Baba & Rakov's configuration — an unloaded, perfectly conducting 2 km channel (r0 = 0.23 m, 200 segments of 10 m, free-standing) over **ideal** ground, driven at its base by a 5 MV, 1 µs ramp voltage (`quantity: "voltage"`, `portela` waveform with `alpha: 0`), NLT, 512 samples to 5 MHz; observes `ch_e1/e31/e61/e91` (z = 5, 305, 605, 905 m). Segment currents follow Chen's analytic current to ≈ 1 % after the front ([validation/channel-validation.md](../docs/validation/channel-validation.md)) | `channel_unloaded_expected.csv` (transient shape) |
+| `channel_loaded.json` | ROADMAP Phase 10b: 3 km, r0 = 3 cm channel over ideal ground loaded to c/2 (`speed: 1.5e8`, `resistance: 0.5`, `calibrate: true`), segments graded from 5 m at the foot (`growth: 1.15`, ≤ 20 m), 10 kA 1 µs ramp current source at `ch-base`, NLT. The fixture pins the **calibrated** loading too (the `channels` block of its results records it) | `channel_loaded_expected.csv` (transient shape) |
+| `channel_tower.json`, `channel_tower_gap.json` | ROADMAP Phase 10b: strike to a 30 m tower (0.3 m radius) with a 3 m rod footing in σ = 1 mS/m soil, and a 1 km channel above the tower top (`strike: "Ttop"`, c/2, 0.5 Ω/m, graded). Source between the tower top and `ch-base` (a two-node source, ADR 0025): a 1 A current source in `channel_tower.json`, a 1 kV ideal voltage source (delta gap) in `channel_tower_gap.json`; each carries a harmonic sweep (10 kHz–1 MHz, 3/decade) and a transient (10 kA / 1 MV, 1 µs ramp, NLT, 256 samples to 2 MHz) | `channel_tower_expected.csv`, `channel_tower_transient_expected.csv`, `channel_tower_gap_expected.csv`, `channel_tower_gap_transient_expected.csv` |
 | `lima_fig6.json` | Lima et al. 2020 (IEEE TEMC, references.md [11]) §III-B Case #9: distribution tower grounding — 4 horizontal electrodes (6 m) radiating 90° apart from a center node, each ending in a vertical rod (3 m), plus a 5th vertical rod at the center (injection point); homogeneous soil (σ1 = 1 mS/m, εr = 10); 12.5 mm radius, arms at -0.5 m with rods to -3.5 m (both inferred — see writeup), 0.5 m segments, 1∠0° A at `Node_C`, 150 log-spaced points 100 Hz–10 MHz (`pointsPerDecade: 29.8`). For comparison against the paper's Fig. 6 MHEM curve — see [`docs/validation/lima-fig6.md`](../docs/validation/lima-fig6.md) | none yet (plausibility check only; case geometry only partially specified by the paper) |
 
 ### Legacy TUPÃ cases (`linha*.json`, `torre*.json`, ADR 0023)
@@ -111,8 +114,9 @@ item 5). They pin today's numerics for this implementation and, per ADR 0002,
 are the conformance target future Python ports — and the Rust and Julia
 ports in [`rust/`](../rust/README.md) and [`julia/`](../julia/README.md) —
 must reproduce within tolerance: the Rust port matches every fixture at 1e-6
-(worst 1.3e-10 harmonic, 1.5e-8 NLT); the Julia port, which still computes the
-pre-Phase-10 numerics, does not run the regenerated harmonic ones. All fixtures
+(worst 1.3e-10 harmonic, 1.5e-8 NLT); the Julia port matches the harmonic ones (`grid`, `portela1997`,
+`portela1997_ideal`, `rod`, `portelaMesh`; worst 2.4e-10) and still lags on
+the Phase 9 transient and Phase 10b channel ones. All fixtures
 were regenerated once for ROADMAP Phase 10 (single-integral kernel, `Γ(ω)`
 images; [ADR 0024](../docs/adr/0024-phase10-numerics.md)). `fortran/test/test_common_cases.f90` diffs a fresh run against
 each fixture (relative tolerance 1e-6) and re-checks passivity
@@ -164,8 +168,37 @@ Semantics:
   (Alipio & Visacro [14], mean parameter set) takes `permeability`/`sigma0`
   only — e.g. `{ "type": "alipio-visacro", "permeability": 1.0, "sigma0": 0.01 }`.
   See `silva2025_rho100.json` for a worked example.
-- `elements[].type`: `"line"`, `"mesh"` (ADR 0020) or `"catenary"` (ADR
-  0023); unknown types are skipped with a warning.
+- `elements[].type`: `"line"`, `"mesh"` (ADR 0020), `"catenary"` (ADR
+  0023) or `"channel"` (ADR 0025); unknown types are skipped with a warning.
+- `"channel"` (ADR 0025, theory.md §4.5) is a lightning return-stroke
+  channel in air: a chain of perfectly conducting segments rising from a
+  `strike` node — or from a free-standing `position` `[x, y, z]`, exactly
+  one of the two — `length` (m) along an axis tilted `incidence` degrees
+  from the vertical towards `azimuth` degrees from +x (both default 0), of
+  `radius` (m). Loading in the internal-impedance slot: `speed` (target
+  return-stroke speed, m/s) gives `L'(z) = κ·L0(z)(c²/v² − 1)` (`κ = 1`
+  unless `"calibrate": true`, which solves for `κ` at load time against the
+  10–90 % front-tangent speed of the channel alone over ideal ground); or an
+  explicit uniform `inductance` `L'` (H/m) — not both; `resistance` `R'`
+  (Ω/m). `speed` and `resistance` take a number or a piecewise-constant
+  profile `[{"upTo": s, "value": v}, ...]` in the distance `s` along the
+  axis. Segments: `segments` (uniform), or `maxSegment` with optional
+  `firstSegment` (default `maxSegment`) and `growth` (default 1, the ratio
+  of successive segments), graded from the foot (`numerics.maxSegmentLength`
+  caps `maxSegment`). Generated nodes `<id>-base` (a **separate** node
+  coincident with the strike node, so a source can sit between them),
+  `<id>_n<k>`, `<id>-top`; segments `<id>_e<k>` upward from the base. The
+  strike node must be attached to the struck object. See `channel_*.json`.
+- **Two-node sources** (ADR 0025). A `sources[]` entry, a `signal.sources[]`
+  entry, or the single-source `signal`, may add `"returnNode"`: a current
+  source pushes `+I` into `node` and `−I` into `returnNode`; a voltage
+  source fixes `u(node) − u(returnNode)`. A strike to an object at node `T`
+  is `{ "node": "T", "returnNode": "<channel id>-base", ... }`; a channel
+  alone above ideal ground has no object, and its source acts against remote
+  earth (no `returnNode`). Transient sources also take `"quantity":
+  "current"` (default) or `"voltage"` — the waveform is then a source
+  voltage (V) and the `injectedCurrent` rows of the results hold that
+  voltage.
 - `"catenary"` (ADR 0023) is a `"line"` that sags: same fields plus `sag`,
   the drop at midspan below the chord (m, negative bows upward). The chain
   nodes lie on the parabola of theory.md §4.4, evenly spaced along the
@@ -188,8 +221,10 @@ Semantics:
   `segments` follows the target alone. `numerics` reproduces the earlier
   results with `{ "kernel": "double", "imageModel": "ideal" }`. The CLI
   defaults (`--kernel`, `--image-model`) apply to studies that do not state
-  their own. The Julia port still refuses the block (its numerics are the
-  pre-Phase-10 ones).
+  their own. The Julia port reads it too (since 2026-10-01).
+  For a `mesh` the target is applied to `length/rows` rather than the true bar
+  length `length/(rows − 1)`, so it is undershot there in all three
+  implementations (ADR 0024 §8); `line` and `catenary` are exact.
 - `"mesh"` (ADR 0020) is a rectangular, axis-aligned grounding grid: a
   composite element that plants its own `rowsX * rowsY` main nodes on a
   regular grid — `rowsX` bars parallel to the X axis (each `lengthX` long,
@@ -303,6 +338,12 @@ Semantics:
   `injectedCurrent`, which, like `sourceNode`, keeps describing the first
   source; the CSV has one `injectedCurrent` row per distinct source node,
   holding the net current injected there.
+- **Results with a channel** (ADR 0025): both results JSON files gain, only
+  when the study has a `channel` element, a top-level `"channels"` array
+  after `title` — per channel `id`, `calibrated`, and (if calibrated)
+  `scale` (κ) and `measuredSpeed`, plus the per-segment `inductance` (H/m)
+  and `resistance` (Ω/m) the solver used. Files of other studies are
+  unchanged; CSV files are unchanged.
 - **Transient golden fixtures** (`*_expected.csv` in the
   `time_s,quantity,id,value` shape): rows are compared by position with
   identical text fields, and values pass when

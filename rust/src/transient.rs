@@ -246,13 +246,31 @@ impl Default for TransientOptions {
     }
 }
 
-/// One current injection of a transient run.
+/// One injection of a transient run.
 #[derive(Debug, Clone)]
 pub struct TransientSource {
     /// Injection node
     pub node: String,
     /// Excitation waveform
     pub signal: Signal,
+    /// Return node of a two-node source (ADR 0025); `None` = against remote
+    /// earth
+    pub return_node: Option<String>,
+    /// The waveform is a source voltage (V) across the node pair instead of
+    /// an injected current (A) (ADR 0025)
+    pub is_voltage: bool,
+}
+
+impl TransientSource {
+    /// A current injection at `node`.
+    pub fn current(node: impl Into<String>, signal: Signal) -> Self {
+        Self {
+            node: node.into(),
+            signal,
+            return_node: None,
+            is_voltage: false,
+        }
+    }
 }
 
 /// Transient request (mirrors the JSON `signal` block, ADR 0015).
@@ -461,7 +479,8 @@ pub fn transient_response(study: &mut Study, spec: &TransientSpec) -> Result<Tra
             &[Source {
                 node: src.node.clone(),
                 value: Complex64::new(1.0, 0.0),
-                is_voltage: false,
+                is_voltage: src.is_voltage,
+                return_node: src.return_node.clone(),
             }],
             c,
         )?;

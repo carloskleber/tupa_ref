@@ -9,6 +9,8 @@ module mResultsWriter
   !! per axis-point x quantity x entity) so column count doesn't depend on
   !! node/electrode count.
   use mStudy
+  use mElement, only: tElement
+  use mElementChannel, only: tChannel
   use mError, only: raiseError
   implicit none
   private
@@ -128,6 +130,54 @@ contains
     s = '{"re": ' // trim(fmtReal(real(v))) // ', "im": ' // trim(fmtReal(aimag(v))) // '}'
   end function fmtComplexJson
 
+  subroutine writeChannelsJson(unit, study)
+    !! Write the optional `"channels"` block (ADR 0025): one entry per
+    !! lightning-channel element with the loading the solver used — the
+    !! per-segment series inductance and resistance, and the calibration
+    !! outcome — so a run records its calibrated value. Writes nothing when
+    !! the study has no channel, leaving other files unchanged.
+    integer, intent(in) :: unit
+    type(tStudy), intent(in) :: study
+    class(tElement), pointer :: el
+    integer :: i, k, n
+    logical :: first
+
+    first = .true.
+    do i = 1, study%structure%getElementCount()
+      el => study%structure%getElement(i)
+      select type (el)
+      type is (tChannel)
+        if (.not. allocated(el%electrodes)) cycle
+        if (first) write(unit, '(A)') '  "channels": ['
+        if (.not. first) write(unit, '(A)') ","
+        first = .false.
+        n = size(el%electrodes)
+        write(unit, '(A)', advance="no") '    { "id": "' // trim(el%id) // '", "calibrated": '
+        if (el%calibrated) then
+          write(unit, '(A)', advance="no") 'true, "scale": ' // trim(fmtReal(el%loadScale)) // &
+                                            ', "measuredSpeed": ' // trim(fmtReal(el%calibratedSpeed))
+        else
+          write(unit, '(A)', advance="no") 'false'
+        end if
+        write(unit, '(A)', advance="no") ', "inductance": ['
+        do k = 1, n
+          write(unit, '(A)', advance="no") trim(fmtReal(el%electrodes(k)%loadInductance))
+          if (k < n) write(unit, '(A)', advance="no") ", "
+        end do
+        write(unit, '(A)', advance="no") '], "resistance": ['
+        do k = 1, n
+          write(unit, '(A)', advance="no") trim(fmtReal(el%electrodes(k)%loadResistance))
+          if (k < n) write(unit, '(A)', advance="no") ", "
+        end do
+        write(unit, '(A)', advance="no") "] }"
+      end select
+    end do
+    if (.not. first) then
+      write(unit, '(A)') ""
+      write(unit, '(A)') "  ],"
+    end if
+  end subroutine writeChannelsJson
+
   subroutine writeResultsJson(study, filename, nodeIds, electrodeIds, quantities)
     !! Write the study's last sweep as ADR 0012 v0 JSON:
     !! `{title, frequencies, nodes[{id,voltage}], electrodes[{id,i1,i2}],
@@ -162,6 +212,7 @@ contains
     open(newunit=unit, file=filename, status="replace", action="write")
     write(unit, '(A)') "{"
     write(unit, '(A)') '  "title": "' // trim(study%title) // '",'
+    call writeChannelsJson(unit, study)
 
     write(unit, '(A)', advance="no") '  "frequencies": ['
     do k = 1, nf
@@ -312,7 +363,8 @@ contains
   end subroutine writeTransientResultsCsv
 
   subroutine writeTransientResultsJson(title, sourceNodeIds, t, injectedCurrents, observeNodeIds, &
-                                        nodeResponses, filename, observeElectrodeIds, i1Responses, i2Responses)
+                                        nodeResponses, filename, observeElectrodeIds, i1Responses, i2Responses, &
+                                        study)
     !! Write a `mTransient%transientResponseSources` run as ADR 0015
     !! transient results JSON: `{title, sourceNode, time, injectedCurrent,
     !! [sources[{node,current}],] nodes[{id,voltage}], electrodes[{id,i1,i2}]}`.
@@ -332,12 +384,15 @@ contains
     character(len=*), intent(in), optional :: observeElectrodeIds(:)
     real(8), intent(in), optional :: i1Responses(:,:), i2Responses(:,:)
     !! Shape (size(observeElectrodeIds), size(t)) each, if present
+    type(tStudy), intent(in), optional :: study
+    !! Source of the optional `"channels"` block (ADR 0025)
     integer :: unit, nt, i, k
 
     nt = size(t)
     open(newunit=unit, file=filename, status="replace", action="write")
     write(unit, '(A)') "{"
     write(unit, '(A)') '  "title": "' // trim(title) // '",'
+    if (present(study)) call writeChannelsJson(unit, study)
     write(unit, '(A)') '  "sourceNode": "' // trim(sourceNodeIds(1)) // '",'
 
     write(unit, '(A)', advance="no") '  "time": ['

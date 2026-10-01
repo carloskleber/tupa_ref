@@ -1,0 +1,19 @@
+{
+  "title": "ROADMAP Phase 10b: unloaded 2 km channel over ideal ground, 5 MV ramp (Baba and Rakov / Chen configuration)",
+  "soil": { "conductivity": 0.01, "permittivity": 10.0, "permeability": 1.0 },
+  "numerics": { "imageModel": "ideal" },
+  "elements": [
+    { "type": "channel", "id": "ch", "position": [0.0, 0.0, 0.0], "length": 2000.0, "radius": 0.23, "segments": 200 }
+  ],
+  "signal": {
+    "sources": [
+      { "node": "ch-base", "quantity": "voltage", "waveform": "portela", "imax": 5.0e6, "alpha": 0.0,
+        "tFront": 1.0e-6, "tTopEnd": 1.0e3, "tTailEnd": 2.0e3 }
+    ],
+    "observeNodes": ["ch-base"],
+    "observeElectrodes": ["ch_e1", "ch_e31", "ch_e61", "ch_e91"],
+    "nyquistHz": 5.0e6,
+    "fftPoints": 512,
+    "transform": "nlt"
+  }
+}

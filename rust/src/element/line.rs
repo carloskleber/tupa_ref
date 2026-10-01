@@ -103,6 +103,7 @@ impl Line {
                 node_indices: [node_idx[k - 1], node_idx[k]],
                 radius: self.radius,
                 material: material.clone(),
+                loading: None,
             });
         }
         Ok(n - 1)

@@ -67,7 +67,7 @@ fpm test --profile release \
   --link-flag "-Wl,--no-as-needed -llapack -lblas"
 ```
 
-All 17 test programs pass under it (2026-10-01). `test_parallel` checks that a
+All 18 test programs pass under it (2026-10-01). `test_parallel` checks that a
 sweep is bit-identical for 1 and N threads; run the suite a few times with
 `OMP_NUM_THREADS=4` after touching `runSweep` or anything it calls.
 

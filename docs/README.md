@@ -46,6 +46,7 @@ ARCHITECTURE → theory.md; contributors add CONVENTIONS and ROADMAP.
 | [0022](adr/0022-rust-implementation.md) | Rust implementation (`rust/`): design decisions and conformance status | Accepted |
 | [0023](adr/0023-legacy-case-import.md) | Legacy case import: `catenary` element, `portela` waveform, legacy `common/` cases | Accepted |
 | [0024](adr/0024-phase10-numerics.md) | Phase 10 numerics: single-integral kernel, Γ(ω) images, segment-length target, threaded sweep (`numerics` block) | Accepted |
+| [0025](adr/0025-lightning-channel-and-two-node-sources.md) | Lightning channel element (`"type": "channel"`), two-node sources (`returnNode`, transient `quantity`) and speed calibration | Accepted |
 
 Language-specific build documentation stays with each implementation
 (e.g. [../fortran/README.md](../fortran/README.md),

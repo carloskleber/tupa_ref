@@ -22,6 +22,7 @@ BENCHMARKS.md's anchor table.
 | [poljak-fig4.md](poljak-fig4.md) | Poljak & Doric 2006 (PIER, references.md [35]), Fig. 4 | Harmonic input impedance \|Z(ω)\| of a single L = 2 m, a = 5 mm vertical grounding electrode, d = 0.5 m, ρ = 5400 Ω·m, DC-100 MHz | Closest agreement of any comparison in this folder — DC plateau, roll-off and all four antenna-resonance lobes reproduced within ±10% almost everywhere (several points within ±3%); the two largest errors (up to −23%) sit at the steepest null crossings, a reading artifact rather than a modeling gap — see writeup for the full table and the digitization fix (original xlsx frequency column was 10x too low) |
 | [phase9-transient-options.md](phase9-transient-options.md) | Internal consistency (no published curve): each ROADMAP Phase 9 transient option against a slower or longer run of the existing pipeline | Scan-fed vs per-bin transient on the `silva2025_*_transient` cases; NLT vs FFT against a 16× longer record | Scan-fed within 1.7e-5 (driving point) / 2.7e-5 (remote node) of peak at 12–15× less run time; NLT 6–10× closer to the wrap-around-free reference over the first half of a short record, degrading towards the record end as e^{ct} — see writeup for the caveats |
 | [phase10-image-model.md](phase10-image-model.md) | Internal comparison (ROADMAP Phase 10 item 2): every published-curve case above run with ideal images vs the new `Γ(ω)` default | Mean absolute percentage error and worst point, below 1 MHz and over the band, for the 14 digitized cases | Every MAPE moves by under 2 points (helps the Lima Fig. 7 grids and the long resistive Grcev electrode, slightly worse for the Silva `alipio-visacro` curves and Lima Fig. 6); no qualitative conclusion changes — see writeup |
+| [channel-validation.md](channel-validation.md) | Analytic and published (ROADMAP Phase 10b): unloaded channel against Chen's closed-form current; loaded-wire speed against Table 3 of Baba & Rakov; base impedance against the transmission-line estimate; calibrated loading scale | Worst current error over the post-front window as a fraction of the peak; speed per L′; κ table | Chen within 1.5 % of the peak (peaks within 2.5 %); speeds within 0.03c of the FDTD values; κ 0.82–1.05 on thin channels, thick coarse ones refused; the Ishii case is open — see writeup |
 | [tags-xval.md](tags-xval.md) | TAGS (pedrohnv, `benchmarks/tags`), mHEM kernels, homogeneous linear soil | Driving-point impedance over the sweep: conductor, rod, loop, two Grcev electrodes, tower footing | ≤ 0.3 % below 1 MHz on all six; two convention differences found (TAGS' `|cos θ|`, `Γ_ℓ = 1`) and quantified; the passivity dip near 7–9 MHz is shared — see writeup |
 
 ## Methodology
@@ -35,7 +36,7 @@ computed curve using the versions of the case JSON files under
 [fortran/README.md](../../fortran/README.md#running-tupa)).
 
 All figures can be regenerated using the preserved scripts alongside this
-folder (`phase10_image_model_check.py` regenerates the Phase 10 table,
+folder (`phase10_image_model_check.py` regenerates the Phase 10 table, `channel_checks.py` the lightning-channel tables,
 `../../benchmarks/tags-xval/xval.py` the TAGS comparison) (e.g. [plot_silva2025_fig3.py](plot_silva2025_fig3.py),
 [plot_silva2025_fig4.py](plot_silva2025_fig4.py),
 [plot_grcev_fig12.py](plot_grcev_fig12.py),

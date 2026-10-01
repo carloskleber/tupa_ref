@@ -1,14 +1,16 @@
 //! Geometric elements that discretise into nodes and electrodes
 //! (`mElement`): straight `line`, composite rectangular `mesh` (ADR 0020) and
-//! sagging `catenary` (ADR 0023).
+//! sagging `catenary` (ADR 0023) and the lightning `channel` (ADR 0025).
 
 pub mod catenary;
+pub mod channel;
 pub mod line;
 pub mod mesh;
 
 use crate::error::Result;
 use crate::structure::Structure;
 pub use catenary::Catenary;
+pub use channel::Channel;
 pub use line::Line;
 pub use mesh::MeshElement;
 
@@ -21,6 +23,8 @@ pub enum Element {
     Mesh(MeshElement),
     /// Parabolic sagging span between two nodes
     Catenary(Catenary),
+    /// Loaded lightning channel in air
+    Channel(Channel),
 }
 
 impl Element {
@@ -30,6 +34,7 @@ impl Element {
             Element::Line(l) => &l.id,
             Element::Mesh(m) => &m.id,
             Element::Catenary(c) => &c.line.id,
+            Element::Channel(c) => &c.id,
         }
     }
 
@@ -40,6 +45,7 @@ impl Element {
             Element::Line(l) => l.assemble(structure).map(|_| ()),
             Element::Mesh(m) => m.assemble(structure),
             Element::Catenary(c) => c.assemble(structure),
+            Element::Channel(c) => c.assemble(structure),
         }
     }
 
@@ -50,6 +56,7 @@ impl Element {
             Element::Line(l) => l.report(),
             Element::Mesh(m) => m.report(),
             Element::Catenary(c) => c.report(),
+            Element::Channel(c) => c.report(),
         }
     }
 }

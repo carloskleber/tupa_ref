@@ -1,0 +1,24 @@
+{
+  "title": "ROADMAP Phase 10b: 3 km channel over ideal ground loaded to c/2 (calibrated), graded segments, 10 kA 1 us surge",
+  "soil": { "conductivity": 0.01, "permittivity": 10.0, "permeability": 1.0 },
+  "numerics": { "imageModel": "ideal" },
+  "elements": [
+    { "type": "channel", "id": "ch", "position": [0.0, 0.0, 0.0], "length": 3000.0, "radius": 0.03,
+      "speed": 1.5e8, "resistance": 0.5, "calibrate": true,
+      "firstSegment": 5.0, "growth": 1.15, "maxSegment": 20.0 }
+  ],
+  "signal": {
+    "waveform": "portela",
+    "imax": 1.0e4,
+    "alpha": 0.0,
+    "tFront": 1.0e-6,
+    "tTopEnd": 5.0e-6,
+    "tTailEnd": 5.0e-5,
+    "sourceNode": "ch-base",
+    "observeNodes": ["ch-base"],
+    "observeElectrodes": ["ch_e1", "ch_e30", "ch_e60", "ch_e90"],
+    "nyquistHz": 5.0e6,
+    "fftPoints": 512,
+    "transform": "nlt"
+  }
+}

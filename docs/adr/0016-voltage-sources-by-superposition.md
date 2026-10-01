@@ -2,6 +2,7 @@
 
 - **Status**: Accepted
 - **Date**: 2026-07-17
+- **Amended by**: [ADR 0025](0025-lightning-channel-and-two-node-sources.md) (two-node voltage sources (constraint on the node-pair voltage), 2026-10-01)
 
 ## Context
 

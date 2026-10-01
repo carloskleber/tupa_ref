@@ -166,13 +166,27 @@ the `e^{ct}` growth of the error towards the end of the record
 every transient result for a gain the evidence does not show, so
 `signal.transform` stays `"fft"`. Revisit with a TAGS time-domain case.
 
-### 8. Julia follows later
+### 8. Julia follows later — ported 2026-10-01
 
-No Julia toolchain was reachable in the session (egress policy denied
-`julialang.org`), as in Phase 9. The Julia port keeps the pre-Phase-10
-numerics (2-D kernel, ideal images), so its loader refuses a `numerics`
-block and its tests skip the regenerated harmonic fixtures
-(`julia/README.md`).
+The session that implemented Phase 10 had no Julia toolchain (egress policy
+denied `julialang.org`), so the port was left refusing the `numerics` block.
+A later session with Julia 1.13 ported items 1–3 and 6 (`geometry_factor_1d`,
+`image_coefficients`/`gamma_*`, `load_numerics`, the segment target) and
+un-skipped the regenerated fixtures: `portela1997`, `rod`, `grid`,
+`portela1997_ideal` and the harmonic half of `portelaMesh` match at 1e-6
+(worst 2.4e-10); with `kernel: "double"` + `imageModel: "ideal"` the same
+cases sit 3e-4 to 2e-3 away, so the fixtures do discriminate the new
+numerics. Item 4 (the threaded sweep) is not ported; Julia sweeps stay
+serial (`julia/README.md`).
+
+**Finding on item 3 (mesh), shared by Fortran, Rust and Julia.** The count
+for a `mesh` is sized from `lengthX/rowsX` and `lengthY/rowsY`, but a bar
+spans `rows − 1` intervals of the main-node grid (`length/(rows − 1)`).
+The target is therefore undershot: a 2 × 3 grid of 8 m × 4 m with a 1 m
+target gets 3 segments per bar and 2.67 m electrodes. No fixture sets a
+target on a mesh and `line`/`catenary` are exact, so nothing golden moves;
+the three implementations were left identical and the fix (use the true
+bar lengths; add a mesh case to `test_segmentation.f90`) is open.
 
 ## Consequences
 

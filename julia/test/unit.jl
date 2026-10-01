@@ -1,4 +1,5 @@
-using Tupa: self_geometry_factor, mutual_geometry_factor, geometry_factor_2d, twodq,
+using Tupa: self_geometry_factor, mutual_geometry_factor, geometry_factor_2d, geometry_factor_1d, twodq,
+            Mesh, calc_param_w!, EPSILON0,
             GeometryCache, geom_cache_key, cache_get!, cache_put!, cache_stats, MU0, C0,
             permeability, is_power_of_two, next_power_of_two, fmt_real, wanted
 
@@ -67,6 +68,65 @@ end
     p2 = [(1.0, 0.0, -0.5), (1.0, 1.0, -0.5), (0.0, 1.0, -0.5)]
     m = build_geometry_matrices(p1, p2, fill(0.01, 3), nothing)
     @test m.g == m.g' && m.gi == m.gi'
+end
+
+@testset "single-integral kernel (ADR 0024 §1, test_geometry)" begin
+    unit(p, q) = (d = q .- p; l = sqrt(sum(abs2, d)); (Tuple(d ./ l), l))
+    cases = [
+        ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (2.0, 1.0, 0.0), (2.0, 1.0, 1.0)),    # perpendicular, apart
+        ((0.0, 0.0, 0.0), (3.0, 1.0, 0.5), (1.0, 2.0, -1.0), (2.5, -1.0, 1.5)),  # skew, general position
+        ((0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (2.0, 0.0, 0.0), (2.0, 3.0, 0.0)),    # L junction
+        ((0.0, 0.0, -0.5), (1.0, 0.0, -1.5), (0.0, 0.0, 0.5), (1.0, 0.0, 1.5)),  # buried segment vs its image
+    ]
+    for (a1, a2, b1, b2) in cases
+        va, la = unit(a1, a2)
+        vb, lb = unit(b1, b2)
+        g1 = geometry_factor_1d(a1, va, la, b1, vb, lb, 1e-12)
+        g2 = geometry_factor_2d(a1, va, la, b1, vb, lb, 1e-12)
+        @test abs(g1 - g2) <= 1e-5 * abs(g2)
+    end
+
+    # T junction: b starts at the midpoint of a, perpendicular to it — a quadrature node
+    # lands on the logarithmic end-point singularity. Exact: 2 (asinh 2 + 2 asinh 0.5)
+    g = geometry_factor_1d((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), 2.0, (1.0, 0.0, 0.0), (0.0, 0.0, -1.0), 2.0, 1e-6)
+    exact = 2 * (asinh(2.0) + 2 * asinh(0.5))
+    @test isfinite(g) && abs(g - exact) < 1e-6 * exact
+
+    # the default kernel is the single integral; `kernel = :double` is the 2-D path
+    a1, a2, b1, b2 = cases[2]
+    va, la = unit(a1, a2); vb, lb = unit(b1, b2)
+    gs = mutual_geometry_factor(a1, a2, b1, b2, GeometryOptions(eps_rel = 1e-9), GeometryCache(false))
+    gd = mutual_geometry_factor(a1, a2, b1, b2, GeometryOptions(kernel = :double, eps_rel = 1e-9),
+                                GeometryCache(false))
+    @test gs == geometry_factor_1d(a1, va, la, b1, vb, lb, 1e-9)
+    @test gd == geometry_factor_2d(a1, va, la, b1, vb, lb, 1e-9)
+    @test abs(gs - gd) <= 1e-7 * gd
+end
+
+@testset "image reflection coefficients (ADR 0024 §2, test_mesh)" begin
+    m = Mesh(2, [1], [2])
+    @test m.image_model === :frequency_dependent
+    omega = 2π * 1e6
+    w_air, w_soil = complex(0.0, omega * EPSILON0), complex(0.01, omega * 10 * EPSILON0)
+    calc_param_w!(m, omega, MU0, w_air, MU0, w_soil)
+    g_soil = (w_soil - w_air) / (w_soil + w_air)
+    @test abs(m.medium.gamma_soil - g_soil) < 1e-14 && abs(m.medium.gamma_air + g_soil) < 1e-14
+    @test abs(m.medium.gamma_soil) < 1 && imag(m.medium.gamma_soil) != 0
+
+    # low-frequency limit: the ideal table
+    w = 2π * 10.0
+    calc_param_w!(m, w, MU0, complex(0.0, w * EPSILON0), MU0, complex(0.01, w * 10 * EPSILON0))
+    @test abs(m.medium.gamma_soil - 1) < 1e-6 && abs(m.medium.gamma_air + 1) < 1e-6
+
+    # Poljak–Doric soil at 100 MHz: |Γ| → (εr − 1)/(εr + 1)
+    w = 2π * 1e8
+    calc_param_w!(m, w, MU0, complex(0.0, w * EPSILON0), MU0, complex(1 / 5400, w * 10 * EPSILON0))
+    @test abs(abs(m.medium.gamma_soil) - 9 / 11) < 5e-3
+
+    # the ideal model pins ±1 at any frequency
+    m.image_model = :ideal
+    calc_param_w!(m, omega, MU0, w_air, MU0, w_soil)
+    @test m.medium.gamma_soil == 1 && m.medium.gamma_air == -1
 end
 
 @testset "geometry cache" begin
@@ -214,4 +274,79 @@ with_signal(extra) = replace(CASE, "\"outputs\"" => "\"signal\": { \"waveform\":
     @test isempty(t.observe_electrodes)
     @test load_study_string(with_signal(", \"antialiasStart\": 0.85")).transient.antialias_start == 0.85
     @test_throws TupaError load_study_string(with_signal(", \"antialiasStart\": 1.5"))
+end
+
+const NUMERICS_CASE = replace(CASE, "\"nodes\"" => "\"numerics\": { NUM }, \"nodes\"")
+with_numerics(num; segments = "\"segments\": 4,") = replace(
+    replace(NUMERICS_CASE, "NUM" => num), "\"segments\": 4," => segments)
+
+@testset "numerics block (ADR 0024 §3, §5)" begin
+    c = load_study_string(CASE)
+    @test c.study.kernel === nothing && c.study.image_model === nothing && c.study.max_segment_length == 0.0
+    c = load_study_string(with_numerics("\"kernel\": \"double\", \"imageModel\": \"ideal\", \"maxSegmentLength\": 2.5"))
+    @test c.study.kernel === :double && c.study.image_model === :ideal && c.study.max_segment_length == 2.5
+    c = load_study_string(with_numerics("\"imageModel\": \"frequency-dependent\", \"kernel\": \"single\""))
+    @test c.study.kernel === :single && c.study.image_model === :frequency_dependent
+    @test load_study_string(with_numerics("")).study.kernel === nothing
+    for bad in ("\"kernel\": \"triple\"", "\"imageModel\": \"perfect\"", "\"maxSegmentLength\": 0",
+                "\"maxSegmentLength\": -1", "\"kernel\": 2")
+        @test_throws TupaError load_study_string(with_numerics(bad))
+    end
+
+    # segment-length target: ceil(length/target) segments, never coarsening an explicit count
+    nseg(text) = length(validate_study_references!(load_study_string(text)).study.structure.electrodes)
+    @test nseg(with_numerics("\"maxSegmentLength\": 2.5")) == 4          # 10 m / 2.5 m = 4 = explicit
+    @test nseg(with_numerics("\"maxSegmentLength\": 1")) == 10           # refines
+    @test nseg(with_numerics("\"maxSegmentLength\": 100")) == 4          # keeps the stated count
+    @test nseg(with_numerics("\"maxSegmentLength\": 3", segments = "")) == 4   # segments is optional
+    @test nseg(with_numerics("\"maxSegmentLength\": 3.3", segments = "")) == 4 # ceil(10/3.3)
+    @test nseg(with_numerics("\"maxSegmentLength\": 2.5", segments = "\"segments\": 1,")) == 4
+    @test nseg(replace(CASE, "\"segments\": 4," => "")) == 1                  # no target, no count: 1
+
+    # catenary: parabolic arc c + 8s²/(3c)
+    cat_text(num) = replace(NUMERICS_CASE, "NUM" => num, "\"type\": \"line\"" => "\"type\": \"catenary\", \"sag\": 3.0",
+                            "\"segments\": 4," => "")
+    arc = 10.0 + 8 * 9.0 / 30.0
+    @test nseg(cat_text("\"maxSegmentLength\": 1")) == ceil(Int, arc)
+    # mesh: one count serves every bar, the longest bar sets it
+    mesh_text(num) = replace(NUMERICS_CASE, "NUM" => num,
+        r"\"elements\": \[.*?\],\s*\"sources\""s => "\"elements\": [ { \"type\": \"mesh\", \"id\": \"m\", " *
+        "\"position\": [0, 0, -0.5], \"lengthX\": 8, \"lengthY\": 4, \"rowsX\": 3, \"rowsY\": 2, " *
+        "\"radius\": 0.007, \"material\": \"cu\" } ], \"sources\"")
+    st1 = validate_study_references!(load_study_string(mesh_text("\"maxSegmentLength\": 100"))).study.structure
+    st2 = validate_study_references!(load_study_string(mesh_text("\"maxSegmentLength\": 1"))).study.structure
+    # the target refines the mesh (7 bars × 1 segment without it). Its bar length is taken as
+    # extent/rows exactly as Fortran and Rust do, which undershoots the true extent/(rows−1)
+    # — see julia/README.md — so only the direction is pinned here
+    @test length(st1.electrodes) == 7 && length(st2.electrodes) > length(st1.electrodes)
+end
+
+@testset "numerics selection reaches the solver (ADR 0024 §5)" begin
+    corner = replace(CASE, "\"nodes\": [ { \"id\": \"A\", \"position\": [0,0,-0.5] }, { \"id\": \"B\", \"position\": [10,0,-0.5] } ]" =>
+        "\"nodes\": [ { \"id\": \"A\", \"position\": [0,0,-0.5] }, { \"id\": \"B\", \"position\": [10,0,-0.5] }, " *
+        "{ \"id\": \"C\", \"position\": [10,6,-0.5] } ]",
+        "\"segments\": 4, \"material\": \"cu\" } ]" => "\"segments\": 4, \"material\": \"cu\" }, " *
+        "{ \"type\": \"line\", \"id\": \"M\", \"from\": \"B\", \"to\": \"C\", \"radius\": 0.007, " *
+        "\"segments\": 3, \"material\": \"cu\" } ]")
+    function zin(; kernel = nothing, image = nothing, default_image = :frequency_dependent)
+        c = validate_study_references!(load_study_string(corner))
+        c.study.kernel = kernel
+        c.study.image_model = image
+        c.study.default_image_model = default_image
+        run_sweep!(c.study, [1e6], c.sources)
+        return input_impedance(c.study, "A")[1], c.study
+    end
+    z_single, st = zin()
+    z_double, st_d = zin(kernel = :double)
+    z_ideal, _ = zin(image = :ideal)
+    @test st.prepared.mesh.image_model === :frequency_dependent
+    # the kernels agree at the 1e-7 level but are different code paths ...
+    @test z_single != z_double && abs(z_single - z_double) < 1e-6 * abs(z_double)
+    @test st.prepared.geom.g != st_d.prepared.geom.g
+    # ... and ideal images change the MHz-end result at the 1e-3 level (ADR 0024 §2)
+    @test 1e-6 < abs(z_single - z_ideal) / abs(z_ideal) < 1e-1
+    # the study's own choice wins over the process default
+    z_default_ideal, st_i = zin(default_image = :ideal)
+    @test z_default_ideal == z_ideal && st_i.prepared.mesh.image_model === :ideal
+    @test zin(image = :frequency_dependent, default_image = :ideal)[1] == z_single
 end

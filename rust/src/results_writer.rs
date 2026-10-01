@@ -2,6 +2,7 @@
 //! Numbers use the Fortran `ES16.8` layout (`3.08173006E+01`) so files are
 //! byte-comparable with the reference implementation.
 
+use crate::element::Element;
 use crate::error::{Result, TupaError};
 use crate::study::Study;
 use crate::transient::TransientResult;
@@ -124,6 +125,56 @@ fn join_complex(results: &crate::result::ResultSet, i: usize, nf: usize) -> Stri
         .join(", ")
 }
 
+/// The optional `"channels"` block (ADR 0025): one entry per lightning-channel
+/// element with the loading the solver used — the per-segment series
+/// inductance and resistance, and the calibration outcome — so a run records
+/// its calibrated value. Empty when the study has no (assembled) channel,
+/// leaving other files unchanged.
+pub fn channels_json(study: &Study) -> String {
+    let mut entries = Vec::new();
+    for el in &study.structure.elements {
+        let Element::Channel(ch) = el else { continue };
+        let loads: Vec<_> = (1..=ch.n_segments())
+            .filter_map(|k| {
+                study
+                    .structure
+                    .find_electrode_index(&format!("{}_e{}", ch.id, k))
+                    .and_then(|i| study.structure.electrodes[i].loading)
+            })
+            .collect();
+        if loads.len() != ch.n_segments() {
+            continue;
+        }
+        let mut e = format!(
+            "    {{ \"id\": \"{}\", \"calibrated\": ",
+            json_escape(&ch.id)
+        );
+        if ch.calibrated {
+            let _ = write!(
+                e,
+                "true, \"scale\": {}, \"measuredSpeed\": {}",
+                fmt_real(ch.load_scale),
+                fmt_real(ch.calibrated_speed)
+            );
+        } else {
+            e.push_str("false");
+        }
+        let ind: Vec<f64> = loads.iter().map(|l| l.inductance).collect();
+        let res: Vec<f64> = loads.iter().map(|l| l.resistance).collect();
+        let _ = write!(
+            e,
+            ", \"inductance\": [{}], \"resistance\": [{}] }}",
+            join_real(&ind),
+            join_real(&res)
+        );
+        entries.push(e);
+    }
+    if entries.is_empty() {
+        return String::new();
+    }
+    format!("  \"channels\": [\n{}\n  ],\n", entries.join(",\n"))
+}
+
 /// Sweep results as JSON (ADR 0012 shape, `outputs` filtering per ADR 0013).
 pub fn results_json(
     study: &Study,
@@ -138,6 +189,7 @@ pub fn results_json(
     let mut out = String::new();
     out.push_str("{\n");
     let _ = writeln!(out, "  \"title\": \"{}\",", json_escape(&study.title));
+    out.push_str(&channels_json(study));
     let freqs: Vec<String> = study.sweep_freq_hz.iter().map(|&f| fmt_real(f)).collect();
     let _ = writeln!(out, "  \"frequencies\": [{}],", freqs.join(", "));
 
@@ -267,16 +319,21 @@ fn join_real(v: &[f64]) -> String {
 /// Transient results as JSON (ADR 0015). `sourceNode`/`injectedCurrent` are
 /// the first source; `sources` lists every source when there is more than one
 /// (ADR 0015 amendment 2026-09-30).
+///
+/// `channels` is the pre-rendered optional block of [`channels_json`] (empty
+/// for none).
 pub fn transient_json(
     title: &str,
     source_nodes: &[String],
     observe_nodes: &[String],
     observe_electrodes: &[String],
     r: &TransientResult,
+    channels: &str,
 ) -> String {
     let mut out = String::new();
     out.push_str("{\n");
     let _ = writeln!(out, "  \"title\": \"{}\",", json_escape(title));
+    out.push_str(channels);
     let _ = writeln!(
         out,
         "  \"sourceNode\": \"{}\",",

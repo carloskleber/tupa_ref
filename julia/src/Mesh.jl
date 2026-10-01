@@ -8,7 +8,16 @@ const AIR = 1
 "Medium code of the soil half-space."
 const SOIL = 2
 
-"Medium constants at one frequency (theory.md §5: `c_E`, `c_M`, `γ`)."
+"""
+Image reflection model (ROADMAP Phase 10 item 2, ADR 0024, theory.md §5):
+`:frequency_dependent`, `Γ(ω) = (W_own − W_other)/(W_own + W_other)`, the
+quasi-static Fresnel form of the original Matlab default mode (the default),
+or `:ideal`, `Γ = +1` in soil and `−1` in air — the `|W_own| ≫ |W_other|`
+limit (Matlab `SOLO_IDEAL`) and the pre-Phase-10 behaviour.
+"""
+const IMAGE_MODELS = (:frequency_dependent, :ideal)
+
+"Medium constants at one frequency (theory.md §5: `c_E`, `c_M`, `γ`, image `Γ`)."
 struct MediumConstants
     "`1/(4π W_air)`"
     c_e_air::ComplexF64
@@ -22,8 +31,12 @@ struct MediumConstants
     prop_air::ComplexF64
     "Soil propagation constant"
     prop_soil::ComplexF64
+    "Reflection coefficient of the image of a segment in air (ideal: −1)"
+    gamma_air::ComplexF64
+    "Reflection coefficient of the image of a segment in soil (ideal: +1)"
+    gamma_soil::ComplexF64
 end
-MediumConstants() = MediumConstants(0im, 0im, 0im, 0im, 0im, 0im)
+MediumConstants() = MediumConstants(0im, 0im, 0im, 0im, 0im, 0im, -1.0 + 0im, 1.0 + 0im)
 
 "Solution of one injection pattern: node voltages and electrode end currents."
 struct Solution
@@ -55,12 +68,14 @@ mutable struct Mesh
     zlong::Matrix{ComplexF64}
     "Medium constants at the current frequency"
     medium::MediumConstants
+    "Image reflection model, one of `IMAGE_MODELS`"
+    image_model::Symbol
 end
 
 "Allocate for `nn` nodes and the segments `n1[i] → n2[i]`."
 Mesh(nn::Int, n1::Vector{Int}, n2::Vector{Int}) =
     Mesh(nn, length(n1), n1, n2, zeros(ComplexF64, length(n1), length(n1)),
-         zeros(ComplexF64, length(n1), length(n1)), MediumConstants())
+         zeros(ComplexF64, length(n1), length(n1)), MediumConstants(), :frequency_dependent)
 
 """
 Topology matrices `(A, B, C, D)` (theory.md §6): `A` (nseg × nno) −1 at n1,
@@ -85,17 +100,31 @@ end
 function calc_param_w!(m::Mesh, omega::Float64, mu_air::Float64, w_air::ComplexF64,
                        mu_soil::Float64, w_soil::ComplexF64)
     jw = complex(0.0, omega)
-    m.medium = MediumConstants(1.0 / (FOUR_PI * w_air), 1.0 / (FOUR_PI * w_soil),
+    c_e_air, c_e_soil = 1.0 / (FOUR_PI * w_air), 1.0 / (FOUR_PI * w_soil)
+    gamma_air, gamma_soil = image_coefficients(m.image_model, c_e_air, c_e_soil)
+    m.medium = MediumConstants(c_e_air, c_e_soil,
                                complex(0.0, omega * mu_air / FOUR_PI),
                                complex(0.0, omega * mu_soil / FOUR_PI),
-                               sqrt(jw * mu_air * w_air), sqrt(jw * mu_soil * w_soil))
+                               sqrt(jw * mu_air * w_air), sqrt(jw * mu_soil * w_soil),
+                               gamma_air, gamma_soil)
     return m
 end
 
-# (γ, c_E, c_M, image sign): image sign "−" in air, "+" in soil
+"""
+Image reflection coefficients `(Γ_air, Γ_soil)` of `model` (`calcImageCoefficients`).
+With `cE = 1/(4πW)`: `Γ_own = (W_own − W_other)/(W_own + W_other) =
+(cE_other − cE_own)/(cE_other + cE_own)`; applied to the image parcels of both
+`Z_t` and `Z_ℓ`, as the original Matlab does.
+"""
+function image_coefficients(model::Symbol, c_e_air::ComplexF64, c_e_soil::ComplexF64)
+    model === :ideal && return (-1.0 + 0im, 1.0 + 0im)
+    return ((c_e_soil - c_e_air) / (c_e_soil + c_e_air), (c_e_air - c_e_soil) / (c_e_air + c_e_soil))
+end
+
+# (γ, c_E, c_M, image factor Γ): ideal limit "−1" in air, "+1" in soil
 medium_for(m::Mesh, pos::Integer) = pos == AIR ?
-    (m.medium.prop_air, m.medium.c_e_air, m.medium.c_m_air, -1.0) :
-    (m.medium.prop_soil, m.medium.c_e_soil, m.medium.c_m_soil, 1.0)
+    (m.medium.prop_air, m.medium.c_e_air, m.medium.c_m_air, m.medium.gamma_air) :
+    (m.medium.prop_soil, m.medium.c_e_soil, m.medium.c_m_soil, m.medium.gamma_soil)
 
 """
 Self impedance of segment `i` with its own image (theory.md §4.3, §5,

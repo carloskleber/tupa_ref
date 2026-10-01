@@ -38,6 +38,23 @@ pub struct Source {
     pub value: Complex64,
     /// Ideal voltage source (ADR 0016) instead of a current injection
     pub is_voltage: bool,
+    /// Return node of a two-node source (ADR 0025): a current source pushes
+    /// `+I` into `node` and `−I` into it, a voltage source fixes
+    /// `u(node) − u(return_node)`. `None`: the source acts against remote
+    /// earth.
+    pub return_node: Option<String>,
+}
+
+impl Source {
+    /// A single-node source.
+    pub fn new(node: impl Into<String>, value: Complex64, is_voltage: bool) -> Self {
+        Self {
+            node: node.into(),
+            value,
+            is_voltage,
+            return_node: None,
+        }
+    }
 }
 
 /// One study: structure, numerical options, optional preparation and sweep
@@ -73,6 +90,8 @@ pub struct Study {
     pub sweep_freq_hz: Vec<f64>,
     /// Last sweep source node ids
     pub sweep_source_ids: Vec<String>,
+    /// Last sweep return node ids (`None` = no return node)
+    pub sweep_return_ids: Vec<Option<String>>,
     /// Effective source currents per source and frequency
     pub sweep_source_currents_freq: Vec<Vec<Complex64>>,
 }
@@ -107,6 +126,7 @@ impl Study {
             trans_current_results: ResultSet::default(),
             sweep_freq_hz: Vec::new(),
             sweep_source_ids: Vec::new(),
+            sweep_return_ids: Vec::new(),
             sweep_source_currents_freq: Vec::new(),
         }
     }
@@ -177,6 +197,10 @@ impl Study {
         length: f64,
         omega: f64,
     ) -> Complex64 {
+        if let Some(l) = e.loading {
+            // lightning-channel loading (theory.md §4.5): (R' + jωL')·l
+            return Complex64::new(l.resistance, omega * l.inductance) * length;
+        }
         internal_impedance(radius, length, omega, e.material.sigma, e.material.mur)
     }
 
@@ -211,13 +235,17 @@ impl Study {
                 if i == j {
                     let zint = if laplace {
                         let e = &self.structure.electrodes[i];
-                        internal_impedance_laplace(
-                            prep.radius[i],
-                            prep.length[i],
-                            s,
-                            e.material.sigma,
-                            e.material.mur,
-                        )
+                        if let Some(l) = e.loading {
+                            (Complex64::new(l.resistance, 0.0) + s * l.inductance) * prep.length[i]
+                        } else {
+                            internal_impedance_laplace(
+                                prep.radius[i],
+                                prep.length[i],
+                                s,
+                                e.material.sigma,
+                                e.material.mur,
+                            )
+                        }
                     } else {
                         Self::segment_internal_impedance(
                             &self.structure.electrodes[i],
@@ -276,21 +304,22 @@ impl Study {
         self.prepare()?;
         self.fill(omega, damping)?;
 
-        let mut pos = Vec::with_capacity(sources.len());
-        for s in sources {
-            let idx = self.structure.find_node_index(&s.node).ok_or_else(|| {
-                TupaError::new(format!("tStudy%run: source node '{}' not found", s.node))
-            })?;
-            pos.push(idx);
-        }
+        let (pos, ret) = self.resolve_sources("run", sources)?;
+        let (nodes, patterns) = injection_patterns(&pos, &ret);
         let mesh = &self.prepared.as_ref().expect("prepared").mesh;
 
         if sources.iter().any(|s| s.is_voltage) {
-            return solve_with_voltage_sources(mesh, &pos, sources);
+            return solve_with_voltage_sources(mesh, &nodes, &patterns, &pos, &ret, sources);
         }
         let currents: Vec<Complex64> = sources.iter().map(|s| s.value).collect();
+        let mut injected = vec![ZERO; nodes.len()];
+        for (k, pattern) in patterns.iter().enumerate() {
+            for (u, p) in pattern.iter().enumerate() {
+                injected[u] += *p * currents[k];
+            }
+        }
         let sol = mesh
-            .inject_signal(&pos, &currents)
+            .inject_signal(&nodes, &injected)
             .map_err(|e| TupaError::new(format!("tStudy%run: injectSignal failed ({e})")))?;
         Ok(RunOutput {
             voltage: sol.voltage,
@@ -298,6 +327,39 @@ impl Study {
             current2: sol.current2,
             source_currents: currents,
         })
+    }
+
+    /// Node indices of the sources and of their return nodes.
+    fn resolve_sources(
+        &self,
+        who: &str,
+        sources: &[Source],
+    ) -> Result<(Vec<usize>, Vec<Option<usize>>)> {
+        let mut pos = Vec::with_capacity(sources.len());
+        let mut ret = Vec::with_capacity(sources.len());
+        for s in sources {
+            let idx = self.structure.find_node_index(&s.node).ok_or_else(|| {
+                TupaError::new(format!("tStudy%{who}: source node '{}' not found", s.node))
+            })?;
+            let r = match s.return_node.as_deref() {
+                None | Some("") => None,
+                Some(id) => {
+                    let r = self.structure.find_node_index(id).ok_or_else(|| {
+                        TupaError::new(format!("tStudy%{who}: return node '{id}' not found"))
+                    })?;
+                    if r == idx {
+                        return Err(TupaError::new(format!(
+                            "tStudy%{who}: source node '{}' and its return node are the same node",
+                            s.node
+                        )));
+                    }
+                    Some(r)
+                }
+            };
+            pos.push(idx);
+            ret.push(r);
+        }
+        Ok((pos, ret))
     }
 
     /// Sweep over `freq_hz`, storing all node voltages and electrode currents.
@@ -352,6 +414,10 @@ impl Study {
         self.trans_current_results = i2;
         self.sweep_freq_hz = freq_hz.to_vec();
         self.sweep_source_ids = sources.iter().map(|s| s.node.clone()).collect();
+        self.sweep_return_ids = sources
+            .iter()
+            .map(|s| s.return_node.clone().filter(|r| !r.is_empty()))
+            .collect();
         self.sweep_source_currents_freq = src_freq;
         Ok(())
     }
@@ -371,10 +437,19 @@ impl Study {
         let i_node = self.structure.find_node_index(node_id).ok_or_else(|| {
             TupaError::new(format!("tStudy%inputImpedance: node '{node_id}' not found"))
         })?;
+        // A two-node source (ADR 0025): the impedance between its terminals
+        let i_ret = match self.sweep_return_ids.get(i_src).and_then(|r| r.as_deref()) {
+            Some(id) => self.structure.find_node_index(id),
+            None => None,
+        };
         let nf = self.voltage_results.frequency_count();
         Ok((0..nf)
             .map(|k| {
-                self.voltage_results.get(i_node, k) / self.sweep_source_currents_freq[i_src][k]
+                let mut v = self.voltage_results.get(i_node, k);
+                if let Some(r) = i_ret {
+                    v -= self.voltage_results.get(r, k);
+                }
+                v / self.sweep_source_currents_freq[i_src][k]
             })
             .collect())
     }
@@ -474,25 +549,54 @@ fn format_engineering(f: f64) -> String {
     format!("{f:.3e}")
 }
 
-/// Ideal voltage sources by unit-injection superposition (ADR 0016).
-fn solve_with_voltage_sources(mesh: &Mesh, pos: &[usize], sources: &[Source]) -> Result<RunOutput> {
-    let ns = pos.len();
-    let unit: Vec<Vec<Complex64>> = (0..ns)
+/// Right-hand-side patterns of the sources (ADR 0025): the distinct nodes a
+/// source touches, and per source its unit injection over them — `+1` at its
+/// node, `−1` at its return node.
+fn injection_patterns(pos: &[usize], ret: &[Option<usize>]) -> (Vec<usize>, Vec<Vec<Complex64>>) {
+    let mut nodes: Vec<usize> = Vec::new();
+    for (k, &p) in pos.iter().enumerate() {
+        for n in std::iter::once(p).chain(ret[k]) {
+            if !nodes.contains(&n) {
+                nodes.push(n);
+            }
+        }
+    }
+    let patterns = (0..pos.len())
         .map(|k| {
-            (0..ns)
-                .map(|j| {
-                    if j == k {
-                        Complex64::new(1.0, 0.0)
-                    } else {
-                        ZERO
-                    }
-                })
-                .collect()
+            let mut v = vec![ZERO; nodes.len()];
+            v[nodes.iter().position(|&n| n == pos[k]).expect("node")] = Complex64::new(1.0, 0.0);
+            if let Some(r) = ret[k] {
+                v[nodes.iter().position(|&n| n == r).expect("node")] = Complex64::new(-1.0, 0.0);
+            }
+            v
         })
         .collect();
+    (nodes, patterns)
+}
+
+/// Ideal voltage sources by unit-injection superposition (ADR 0016); a
+/// two-node source uses the ±1 dipole as its unit pattern and constrains
+/// `u(node) − u(return)` (ADR 0025).
+fn solve_with_voltage_sources(
+    mesh: &Mesh,
+    nodes: &[usize],
+    patterns: &[Vec<Complex64>],
+    pos: &[usize],
+    ret: &[Option<usize>],
+    sources: &[Source],
+) -> Result<RunOutput> {
+    let ns = pos.len();
     let units = mesh
-        .inject_signals(pos, &unit)
+        .inject_signals(nodes, patterns)
         .map_err(|e| TupaError::new(format!("tStudy%run: unit-injection solve failed ({e})")))?;
+    // Voltage across source j's terminals for unit pattern k
+    let gap = |j: usize, k: usize| -> Complex64 {
+        let mut v = units[k].voltage[pos[j]];
+        if let Some(r) = ret[j] {
+            v -= units[k].voltage[r];
+        }
+        v
+    };
 
     let v_idx: Vec<usize> = (0..ns).filter(|&k| sources[k].is_voltage).collect();
     let nv = v_idx.len();
@@ -500,12 +604,12 @@ fn solve_with_voltage_sources(mesh: &Mesh, pos: &[usize], sources: &[Source]) ->
     let mut rhs = CMatrix::zeros(nv, 1);
     for j in 0..nv {
         for l in 0..nv {
-            a.set(j, l, units[v_idx[l]].voltage[pos[v_idx[j]]]);
+            a.set(j, l, gap(v_idx[j], v_idx[l]));
         }
         let mut r = sources[v_idx[j]].value;
-        for k in 0..ns {
-            if !sources[k].is_voltage {
-                r -= sources[k].value * units[k].voltage[pos[v_idx[j]]];
+        for (k, src) in sources.iter().enumerate() {
+            if !src.is_voltage {
+                r -= src.value * gap(v_idx[j], k);
             }
         }
         rhs.set(j, 0, r);

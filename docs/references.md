@@ -321,7 +321,7 @@ below) as the sources of its dispersive-soil routines:
     channel-current distributions against FDTD. The primary design reference
     for the planned lightning-channel element: distributed series loading is
     the catalogued technique for slowing channel propagation from c to a
-    prescribed return-stroke speed (ROADMAP Phase 14 item 2).
+    prescribed return-stroke speed (ROADMAP Phase 10b).
 45. **Silveira, F. H.** — *Modelagem para Cálculo de Tensões Induzidas por
     Descargas Atmosféricas*, D.Sc. thesis, PPGEE/UFMG, Belo Horizonte, 2006
     (in Portuguese). Book-length HEM application to lightning-*induced*
@@ -662,6 +662,25 @@ below) as the sources of its dispersive-soil routines:
     coaxial solution, then applied to pipe-type cables with magnetic pipes
     and to stranded conductors in the power-line-carrier range. This is the
     numerical route where analytic formulas [40,43] need axial symmetry.
+
+## Lightning return-stroke channel models
+
+74. **Cooray, V. (ed.)** — *Lightning Electromagnetics*, IET Power and
+    Energy Series 62, IET, London, 2012. ISBN 978-1-84919-215-6.
+    DOI: 10.1049/PBPO062E (chapters 10.1049/pbpo062e_ch1–_ch25). The design
+    reference for theory.md §4.5. Three chapters matter here.
+    Ch. 8 (Baba & Rakov) is the book-length update of [44]. It classifies
+    channels into six representations, gives the TEM speed and impedance
+    estimates for loaded wires, and compares current- against
+    voltage-source excitation. It also checks time-domain MoM, NEC-2 and
+    FDTD against Chen's analytic solution for a vertical wire.
+    Ch. 9 (Moini & Sadeghi) covers antenna models: closed-form
+    height-dependent inductive loading, the antenna-mode and TL-mode split
+    of the loaded-channel current, and modified-image reflection and
+    transmission factors for a lossy ground.
+    Ch. 10 (De Conti, Silveira & Visacro) covers transmission-line channel
+    models: logarithmic $L(z)$ and $C(z)$, corona and nonlinear resistance.
+    Read with care: the extraction turns some μs into ms and some Ω into W.
 
 ## Related open-source implementations
 

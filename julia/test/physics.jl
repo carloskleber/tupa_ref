@@ -172,17 +172,17 @@ end
         end
         @test err isa TupaError && occursin("ROADMAP Phase 9", err.msg)
     end
-    for f in filter(f -> replace(f, ".json" => "") in PHASE10_LAG_CASES, cases)
-        # Phase 10 cases: the loader must refuse the `numerics` block explicitly (lag)
+    for f in filter(f -> replace(f, ".json" => "") in PHASE10B_LAG_CASES, cases)
+        # Phase 10b cases (lightning channel): refused explicitly (lag)
         err = try
             load_study(joinpath(COMMON, f)); nothing
         catch e
             e
         end
-        @test err isa TupaError && occursin("ROADMAP Phase 10", err.msg)
+        @test err isa TupaError && occursin("ROADMAP Phase 10b", err.msg)
     end
     for f in filter(f -> !(replace(f, ".json" => "") in PHASE9_LAG) &&
-                         !(replace(f, ".json" => "") in PHASE10_LAG_CASES), cases)
+                         !(replace(f, ".json" => "") in PHASE10B_LAG_CASES), cases)
         c = validate_study_references!(load_study(joinpath(COMMON, f)))
         @test !isempty(c.study.structure.electrodes)
     end

@@ -53,11 +53,13 @@ anchors of [docs/theory.md](docs/theory.md) §9 within stated tolerances —
 DC grounding resistance (Sunde), the Portela 1997 harmonic-impedance case,
 internal-consistency checks, and cross-code agreement with the open-source
 TAGS/PRTL-mHEM solvers. Current status: the end-to-end frequency-sweep and
-time-domain pipeline are wired and green (ROADMAP Phases 0–7, 9 and 10 —
+time-domain pipeline are wired and green (ROADMAP Phases 0–7, 9, 10 and 10b —
 Phase 9 adds scan-fed transients, windows, multiple injections and the
 Numerical Laplace Transform; Phase 10 makes the single-integral mHEM kernel
 and frequency-dependent image coefficients the defaults, threads the
-frequency sweep and adds a segment-length target; Phase 8, the Rust port,
+frequency sweep and adds a segment-length target; Phase 10b adds the
+lightning-channel element (speed-calibrated series loading) and two-node
+current/voltage sources, validated against Chen's analytic current; Phase 8, the Rust port,
 implemented — every golden fixture matched at 1e-6); six comparisons against
 published papers' own figures — Silva et
 al. 2025, Grcev et al. 2018, Lima et al. 2020 and Poljak & Doric 2006 —
@@ -186,3 +188,26 @@ written "TUPA".
 ## License
 
 GPLv3 — see [LICENSE](LICENSE).
+
+## Implementations compared
+
+Fortran is the reference implementation; Rust follows it to the 1e-6
+conformance rule on every golden fixture; Julia is a lag-guarded third port
+(it refuses the schema features it does not implement rather than ignoring
+them). State as of 2026-10-01 (Phase 10b, Fortran package 0.7.0).
+
+| Feature | Fortran (`fortran/`) | Rust (`rust/`) | Julia (`julia/`) |
+| --- | --- | --- | --- |
+| Harmonic sweep, current and voltage sources (ADR 0016) | ✔ | ✔ | ✔ |
+| Elements: line, `mesh` grid (ADR 0020), `catenary` (ADR 0023) | ✔ | ✔ | ✔ |
+| Transient by FFT, Heidler / double-exponential / Portela waveforms | ✔ | ✔ | ✔ |
+| Phase 9 transients: scan-fed transfer function, windows, multiple injections, Numerical Laplace Transform | ✔ | ✔ | lag |
+| Phase 10 numerics: single-integral kernel, Γ(ω) images, `numerics` block, segment-length target | ✔ | ✔ | ✔ |
+| Threaded frequency sweep (OpenMP, Phase 10 item 4) | ✔ | serial | serial |
+| Lightning `channel` element, speed calibration (Phase 10b, ADR 0025) | ✔ | ✔ | lag (refuses the element) |
+| Two-node sources: `returnNode` current dipole, delta-gap voltage, `quantity` (ADR 0025) | ✔ | ✔ | lag (refuses the fields) |
+| `channels` block in the results JSON | ✔ | ✔ | — |
+| Golden fixtures in `common/` met at 1e-6 | all | all | harmonic ones (`grid`, `portela1997`, `portela1997_ideal`, `rod`, `portelaMesh`); the Phase 9 transient and Phase 10b channel ones lag (`julia/README.md`) |
+| Test suite (2026-10-01) | 18 programs, all pass | 110 tests, all pass | 239 tests, all pass |
+| Linear algebra / quadrature | LAPACK, SLATEC | in-repo LU, line-by-line GK 7/15 port, no external numerics | LAPACK LU via `LinearAlgebra`, line-by-line GK 7/15 port |
+| Role | reference; also builds the CLI used by the GUI | conformance port (ADR 0022) | contributed prototype, follow-along port (Phase 8J) |

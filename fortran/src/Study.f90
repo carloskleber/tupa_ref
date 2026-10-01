@@ -56,6 +56,9 @@ module mStudy
     !! Laplace Transform driver, ROADMAP Phase 9 item 5)
     character(256), allocatable :: sweepSourceIds(:)
     !! Source node IDs of the last `runSweep` call (for `inputImpedance`)
+    character(256), allocatable :: sweepReturnIds(:)
+    !! Return node IDs of the last `runSweep` call (blank = none); allocated
+    !! only when the call passed `returnNodeIds`
     complex(8), allocatable :: sweepSourceCurrents(:)
     !! Source values corresponding to `sweepSourceIds` as given by the
     !! caller: currents (A), or voltages (V) where flagged as voltage
@@ -190,6 +193,7 @@ contains
     integer(4) :: i
 
     do i = 1, this%structure%getElectrodeCount()
+      if (this%structure%electrodes(i)%loaded) cycle
       select type (mat => this%structure%electrodes(i)%material)
       type is (tLinear)
       class default
@@ -202,10 +206,17 @@ contains
     !! Internal impedance of electrode `i`'s conductor material at `omega`
     !! (theory.md §4.3). Only `tLinear` conductor materials are supported;
     !! dispersive conductor models are not part of the current object model.
+    !! A series-loaded segment (lightning channel, theory.md §4.5) takes
+    !! (R' + jωL')·l instead.
     class(tStudy), intent(in) :: this
     integer(4), intent(in) :: i
     real(8), intent(in) :: omega
 
+    if (this%structure%electrodes(i)%loaded) then
+      zint = cmplx(this%structure%electrodes(i)%loadResistance, &
+                   omega * this%structure%electrodes(i)%loadInductance, kind=8) * this%geomLength(i)
+      return
+    end if
     select type (mat => this%structure%electrodes(i)%material)
     type is (tLinear)
       zint = internalImpedance(this%geomRadius(i), this%geomLength(i), omega, mat%sigma, mat%mur)
@@ -221,6 +232,11 @@ contains
     integer(4), intent(in) :: i
     complex(8), intent(in) :: sLap
 
+    if (this%structure%electrodes(i)%loaded) then
+      zint = (this%structure%electrodes(i)%loadResistance + &
+              sLap * this%structure%electrodes(i)%loadInductance) * this%geomLength(i)
+      return
+    end if
     select type (mat => this%structure%electrodes(i)%material)
     type is (tLinear)
       zint = internalImpedanceLaplace(this%geomRadius(i), this%geomLength(i), sLap, mat%sigma, mat%mur)
@@ -234,7 +250,7 @@ contains
   ! Study execution and reporting
   ! =====================================================================
 
-  subroutine run(this, omega, sourceNodeIds, sourceCurrents, sourceIsVoltage, damping)
+  subroutine run(this, omega, sourceNodeIds, sourceCurrents, sourceIsVoltage, damping, returnNodeIds)
     !! Solve the study at one angular frequency ω, injecting the given
     !! sources at the given nodes (ADR 0010: current-injection sources).
     !!
@@ -260,6 +276,11 @@ contains
     !! ROADMAP Phase 9 item 5, theory.md §8): media immittances come from
     !! `admittanceLaplace` and every jω factor becomes s. Absent or zero,
     !! the real-ω path runs exactly as before.
+    !!
+    !! A source with a nonblank entry in `returnNodeIds` is a two-node source
+    !! (ROADMAP Phase 10b item 2, ADR 0025): a current source pushes +I into
+    !! its node and -I into the return node; a voltage source fixes
+    !! u(node) - u(returnNode). Its unit pattern is the ±1 dipole.
     class(tStudy), intent(inout) :: this
     real(8), intent(in) :: omega
     !! Angular frequency ω (rad/s) for this solve
@@ -273,7 +294,9 @@ contains
     !! current sources)
     real(8), intent(in), optional :: damping
     !! Damping c (1/s) of the complex frequency s = c + jω (default 0)
-    integer(4), allocatable :: sourcePos(:)
+    character(len=*), intent(in), optional :: returnNodeIds(:)
+    !! Return node per source (blank = none: the source acts against remote earth)
+    integer(4), allocatable :: sourcePos(:), retPos(:)
     complex(8), allocatable :: lastSrc(:)
     integer(4) :: k, info
     logical :: anyVoltage, laplace
@@ -283,10 +306,11 @@ contains
 
     if (.not. this%prepared) call prepareStudy(this)
 
-    call resolveSources(this, "run", sourceNodeIds, sourceCurrents, sourceIsVoltage, sourcePos, anyVoltage)
+    call resolveSources(this, "run", sourceNodeIds, sourceCurrents, sourceIsVoltage, returnNodeIds, &
+                        sourcePos, retPos, anyVoltage)
     if (.not. allocated(sourcePos)) return
 
-    call solveAtFrequency(this, this%mesh, omega, sourcePos, sourceCurrents, sourceIsVoltage, anyVoltage, &
+    call solveAtFrequency(this, this%mesh, omega, sourcePos, retPos, sourceCurrents, sourceIsVoltage, anyVoltage, &
                           damping, laplace, lastSrc, info)
     if (info /= 0) then
       call raiseError("tStudy%run: linear solve failed (ZGESV INFO /= 0)")
@@ -295,22 +319,26 @@ contains
     this%lastSourceCurrents = lastSrc
   end subroutine run
 
-  subroutine resolveSources(this, who, sourceNodeIds, sourceCurrents, sourceIsVoltage, sourcePos, anyVoltage)
+  subroutine resolveSources(this, who, sourceNodeIds, sourceCurrents, sourceIsVoltage, returnNodeIds, &
+                            sourcePos, retPos, anyVoltage)
     !! Validate the source arguments of `run`/`runSweep` and resolve the
-    !! node IDs to 1-based node indices. Leaves `sourcePos` unallocated after
-    !! raising an error. Done once, before any (possibly threaded) solve.
+    !! node IDs to 1-based node indices (`retPos` = 0 where a source has no
+    !! return node). Leaves `sourcePos` unallocated after raising an error.
+    !! Done once, before any (possibly threaded) solve.
     class(tStudy), intent(in) :: this
     character(len=*), intent(in) :: who
     character(len=*), intent(in) :: sourceNodeIds(:)
     complex(8), intent(in) :: sourceCurrents(:)
     logical, intent(in), optional :: sourceIsVoltage(:)
-    integer(4), allocatable, intent(out) :: sourcePos(:)
+    character(len=*), intent(in), optional :: returnNodeIds(:)
+    integer(4), allocatable, intent(out) :: sourcePos(:), retPos(:)
     logical, intent(out) :: anyVoltage
-    integer(4), allocatable :: pos(:)
+    integer(4), allocatable :: pos(:), ret(:)
     integer(4) :: k
 
     anyVoltage = .false.
-    allocate(pos(size(sourceNodeIds)))
+    allocate(pos(size(sourceNodeIds)), ret(size(sourceNodeIds)))
+    ret = 0
     do k = 1, size(sourceNodeIds)
       pos(k) = this%structure%findNodeIndex(trim(sourceNodeIds(k)))
       if (pos(k) == 0) then
@@ -318,6 +346,26 @@ contains
         return
       end if
     end do
+
+    if (present(returnNodeIds)) then
+      if (size(returnNodeIds) /= size(sourceNodeIds)) then
+        call raiseError("tStudy%" // who // ": returnNodeIds must have one entry per source")
+        return
+      end if
+      do k = 1, size(returnNodeIds)
+        if (len_trim(returnNodeIds(k)) == 0) cycle
+        ret(k) = this%structure%findNodeIndex(trim(returnNodeIds(k)))
+        if (ret(k) == 0) then
+          call raiseError("tStudy%" // who // ": return node '" // trim(returnNodeIds(k)) // "' not found")
+          return
+        end if
+        if (ret(k) == pos(k)) then
+          call raiseError("tStudy%" // who // ": source node '" // trim(sourceNodeIds(k)) // &
+                          "' and its return node are the same node")
+          return
+        end if
+      end do
+    end if
 
     if (present(sourceIsVoltage)) then
       if (size(sourceIsVoltage) /= size(sourceNodeIds)) then
@@ -327,9 +375,61 @@ contains
       anyVoltage = any(sourceIsVoltage)
     end if
     call move_alloc(pos, sourcePos)
+    call move_alloc(ret, retPos)
   end subroutine resolveSources
 
-  subroutine solveAtFrequency(this, mesh, omega, sourcePos, sourceValues, sourceIsVoltage, anyVoltage, &
+  subroutine injectionPatterns(sourcePos, retPos, nodes, patterns)
+    !! Right-hand-side patterns of the sources: `nodes` lists every distinct
+    !! node a source touches, and column k of `patterns` is source k's unit
+    !! injection over those nodes — +1 at its node, -1 at its return node
+    !! (ADR 0025). Merging shared nodes here also keeps the vector-subscript
+    !! assignment of `injectSignal(s)` free of repeated indices.
+    integer(4), intent(in) :: sourcePos(:), retPos(:)
+    integer(4), allocatable, intent(out) :: nodes(:)
+    complex(8), allocatable, intent(out) :: patterns(:,:)
+    integer(4), allocatable :: list(:)
+    integer(4) :: ns, k, n, j
+
+    ns = size(sourcePos)
+    allocate(list(2 * ns))
+    n = 0
+    do k = 1, ns
+      call addNode(sourcePos(k))
+      if (retPos(k) /= 0) call addNode(retPos(k))
+    end do
+    allocate(nodes(n), patterns(n, ns))
+    nodes = list(1:n)
+    patterns = ZERO_CPLX
+    do k = 1, ns
+      patterns(indexOf(sourcePos(k)), k) = cmplx(1.0d0, 0.0d0, kind=8)
+      if (retPos(k) /= 0) patterns(indexOf(retPos(k)), k) = cmplx(-1.0d0, 0.0d0, kind=8)
+    end do
+
+  contains
+
+    subroutine addNode(idx)
+      integer(4), intent(in) :: idx
+      if (n > 0) then
+        if (any(list(1:n) == idx)) return
+      end if
+      n = n + 1
+      list(n) = idx
+    end subroutine addNode
+
+    integer(4) function indexOf(idx) result(r)
+      integer(4), intent(in) :: idx
+      do j = 1, n
+        if (list(j) == idx) then
+          r = j
+          return
+        end if
+      end do
+      r = 0
+    end function indexOf
+
+  end subroutine injectionPatterns
+
+  subroutine solveAtFrequency(this, mesh, omega, sourcePos, retPos, sourceValues, sourceIsVoltage, anyVoltage, &
                               damping, laplace, lastSrc, info)
     !! One frequency's fill + solve on the caller's `mesh` (ROADMAP Phase 10
     !! item 4): the study is read-only here (geometry matrices, media), every
@@ -341,7 +441,7 @@ contains
     class(tStudy), intent(in) :: this
     type(tMesh), intent(inout) :: mesh
     real(8), intent(in) :: omega
-    integer(4), intent(in) :: sourcePos(:)
+    integer(4), intent(in) :: sourcePos(:), retPos(:)
     complex(8), intent(in) :: sourceValues(:)
     logical, intent(in), optional :: sourceIsVoltage(:)
     logical, intent(in) :: anyVoltage
@@ -352,6 +452,8 @@ contains
     integer(4) :: nseg, i, j
     complex(8) :: zint, sLap
     real(8) :: muAir, muSoil
+    integer(4), allocatable :: injNodes(:)
+    complex(8), allocatable :: patterns(:,:)
 
     info = 0
     if (laplace) sLap = cmplx(damping, omega, kind=8)
@@ -396,15 +498,18 @@ contains
 
     call calcFreq2(mesh)
 
+    call injectionPatterns(sourcePos, retPos, injNodes, patterns)
     if (anyVoltage) then
-      call solveWithVoltageSources(mesh, sourcePos, sourceValues, sourceIsVoltage, lastSrc, info)
+      call solveWithVoltageSources(mesh, sourcePos, retPos, injNodes, patterns, sourceValues, sourceIsVoltage, &
+                                   lastSrc, info)
     else
-      info = injectSignal(mesh, size(sourcePos), sourcePos, sourceValues)
+      info = injectSignal(mesh, size(injNodes), injNodes, matmul(patterns, sourceValues))
       lastSrc = sourceValues
     end if
   end subroutine solveAtFrequency
 
-  subroutine solveWithVoltageSources(mesh, sourcePos, sourceValues, isVoltage, lastSrc, info)
+  subroutine solveWithVoltageSources(mesh, sourcePos, retPos, injNodes, patterns, sourceValues, isVoltage, &
+                                     lastSrc, info)
     !! Convert ideal voltage sources to equivalent current injections by
     !! unit-injection superposition (ADR 0016, implementing ADR 0010's
     !! study-layer conversion), then superpose the full solution.
@@ -423,9 +528,17 @@ contains
     !!
     !! `mesh%Zeq` holds LU factors afterwards, same as the plain-current
     !! path — `solveAtFrequency` reassembles it (`calcFreq2`) on every call.
+    !!
+    !! A two-node source (ADR 0025) uses the ±1 dipole as its unit pattern
+    !! and constrains u(node) - u(returnNode); the equations above hold with
+    !! `Vunit(pos_j, k)` read as that difference.
     type(tMesh), intent(inout) :: mesh
-    integer(4), intent(in) :: sourcePos(:)
-    !! 1-based node indices of every source
+    integer(4), intent(in) :: sourcePos(:), retPos(:)
+    !! 1-based node indices of every source and of its return node (0 = none)
+    integer(4), intent(in) :: injNodes(:)
+    !! Distinct nodes touched by the sources
+    complex(8), intent(in) :: patterns(:,:)
+    !! Unit injection pattern of each source over `injNodes`
     complex(8), intent(in) :: sourceValues(:)
     !! Current (A) or voltage (V) per source, per `isVoltage`
     logical, intent(in) :: isVoltage(:)
@@ -434,19 +547,14 @@ contains
     !! Effective injected currents per source
     integer(4), intent(out) :: info
     !! LAPACK status of the failing solve (0 = success)
-    complex(8), allocatable :: unitSigs(:,:), vUnit(:,:), i1Unit(:,:), i2Unit(:,:)
+    complex(8), allocatable :: vUnit(:,:), i1Unit(:,:), i2Unit(:,:)
     complex(8), allocatable :: a(:,:), rhs(:), ieff(:)
     integer(4), allocatable :: vIdx(:), ipiv(:)
     integer(4) :: ns, nV, j, k, l
 
     ns = size(sourcePos)
-    allocate(unitSigs(ns, ns))
-    unitSigs = ZERO_CPLX
-    do k = 1, ns
-      unitSigs(k, k) = cmplx(1.0d0, 0.0d0, kind=8)
-    end do
 
-    info = injectSignals(mesh, ns, sourcePos, unitSigs, vUnit, i1Unit, i2Unit)
+    info = injectSignals(mesh, size(injNodes), injNodes, patterns, vUnit, i1Unit, i2Unit)
     if (info /= 0) return
 
     nV = count(isVoltage)
@@ -463,11 +571,11 @@ contains
     allocate(a(nV, nV), rhs(nV), ipiv(nV))
     do j = 1, nV
       do l = 1, nV
-        a(j, l) = vUnit(sourcePos(vIdx(j)), vIdx(l))
+        a(j, l) = gap(vIdx(j), vIdx(l))
       end do
       rhs(j) = sourceValues(vIdx(j))
       do k = 1, ns
-        if (.not. isVoltage(k)) rhs(j) = rhs(j) - sourceValues(k) * vUnit(sourcePos(vIdx(j)), k)
+        if (.not. isVoltage(k)) rhs(j) = rhs(j) - sourceValues(k) * gap(vIdx(j), k)
       end do
     end do
 
@@ -486,6 +594,16 @@ contains
     mesh%current1 = matmul(i1Unit, ieff)
     mesh%current2 = matmul(i2Unit, ieff)
     lastSrc = ieff
+
+  contains
+
+    complex(8) function gap(j, k) result(v)
+      !! Voltage across source j's terminals for a unit pattern k.
+      integer(4), intent(in) :: j, k
+      v = vUnit(sourcePos(j), k)
+      if (retPos(j) /= 0) v = v - vUnit(retPos(j), k)
+    end function gap
+
   end subroutine solveWithVoltageSources
 
   ! =====================================================================
@@ -518,7 +636,7 @@ contains
     end do
   end function logFrequencyAxis
 
-  subroutine runSweep(this, freqHz, sourceNodeIds, sourceCurrents, sourceIsVoltage, damping)
+  subroutine runSweep(this, freqHz, sourceNodeIds, sourceCurrents, sourceIsVoltage, damping, returnNodeIds)
     !! Solve the study once per frequency in `freqHz` (ROADMAP.md Phase 3
     !! items 1-2), storing node voltages and electrode currents in
     !! `this%voltageResults`/`longCurrentResults`/`transCurrentResults`,
@@ -542,10 +660,12 @@ contains
     !! current sources)
     real(8), intent(in), optional :: damping
     !! Damping c (1/s) of the complex frequency s = c + jω (default 0)
+    character(len=*), intent(in), optional :: returnNodeIds(:)
+    !! Return node per source (blank = none), see `run`
     real(8), allocatable :: omegaAxis(:)
     character(256), allocatable :: nodeIds(:), electrodeIds(:)
     integer(4) :: nf, nno, nseg, i, k, info, solveInfo
-    integer(4), allocatable :: sourcePos(:)
+    integer(4), allocatable :: sourcePos(:), retPos(:)
     complex(8), allocatable :: lastSrc(:)
     logical :: anyVoltage, laplace
 
@@ -573,7 +693,8 @@ contains
     if (allocated(this%sweepSourceCurrentsFreq)) deallocate(this%sweepSourceCurrentsFreq)
     allocate(this%sweepSourceCurrentsFreq(size(sourceNodeIds), nf))
 
-    call resolveSources(this, "runSweep", sourceNodeIds, sourceCurrents, sourceIsVoltage, sourcePos, anyVoltage)
+    call resolveSources(this, "runSweep", sourceNodeIds, sourceCurrents, sourceIsVoltage, returnNodeIds, &
+                        sourcePos, retPos, anyVoltage)
     if (.not. allocated(sourcePos)) return
     laplace = .false.
     if (present(damping)) laplace = damping /= 0.0d0
@@ -599,7 +720,7 @@ contains
       !$omp do schedule(dynamic)
       do k = 1, nf
         if (verbosityLevel() .eq. VERB_VERBOSE) write(*, '("f = ",EN0.1E2," Hz")') freqHz(k)
-        call solveAtFrequency(this, meshLocal, omegaAxis(k), sourcePos, sourceCurrents, sourceIsVoltage, &
+        call solveAtFrequency(this, meshLocal, omegaAxis(k), sourcePos, retPos, sourceCurrents, sourceIsVoltage, &
                               anyVoltage, damping, laplace, lastSrc, info)
         if (info /= 0) then
           !$omp critical (tupaSolveInfo)
@@ -626,13 +747,18 @@ contains
     end if
     ! Leave the study's own mesh and last-source state as the serial loop
     ! did: those of the final frequency (for callers reading `this%mesh`).
-    call this%run(omegaAxis(nf), sourceNodeIds, sourceCurrents, sourceIsVoltage, damping)
+    call this%run(omegaAxis(nf), sourceNodeIds, sourceCurrents, sourceIsVoltage, damping, returnNodeIds)
 
     this%sweepFreqHz = freqHz
     this%sweepDamping = 0.0d0
     if (present(damping)) this%sweepDamping = damping
     this%sweepSourceIds = sourceNodeIds
     this%sweepSourceCurrents = sourceCurrents
+    if (present(returnNodeIds)) then
+      this%sweepReturnIds = returnNodeIds
+    else if (allocated(this%sweepReturnIds)) then
+      deallocate(this%sweepReturnIds)
+    end if
   end subroutine runSweep
 
   function inputImpedance(this, nodeId) result(zin)
@@ -645,7 +771,7 @@ contains
     class(tStudy), intent(in) :: this
     character(len=*), intent(in) :: nodeId
     complex(8), allocatable :: zin(:)
-    integer(4) :: iNode, iSrc, k, nf
+    integer(4) :: iNode, iRet, iSrc, k, nf
 
     iSrc = 0
     if (allocated(this%sweepSourceIds)) then
@@ -662,10 +788,17 @@ contains
     end if
 
     iNode = this%structure%findNodeIndex(trim(nodeId))
+    ! A two-node source (ADR 0025): the impedance seen between its terminals
+    iRet = 0
+    if (allocated(this%sweepReturnIds)) then
+      if (len_trim(this%sweepReturnIds(iSrc)) > 0) iRet = this%structure%findNodeIndex(trim(this%sweepReturnIds(iSrc)))
+    end if
     nf = this%voltageResults%frequencyCount()
     allocate(zin(nf))
     do k = 1, nf
-      zin(k) = this%voltageResults%get(iNode, k) / this%sweepSourceCurrentsFreq(iSrc, k)
+      zin(k) = this%voltageResults%get(iNode, k)
+      if (iRet /= 0) zin(k) = zin(k) - this%voltageResults%get(iRet, k)
+      zin(k) = zin(k) / this%sweepSourceCurrentsFreq(iSrc, k)
     end do
   end function inputImpedance
 

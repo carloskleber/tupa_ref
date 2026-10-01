@@ -99,13 +99,7 @@ function load_study_string(text::AbstractString)
     end
     root isa AbstractDict || raise_error("JSON error: the case file must be a JSON object")
 
-    # ROADMAP Phase 10 `numerics` block (ADR 0024: kernel, imageModel,
-    # maxSegmentLength) that this port does not implement yet: rejected rather
-    # than silently ignored. Without the block the Julia port still computes
-    # the pre-Phase-10 numerics (2-D kernel, ideal images) — see julia/README.md.
-    field(root, "numerics") === nothing ||
-        raise_error("mTupa: numerics (ROADMAP Phase 10) is not implemented in the Julia port yet " *
-                    "(follow-along lag, see julia/README.md)")
+    kernel, image_model, max_segment_length = load_numerics(field(root, "numerics"))
 
     soil_spec = field(root, "soil")
     soil_type = json_str(soil_spec, "type", "linear")
@@ -129,27 +123,51 @@ function load_study_string(text::AbstractString)
         add_material!(st, Linear(json_str(m, "id"), json_real(m, "epsilonr"), json_real(m, "mur"),
                                  json_real(m, "sigma")))
     end
+    # Segment count: `segments` (default 1), raised to ceil(length / target) when the
+    # study carries a target — the target only ever refines (ROADMAP Phase 10 item 3)
+    segments_for(e, len) = begin
+        n = field(e, "segments") === nothing ? 1 : count_of(json_real(e, "segments"))
+        max_segment_length > 0.0 && len > 0.0 ?
+            max(n, ceil(Int, len / max_segment_length - 1.0e-9)) : n
+    end
+    chord(from, to) = begin
+        a, b = find_node_index(st, from), find_node_index(st, to)
+        a === nothing || b === nothing ? 0.0 : vnorm(vsub(st.nodes[a].p, st.nodes[b].p))
+    end
     for e in something(json_array(root, "elements"), ())
         kind = json_str(e, "type")
         if kind == "line"
+            n = segments_for(e, chord(json_str(e, "from"), json_str(e, "to")))
             add_element!(st, Line(json_str(e, "id"), json_str(e, "from"), json_str(e, "to"),
-                                  json_real(e, "radius"), count_of(json_real(e, "segments")),
-                                  json_str(e, "material")))
+                                  json_real(e, "radius"), n, json_str(e, "material")))
         elseif kind == "catenary"
+            c = chord(json_str(e, "from"), json_str(e, "to"))
+            sag = json_real(e, "sag")
+            # parabolic arc length: c + 8 s² / (3 c)
+            n = segments_for(e, c > 0.0 ? c + 8.0 * sag * sag / (3.0 * c) : c)
             add_element!(st, Catenary(Line(json_str(e, "id"), json_str(e, "from"), json_str(e, "to"),
-                                           json_real(e, "radius"), count_of(json_real(e, "segments")),
-                                           json_str(e, "material")), json_real(e, "sag")))
+                                           json_real(e, "radius"), n, json_str(e, "material")), sag))
         elseif kind == "mesh"
+            rows_x, rows_y = count_of(json_real(e, "rowsX")), count_of(json_real(e, "rowsY"))
+            # one count serves every bar: the longest bar sets the target
+            bar = max(json_real(e, "lengthX") / max(rows_x, 1), json_real(e, "lengthY") / max(rows_y, 1))
             add_element!(st, MeshElement(json_str(e, "id"), json_vec3(e, "position"),
                                          json_real(e, "lengthX"), json_real(e, "lengthY"),
-                                         count_of(json_real(e, "rowsX")), count_of(json_real(e, "rowsY")),
-                                         json_real(e, "radius"), count_of(json_real(e, "segments")),
-                                         json_str(e, "material")))
+                                         rows_x, rows_y, json_real(e, "radius"),
+                                         segments_for(e, bar), json_str(e, "material")))
+        elseif kind == "channel"
+            # ROADMAP Phase 10b (ADR 0025): rejected rather than skipped, so a
+            # channel case never runs without its channel by mistake
+            raise_error("mTupa: the channel element (ROADMAP Phase 10b) is not implemented in the Julia " *
+                        "port yet (follow-along lag, see julia/README.md)")
         else
             println(stderr, " mTupa: unknown element type '$kind' — skipped")
         end
     end
     study = Study(json_str(root, "title"), st)
+    study.kernel = kernel
+    study.image_model = image_model
+    study.max_segment_length = max_segment_length
 
     sources = let list = json_array(root, "sources")
         list === nothing ? nothing : [load_source(s) for s in list]
@@ -177,8 +195,38 @@ function load_study_string(text::AbstractString)
     return LoadedCase(study, sources, freq_hz, outputs, transient)
 end
 
+"""
+`numerics` block (ADR 0024, ROADMAP Phase 10): `(kernel, image_model,
+max_segment_length)`; each field is independently optional (`nothing` / `nothing`
+/ 0.0 when absent) and an unknown value is an error.
+"""
+function load_numerics(num)
+    num === nothing && return nothing, nothing, 0.0
+    kernel = nothing
+    kind = field(num, "kernel") === nothing ? nothing : json_str(num, "kernel")
+    kind === nothing || kind in ("single", "double") ||
+        raise_error("mTupa: unknown numerics.kernel '$kind' (expected single or double)")
+    kind === nothing || (kernel = Symbol(kind))
+    image_model = nothing
+    model = field(num, "imageModel") === nothing ? nothing : json_str(num, "imageModel")
+    if model !== nothing
+        model == "frequency-dependent" ? (image_model = :frequency_dependent) :
+        model == "ideal" ? (image_model = :ideal) :
+        raise_error("mTupa: unknown numerics.imageModel '$model' (expected frequency-dependent or ideal)")
+    end
+    max_len = 0.0
+    if field(num, "maxSegmentLength") !== nothing
+        max_len = json_real(num, "maxSegmentLength")
+        max_len > 0.0 || raise_error("mTupa: numerics.maxSegmentLength must be positive")
+    end
+    return kernel, image_model, max_len
+end
+
 # "voltage" wins if both are present; neither → zero current
 function load_source(s)
+    field(s, "returnNode") === nothing ||
+        raise_error("mTupa: sources[].returnNode (ROADMAP Phase 10b) is not implemented in the Julia port yet " *
+                    "(follow-along lag, see julia/README.md)")
     node = json_str(s, "node")
     v, c = field(s, "voltage"), field(s, "current")
     v !== nothing && return Source(node, complex(json_real(v, "re"), json_real(v, "im")), true)
@@ -191,11 +239,18 @@ end
 # case never runs as a plain-FFT transient by mistake (julia/README.md
 # conformance table).
 const PHASE9_SIGNAL_FIELDS = ("sources", "window", "transform", "nltDamping", "transferFunction")
+# ... and the two-node-source fields of ROADMAP Phase 10b (ADR 0025)
+const PHASE10B_SIGNAL_FIELDS = ("returnNode", "quantity")
 
 function load_signal(s)
     for key in PHASE9_SIGNAL_FIELDS
         field(s, key) === nothing ||
             raise_error("mTupa: signal.$key (ROADMAP Phase 9) is not implemented in the Julia port yet " *
+                        "(follow-along lag, see julia/README.md)")
+    end
+    for key in PHASE10B_SIGNAL_FIELDS
+        field(s, key) === nothing ||
+            raise_error("mTupa: signal.$key (ROADMAP Phase 10b) is not implemented in the Julia port yet " *
                         "(follow-along lag, see julia/README.md)")
     end
     imax = field(s, "imax") === nothing ? nothing : json_real(s, "imax")

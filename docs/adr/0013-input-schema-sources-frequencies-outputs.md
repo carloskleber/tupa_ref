@@ -3,6 +3,7 @@
 - **Status**: Accepted (schema v1 addition, open to revision before a JSON
   reader consumes it)
 - **Date**: 2026-07-09
+- **Amended by**: [ADR 0025](0025-lightning-channel-and-two-node-sources.md) (`returnNode` on `sources[]`, 2026-10-01)
 
 ## Context
 

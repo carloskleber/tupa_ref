@@ -3,6 +3,7 @@
 - **Status**: Accepted (schema addition, open to revision before more than
   one writer/reader depends on it)
 - **Date**: 2026-07-16
+- **Amended by**: [ADR 0025](0025-lightning-channel-and-two-node-sources.md) (`returnNode` and `quantity` on `signal` sources, 2026-10-01)
 
 ## Context
 

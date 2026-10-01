@@ -45,12 +45,13 @@ cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test --r
 | --- | --- | --- |
 | `ctes`, `error`, `verbosity` | `Ctes`, `Error`, `Verbosity` | constants, `TupaError`, CLI levels |
 | `material` | `Material` | linear / Portela / Alipio–Visacro media, `W(ω)`, `γ` |
-| `node`, `electrode`, `structure`, `element/{line,mesh}` | `Node`, `Electrode`, `Structure`, `element/*` | object model and assembly (identical discretised IDs) |
+| `node`, `electrode`, `structure`, `element/{line,mesh,channel}` | `Node`, `Electrode`, `Structure`, `element/*` | object model and assembly (identical discretised IDs) |
 | `geometry`, `geometry_cache` | `Geometry`, `GeometryCache` | `g(a,b)`, image terms, distances, cosines |
 | `impedance`, `bessel` | `Impedance` | adaptive GK 7/15, single-integral `geometry_factor_1d` (default) and nested 2-D `geometry_factor_2d` quadrature, internal impedance |
 | `mesh`, `linalg` | `Mesh` | topology, `Zeq` assembly (image coefficients `Γ(ω)`/ideal, `ImageModel`), LU with multiple RHS |
 | `study`, `result` | `Study`, `Result` | preparation, fill, sweep, voltage sources (ADR 0016) |
 | `results_writer` | `ResultsWriter` | CSV/JSON, `ES16.8` number format |
+| `channel_calibration` | `ChannelCalibration` | speed calibration of the lightning channel's loading (ADR 0025) |
 | `signal`, `fft`, `transient`, `special` | `Signal`, `Fft`, `Transient` | waveforms, radix-2 FFT, transient driver, `erfc` |
 | `json` | `JsonParser`, `Tupa` | typed schema reader, `validate_study_references` |
 | `main.rs` | `app/main.f90` | CLI |
@@ -76,6 +77,7 @@ Tolerance and comparison rule: 1e-6 relative on the row scale
 | `portela1997_transient_{interpolated,hann,hann_time,multi,nlt}` (ROADMAP Phase 9) | `*_expected.csv` (transient shape, Fortran output) | **match** — worst 1.5e-8 (`nlt`), 3e-12 the others, under the transient rule (below); `tests/conformance.rs::check_transient_case` |
 | `portela1997_transient`, `silva2025_*_transient` | none | vs fresh Fortran runs (2026-09-30, after Phase 9): 3e-12 and 2e-9 (`silva2025_rho100_transient`) under the transient rule |
 | `silva2025_*`, `grcev_*`, `lima_*`, `poljak_fig4`, `rod_air`, … | none | load, validate, assemble; sweeps run |
+| `channel_{unloaded,loaded,tower,tower_gap}` (ROADMAP Phase 10b, ADR 0025: `channel` element, two-node sources; `channel_loaded` runs the calibration) | `channel_*_expected.csv`; `channel_tower*` also `*_transient_expected.csv` | **match** under the 1e-6 rules (`tests/conformance.rs`: `check_harmonic` and the transient comparison; 2026-10-01) |
 | `linha*`, `torre*` (ADR 0023: `catenary` element, `portela` waveform) | none | load, validate, assemble; vs fresh Fortran runs: `linha1` 3e-10, `linha4` 1e-5 (quadrature-tolerance level, same with zero sag) — see `common/README.md` |
 
 **Cross-code check on Grcev ℓ = 10 m** (`grcev_fig12_l10_rho{30,300,3000}`,
@@ -109,6 +111,15 @@ item 9) still needs Fortran outputs for the non-golden cases.
 
 Each later contract change (schema, `common/` case, default numerics)
 carries a Rust item; lags are recorded in the conformance table above.
+
+- **ROADMAP Phase 10b** ([ADR 0025](../docs/adr/0025-lightning-channel-and-two-node-sources.md)) —
+  **implemented, no lag**: `element/channel.rs` (`Channel`, graded and
+  uniform chains, `Piecewise` profiles), `channel_calibration.rs` (the
+  10–90 % tangent speed calibration, mirroring the Fortran evaluation by
+  evaluation), `Electrode::loading`, `Source::return_node` and
+  `TransientSource::{return_node, is_voltage}`, `study::injection_patterns`
+  and the two-node voltage constraint, the `channels` block of the results
+  JSON. The calibrated `channel_loaded` fixture matches too.
 
 - **ROADMAP Phase 10** ([ADR 0024](../docs/adr/0024-phase10-numerics.md)) —
   **implemented, no lag**: `impedance::geometry_factor_1d` (line-by-line the

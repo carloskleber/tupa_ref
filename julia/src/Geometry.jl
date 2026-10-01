@@ -102,9 +102,17 @@ function parallel_geometry_factor(a1::Vec3, a2::Vec3, la::Float64, va::Vec3,
     return isfinite(g) ? g : nothing
 end
 
-"Numerical options of the geometry build."
+"""
+Numerical options of the geometry build. `kernel` selects the quadrature of
+the pairs that have no closed form (ROADMAP Phase 10 item 1): `:single`, the
+mHEM single integral (theory.md §4.2, the default), or `:double`, the nested
+2-D Gauss–Kronrod quadrature (the pre-Phase-10 path and the test oracle;
+`numerics.kernel: "double"`).
+"""
 Base.@kwdef struct GeometryOptions
-    "Relative-error factor of the 2-D quadrature (CLI `--epsrel`)"
+    "Quadrature kernel for pairs without a closed form: `:single` or `:double`"
+    kernel::Symbol = :single
+    "Relative-error factor of the quadrature (CLI `--epsrel`)"
     eps_rel::Float64 = DEFAULT_QUAD_EPS_REL
     "Memoise quadrature results (CLI `--no-cache` disables)"
     use_cache::Bool = true
@@ -115,7 +123,7 @@ end
 """
 General mutual geometry factor `g(a,b) = ∫ dl_a dl_b / R_ab` (theory.md §4.2)
 for non-coincident, non-identical segments: closed form for parallel pairs,
-memoised adaptive 2-D quadrature otherwise.
+memoised adaptive quadrature (`opts.kernel`) otherwise.
 """
 function mutual_geometry_factor(a1::Vec3, a2::Vec3, b1::Vec3, b2::Vec3,
                                 opts::GeometryOptions, cache::GeometryCache)
@@ -133,7 +141,8 @@ function mutual_geometry_factor(a1::Vec3, a2::Vec3, b1::Vec3, b2::Vec3,
         hit = cache_get!(cache, key)
         hit === nothing || return hit
     end
-    g = geometry_factor_2d(a1, va, la, b1, vb, lb, opts.eps_rel)
+    g = opts.kernel === :double ? geometry_factor_2d(a1, va, la, b1, vb, lb, opts.eps_rel) :
+                                  geometry_factor_1d(a1, va, la, b1, vb, lb, opts.eps_rel)
     use_cache && cache_put!(cache, key, g)
     return g
 end

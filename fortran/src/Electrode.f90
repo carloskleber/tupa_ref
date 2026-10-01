@@ -26,7 +26,16 @@ module mElectrode
     real(8) :: radius = 0.0d0
     !! Cylindrical radius of the electrode (m)
     class(tMaterial), pointer :: material => null()
-    !! Conductor material (points into the owning element's material)
+    !! Conductor material (points into the owning element's material);
+    !! null for a series-loaded segment
+    logical :: loaded = .false.
+    !! True for a segment whose internal-impedance slot carries the
+    !! lightning-channel loading z_ch = R' + jωL' (theory.md §4.5) instead of
+    !! the skin-effect impedance of a conductor material (ROADMAP Phase 10b)
+    real(8) :: loadResistance = 0.0d0
+    !! Series loading resistance per unit length R' (Ω/m), `loaded` only
+    real(8) :: loadInductance = 0.0d0
+    !! Series loading inductance per unit length L' (H/m), `loaded` only
     complex(8) :: il
     !! Longitudinal current through the electrode (A)
     complex(8) :: it

@@ -29,8 +29,16 @@ Source(node::AbstractString, value::Number; voltage::Bool = false) =
 mutable struct Study
     title::String
     structure::Structure
-    "Quadrature/cache options"
+    "Quadrature/cache options (process default; CLI `--epsrel`, `--no-cache`, `--kernel`)"
     options::GeometryOptions
+    "The study's own geometry kernel (`numerics.kernel`); `nothing` = `options.kernel`"
+    kernel::Union{Nothing,Symbol}
+    "The study's own image model (`numerics.imageModel`); `nothing` = `default_image_model`"
+    image_model::Union{Nothing,Symbol}
+    "Image model of studies that do not state one (CLI `--image-model`)"
+    default_image_model::Symbol
+    "Per-study segment-length target (m, `numerics.maxSegmentLength`), applied by the loader; 0 = none"
+    max_segment_length::Float64
     "Filled by `prepare!`"
     prepared::Union{Nothing,Prepared}
     "Node voltages per frequency"
@@ -49,8 +57,8 @@ end
 
 "New study over an existing structure."
 Study(title::AbstractString, structure::Structure) =
-    Study(String(title), structure, GeometryOptions(), nothing, ResultSet(), ResultSet(),
-          ResultSet(), Float64[], String[], zeros(ComplexF64, 0, 0))
+    Study(String(title), structure, GeometryOptions(), nothing, nothing, :frequency_dependent, 0.0,
+          nothing, ResultSet(), ResultSet(), ResultSet(), Float64[], String[], zeros(ComplexF64, 0, 0))
 
 "Solution of one frequency point with the effective injected currents."
 struct RunOutput
@@ -82,7 +90,12 @@ function prepare!(study::Study)
         pos[i] = segment_medium(p1[i], p2[i])
     end
 
-    geom = build_geometry_matrices(p1, p2, radius, pos, study.options)
+    # a study's own kernel applies only to its geometry build
+    opts = study.kernel === nothing ? study.options :
+           GeometryOptions(kernel = study.kernel, eps_rel = study.options.eps_rel,
+                           use_cache = study.options.use_cache,
+                           force_numeric = study.options.force_numeric)
+    geom = build_geometry_matrices(p1, p2, radius, pos, opts)
     verbosity_level() == VERB_VERBOSE &&
         println(" Geometry-factor quadrature cache: $(geom.cache_stats.hits) hits, ",
                 "$(geom.cache_stats.misses) misses ($(geom.cache_stats.entries) entries)")
@@ -99,6 +112,7 @@ function fill_impedance!(study::Study, omega::Float64)
     st = study.structure
     prep = study.prepared
     mesh, gm = prep.mesh, prep.geom
+    mesh.image_model = something(study.image_model, study.default_image_model)
     calc_param_w!(mesh, omega, st.air.mur * MU0, admittance(st.air, omega),
                   permeability(st.soil) * MU0, admittance(st.soil, omega))
     n = mesh.nseg

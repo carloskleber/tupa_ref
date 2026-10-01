@@ -182,11 +182,13 @@ automatically as a side effect of `runSweep`.
 
 | Axis | How | Guard rails |
 | --- | --- | --- |
-| New geometry (ring, catenary, tower, grid…) | Extend `tElement`, implement `assemble` + `report` | Priority order in ROADMAP Phases 12–13 (ring next; grid done — Phase 7 item 3; catenary done — ADR 0023) |
+| New geometry (ring, catenary, tower, grid…) | Extend `tElement`, implement `assemble` + `report` | Priority order in ROADMAP Phases 12–13 (ring next; grid done — Phase 7 item 3; catenary done — ADR 0023; lightning channel done — Phase 10b, ADR 0025) |
 | New soil/conductor model | Extend `tMaterial`, implement `calcPropagationConstant` | One subtype per literature reference, named after it (ADR 0007) |
 | New output | Extend `tResult`, implement `alloc`/`get`/`set`; wire into `runSweep` and `mResultsWriter` | Use the legacy output-class inventory to prioritise (ROADMAP P7) |
 | Alternate geometry-factor kernel | `mGeometry%setGeometryKernel`; the mHEM 1-D form is the default (`mImpedance%geometryFactor1D`), the 2-D quadrature stays as test oracle and is selectable (`numerics.kernel`) | ROADMAP P1 (done, Phase 10 item 1); ADR 0004, 0024 |
 | Image reflection model | `mMesh%calcImageCoefficients` fills `gammaAir`/`gammaSoil` (Γ(ω) default, ideal ±1 selectable via `numerics.imageModel`); `calcZSelf`/`calcZMutual` multiply the image parcel by them | ROADMAP P2 (done, Phase 10 item 2); ADR 0009 keeps call sites untouched, ADR 0024 |
+| Series loading of a segment | `tElectrode%loaded` + `loadResistance`/`loadInductance` replace the skin-effect impedance in `mStudy%segmentInternalImpedance` (used by the lightning channel; also the slot for generic internal-impedance models, ROADMAP Phase 13 item 2) | ADR 0025 |
+| Two-node sources | `returnNodeIds` of `tStudy%run`/`runSweep`: the unit pattern becomes the ±1 dipole (`injectionPatterns`); the solver kernel still sees only nodal current injections | ADR 0025 (extends ADR 0010, 0016) |
 | Other languages | Re-implement the object model; must pass `common/` cases | ADR 0002; JSON schema is the public contract |
 
 The **public interface** of the project is the JSON schema plus the

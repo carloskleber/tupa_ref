@@ -80,8 +80,10 @@ Options of the command-line driver (`fortran/app/main.f90` plus the Rust
 port's `--dump-structure`/`--output-dir` and the Julia-only `--plot`).
 """
 Base.@kwdef struct RunOptions
-    "Geometry/quadrature options (`--epsrel`, `--no-cache`)"
+    "Geometry/quadrature options (`--epsrel`, `--no-cache`, `--kernel`)"
     geometry::GeometryOptions = GeometryOptions()
+    "Image model of studies that do not state one (`--image-model`): `:frequency_dependent` or `:ideal`"
+    image_model::Symbol = :frequency_dependent
     "Print the assembled nodes/electrodes and stop before any physics"
     dump_structure::Bool = false
     "Directory the result files are written to (`nothing`: current directory)"
@@ -103,6 +105,7 @@ function run_from_file(filename::AbstractString; options::RunOptions = RunOption
     verbosity_level() == VERB_VERBOSE && println("\n Loading study ", filename)
     case = load_study(filename)
     case.study.options = options.geometry
+    case.study.default_image_model = options.image_model
     validate_study_references!(case)
 
     if options.dump_structure
@@ -193,6 +196,7 @@ too).
 default_blas_threads!() = (haskey(ENV, "OPENBLAS_NUM_THREADS") || BLAS.set_num_threads(1); nothing)
 
 const USAGE ="Usage: tupa.jl [-v|--verbose] [-q|--quiet] [--epsrel <value>] [--no-cache] " *
+              "[--kernel single|double] [--image-model frequency-dependent|ideal] " *
               "[--dump-structure] [--output-dir <dir>] [--plot] <study.json>"
 
 """
@@ -206,6 +210,8 @@ function main(args::AbstractVector{<:AbstractString})
     filename = nothing
     eps_rel = DEFAULT_QUAD_EPS_REL
     use_cache = true
+    kernel = :single
+    image_model = :frequency_dependent
     dump = false
     output_dir = nothing
     plot = false
@@ -234,6 +240,32 @@ function main(args::AbstractVector{<:AbstractString})
                 return 1
             end
             eps_rel = x
+        elseif arg == "--kernel"
+            if k == length(args)
+                println(stderr, "error: --kernel requires a value (single or double)")
+                return 1
+            end
+            k += 1
+            if !(args[k] in ("single", "double"))
+                println(stderr, "error: --kernel: invalid value '$(args[k])' (expected single or double)")
+                return 1
+            end
+            kernel = Symbol(args[k])
+        elseif arg == "--image-model"
+            if k == length(args)
+                println(stderr, "error: --image-model requires a value (frequency-dependent or ideal)")
+                return 1
+            end
+            k += 1
+            if args[k] == "frequency-dependent"
+                image_model = :frequency_dependent
+            elseif args[k] == "ideal"
+                image_model = :ideal
+            else
+                println(stderr, "error: --image-model: invalid value '$(args[k])' " *
+                                "(expected frequency-dependent or ideal)")
+                return 1
+            end
         elseif arg == "--output-dir"
             if k == length(args)
                 println(stderr, "error: --output-dir requires a directory")
@@ -258,8 +290,9 @@ function main(args::AbstractVector{<:AbstractString})
         return 1
     end
 
-    options = RunOptions(geometry = GeometryOptions(eps_rel = eps_rel, use_cache = use_cache),
-                         dump_structure = dump, output_dir = output_dir, plot = plot)
+    options = RunOptions(geometry = GeometryOptions(kernel = kernel, eps_rel = eps_rel,
+                                                    use_cache = use_cache),
+                         image_model = image_model, dump_structure = dump, output_dir = output_dir, plot = plot)
     default_blas_threads!()
     try
         run_from_file(filename; options = options)

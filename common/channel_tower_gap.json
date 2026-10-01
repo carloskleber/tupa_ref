@@ -1,0 +1,133 @@
+{
+  "title": "ROADMAP Phase 10b: as channel_tower.json with an ideal voltage source (delta gap) between the tower top and the channel base (ADR 0025)",
+  "soil": {
+    "conductivity": 0.001,
+    "permittivity": 10.0,
+    "permeability": 1.0
+  },
+  "nodes": [
+    {
+      "id": "Tfoot",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "id": "Ttop",
+      "position": [
+        0.0,
+        0.0,
+        30.0
+      ]
+    },
+    {
+      "id": "Rend",
+      "position": [
+        0.0,
+        0.0,
+        -3.0
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "id": "steel",
+      "epsilonr": 1.0,
+      "mur": 1.0,
+      "sigma": 5000000.0
+    }
+  ],
+  "elements": [
+    {
+      "type": "line",
+      "id": "Tower",
+      "from": "Tfoot",
+      "to": "Ttop",
+      "radius": 0.3,
+      "segments": 6,
+      "material": "steel"
+    },
+    {
+      "type": "line",
+      "id": "Rod",
+      "from": "Tfoot",
+      "to": "Rend",
+      "radius": 0.0125,
+      "segments": 3,
+      "material": "steel"
+    },
+    {
+      "type": "channel",
+      "id": "ch",
+      "strike": "Ttop",
+      "length": 1000.0,
+      "radius": 0.03,
+      "speed": 150000000.0,
+      "resistance": 0.5,
+      "firstSegment": 5.0,
+      "growth": 1.2,
+      "maxSegment": 50.0
+    }
+  ],
+  "sources": [
+    {
+      "node": "Ttop",
+      "returnNode": "ch-base",
+      "voltage": {
+        "re": 1000.0,
+        "im": 0.0
+      }
+    }
+  ],
+  "frequencies": {
+    "min": 10000.0,
+    "max": 1000000.0,
+    "pointsPerDecade": 3
+  },
+  "outputs": {
+    "nodes": [
+      "Ttop",
+      "Tfoot",
+      "ch-base"
+    ],
+    "electrodes": [
+      "ch_e1",
+      "Tower_e1",
+      "Rod_e1"
+    ],
+    "quantities": [
+      "voltage",
+      "i1",
+      "i2",
+      "inputImpedance"
+    ]
+  },
+  "signal": {
+    "sources": [
+      {
+        "node": "Ttop",
+        "returnNode": "ch-base",
+        "waveform": "portela",
+        "imax": 1000000.0,
+        "alpha": 0.0,
+        "tFront": 1e-06,
+        "tTopEnd": 5e-06,
+        "tTailEnd": 2e-05,
+        "quantity": "voltage"
+      }
+    ],
+    "observeNodes": [
+      "Ttop",
+      "ch-base"
+    ],
+    "observeElectrodes": [
+      "ch_e1",
+      "Tower_e1"
+    ],
+    "nyquistHz": 2000000.0,
+    "fftPoints": 256,
+    "transform": "nlt"
+  }
+}

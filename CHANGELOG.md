@@ -5,6 +5,62 @@ Semantic versioning, annotated git tags (ADR 0018). The roadmap
 this file records what changes **for users of the solver** — above all default
 numerics, which move result files.
 
+## Unreleased
+
+### Changed
+
+- Julia port: ROADMAP Phase 10 numerics (single-integral kernel, `Γ(ω)` images,
+  `numerics` block, `maxSegmentLength`; `--kernel`, `--image-model`). The
+  regenerated harmonic fixtures and `portela1997_ideal` now run there at 1e-6.
+  No solver (Fortran/Rust) behaviour changes.
+
+## 0.7.0 — 2026-10-01 (ROADMAP Phase 10b)
+
+Additive: studies without a channel or a two-node source produce the same
+results as 0.6.0.
+
+### Added
+
+- **Lightning channel element** (`"type": "channel"`,
+  [ADR 0025](docs/adr/0025-lightning-channel-and-two-node-sources.md)): a
+  chain of air segments, uniform or graded from the foot, with a series
+  loading `R' + jωL'` that slows the current wave to a prescribed
+  return-stroke speed. `"calibrate": true` solves for the loading scale
+  against the 10–90 % tangent speed metric of Baba & Rakov at load time (a
+  few seconds); the calibrated scale and the measured speed are recorded in a
+  new additive top-level `channels` array of both results JSON files.
+- **Two-node sources**: `returnNode` on `sources[]`, `signal` and
+  `signal.sources[]` — a current dipole (`+I` at the node, `−I` at the return
+  node) or a delta-gap voltage source (constraint on the node-pair voltage);
+  `quantity: "voltage"` on transient sources. A tower strike is now one
+  `channel` element plus one source.
+- Cases and fixtures: `channel_unloaded`, `channel_loaded`, `channel_tower`,
+  `channel_tower_gap` (harmonic and transient).
+- Validation ([docs/validation/channel-validation.md](docs/validation/channel-validation.md),
+  `docs/validation/channel_checks.py`): the unloaded channel follows Chen's
+  analytic current to 1.5 % of the peak; loaded-wire speeds are within 0.03c
+  of Baba & Rakov's Table 3.
+- Rust implementation of all of the above; every fixture matched, the
+  calibrated one included.
+
+### Fixed
+
+- Sources sharing a node are merged into one right-hand-side vector over the
+  distinct nodes (the previous vector-subscript assignment of the injection
+  was undefined for repeated nodes).
+
+### Known
+
+- The Julia port refuses the `channel` element, `returnNode` and `quantity`
+  (it follows Phase 10 but not yet Phase 9, so no channel fixture runs there)
+  — `julia/README.md`.
+- The channel couples to air segments only; buried-electrode outputs see it
+  through the source current (ROADMAP Phase 14).
+- The Ishii reduced-scale induced-voltage validation is not done (needs the
+  measured waveform).
+- Calibration refuses segmentations for which the speed metric is unreliable
+  (a calibrated scale outside 0.25–4, e.g. 0.23 m radius with 20 m segments).
+
 ## 0.6.0 — 2026-10-01 (ROADMAP Phase 10)
 
 ### Changed — default numerics (results move)
@@ -51,9 +107,12 @@ numerics, which move result files.
 
 ### Known
 
-- The Julia port has not followed Phases 9–10 (no Julia toolchain was
-  reachable): it still computes the 0.5.0 numerics and refuses the `numerics`
-  block — `julia/README.md`.
+- The Julia port had not followed Phase 10 when this was released (no Julia
+  toolchain was reachable); it was ported afterwards (2026-10-01, see the
+  Unreleased entry) — `julia/README.md`.
+- `numerics.maxSegmentLength` undershoots the target on a `mesh` (bars are
+  sized by `length/rows`, not `length/(rows − 1)`); `line` and `catenary` are
+  exact. No fixture is affected (ADR 0024 §8).
 - The NLT remains opt-in (`signal.transform: "nlt"`); the default is unchanged
   (ADR 0024 §7).
 

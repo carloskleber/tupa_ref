@@ -68,8 +68,8 @@ entries.
 - **LEMP (Lightning ElectroMagnetic Pulse)** — the field radiated by the
   return-stroke channel; its coupling to line conductors raises insulator
   voltages beyond the conducted-current response [52]. Captured naturally
-  once the channel is modelled as HEM segments (planned channel element,
-  ROADMAP Phase 14 item 2).
+  once the channel is modelled as HEM segments (the `channel` element,
+  ROADMAP Phase 10b, ADR 0025).
 - **NLT (Numerical Laplace Transform)** — time-domain route solving at
   damped complex frequencies $s = c + j\omega$ with data windows [17];
   opt-in alternative to the plain FFT drive (`signal.transform: "nlt"`,
