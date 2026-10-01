@@ -45,19 +45,23 @@ edit `tFront` to run those. `linha0`'s first signal is the legacy linear
 
 | File | Structure | Soil | Injection | Segments | Fortran run (CPU) |
 | --- | --- | --- | --- | --- | --- |
-| `linha0.json` | 300 m copper line at 30 m, each end grounded by a thin lead and a 20 m rod | 1 mS/m, εr 1 | 1 kA linear ramp, 2 µs front, line start | 68 | 2 s |
-| `linha1.json` | 200 m aluminium line at 30 m, steel down-lead and 20 m rod at the far end | 1 mS/m, εr 10 | 1 kA, 1 µs front, open end | 47 | 6 s |
-| `linha2.json` | Shield wire over 10 iron towers with 3 m footings, 170 m channel to midspan | 1 mS/m, εr 10 | 1 kA, 1 µs, channel top | 160 | 3 min |
-| `linha3.json` | Shield wire over 6 towers, channel to midspan, unconnected 100 m telephone wire at 5 m height, 100 m away | 1 mS/m, εr 10 | 1 kA, 1 µs, channel top | 310 | 26 min |
-| `linha4.json` | Shield wire over 6 towers, outer spans as **catenaries** (5 m sag); grounded channel 100 m off the line (indirect strike) | 1 mS/m, εr 10 | 1 kA, 1 µs, channel top | 164 | 4 min |
-| `linha5.json` | 6 steel towers with crossarms, shield wire, aluminium phase conductor 5 m below the crossarm tips (not connected), channel to midspan | 1 mS/m, εr 10 | 1 kA, 1 µs, channel top | 204 | 104 s |
-| `linha5a.json` | Same as `linha5`, with the legacy `freq_log` scan: Nyquist 2 MHz instead of 5 MHz | 1 mS/m, εr 10 | same | 204 | 2 min |
-| `torre0.json` | 2 × 2 × 100 m prism frame (`cubo`) of 0.2 mm wire, injection lead on top, 10 m lead down to a 10 m rod | 1 MS/m (near-ideal) | 1 kA, 10 µs, lead top | 87 | 31 s |
-| `torre1.json` | Guyed lattice tower (`cubo`/`piramide`): top pyramid, crossarm pyramids, mast, 4 guy wires with anchors, 10 m rod | `portela` (σ0 50 µS/m, α 0.82) | 10 kA, 2 µs, tower top | 319 | 24 min |
-| `torre2.json` | Cross frame: four 5 m arms at 40 m and at 20 m joined by 20 m verticals, 20 m mast, 10 m rod, injection lead on top | 10 kS/m (near-ideal) | 1 kA, 10 µs, lead top | 75 | 20 s |
+| `linha0.json` | 300 m copper line at 30 m, each end grounded by a thin lead and a 20 m rod | 1 mS/m, εr 1 | 1 kA linear ramp, 2 µs front, line start | 68 | 1.3 s |
+| `linha1.json` | 200 m aluminium line at 30 m, steel down-lead and 20 m rod at the far end | 1 mS/m, εr 10 | 1 kA, 1 µs front, open end | 47 | 4.4 s |
+| `linha2.json` | Shield wire over 10 iron towers with 3 m footings, 170 m channel to midspan | 1 mS/m, εr 10 | 1 kA, 1 µs, channel top | 160 | 77 s |
+| `linha3.json` | Shield wire over 6 towers, channel to midspan, unconnected 100 m telephone wire at 5 m height, 100 m away | 1 mS/m, εr 10 | 1 kA, 1 µs, channel top | 310 | 8 min |
+| `linha4.json` | Shield wire over 6 towers, outer spans as **catenaries** (5 m sag); grounded channel 100 m off the line (indirect strike) | 1 mS/m, εr 10 | 1 kA, 1 µs, channel top | 164 | 87 s |
+| `linha5.json` | 6 steel towers with crossarms, shield wire, aluminium phase conductor 5 m below the crossarm tips (not connected), channel to midspan | 1 mS/m, εr 10 | 1 kA, 1 µs, channel top | 204 | 33 s |
+| `linha5a.json` | Same as `linha5`, with the legacy `freq_log` scan: Nyquist 2 MHz instead of 5 MHz | 1 mS/m, εr 10 | same | 204 | 45 s |
+| `torre0.json` | 2 × 2 × 100 m prism frame (`cubo`) of 0.2 mm wire, injection lead on top, 10 m lead down to a 10 m rod | 1 MS/m (near-ideal) | 1 kA, 10 µs, lead top | 87 | 17 s |
+| `torre1.json` | Guyed lattice tower (`cubo`/`piramide`): top pyramid, crossarm pyramids, mast, 4 guy wires with anchors, 10 m rod | `portela` (σ0 50 µS/m, α 0.82) | 10 kA, 2 µs, tower top | 319 | 7 min |
+| `torre2.json` | Cross frame: four 5 m arms at 40 m and at 20 m joined by 20 m verticals, 20 m mast, 10 m rod, injection lead on top | 10 kS/m (near-ideal) | 1 kA, 10 µs, lead top | 75 | 12 s |
 
-Run times are the CPU time of the whole CLI run (sweep plus transient),
-release build, single-threaded (AMD Ryzen 5 8500G). The transient solves every FFT bin
+Run times are the wall time of the whole CLI run (sweep plus transient),
+release build, `OMP_NUM_THREADS=1`, measured 2026-10-01 with the Phase 10
+defaults on a 4-core container (before Phase 10, on an AMD Ryzen 5 8500G:
+2 s, 6 s, 3 min, 26 min, 4 min, 104 s, 2 min, 31 s, 24 min, 20 s in table
+order — not the same machine, so the ratios are indicative). With the
+threaded sweep the transients scale with the core count. The transient solves every FFT bin
 (`fftPoints/2 + 1` frequencies); since ROADMAP Phase 9 item 1 the
 `frequencies` axis can serve as the scan grid instead
 (`signal.transferFunction: "interpolated"`, see the schema notes), after
