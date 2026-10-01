@@ -19,7 +19,7 @@ module mStudy
   use mResult
   use mGeometry, only: buildGeometryMatrices, setGeometryKernel, getGeometryKernel
   use mGeometryCache, only: geomCacheStats
-  use mImpedance, only: internalImpedance, internalImpedanceLaplace
+  use mImpedance, only: internalImpedance, internalImpedanceLaplace, warmUpMachineConstants
   use mError, only: raiseError
   use mCtes, only: newl, PI, EPSILON0, MU0, ZERO_CPLX
   use mVerbosity
@@ -183,6 +183,21 @@ contains
   ! Per-segment internal (skin-effect) impedance
   ! =====================================================================
 
+  subroutine checkConductorMaterials(this)
+    !! Raise the "requires a tLinear conductor material" error up front, so a
+    !! threaded sweep never has to raise it from inside a parallel region.
+    class(tStudy), intent(in) :: this
+    integer(4) :: i
+
+    do i = 1, this%structure%getElectrodeCount()
+      select type (mat => this%structure%electrodes(i)%material)
+      type is (tLinear)
+      class default
+        call raiseError("tStudy%run: internal impedance requires a tLinear conductor material")
+      end select
+    end do
+  end subroutine checkConductorMaterials
+
   complex(8) function segmentInternalImpedance(this, i, omega) result(zint)
     !! Internal impedance of electrode `i`'s conductor material at `omega`
     !! (theory.md §4.3). Only `tLinear` conductor materials are supported;
@@ -258,18 +273,88 @@ contains
     !! current sources)
     real(8), intent(in), optional :: damping
     !! Damping c (1/s) of the complex frequency s = c + jω (default 0)
-    integer(4) :: nseg, i, j, k
     integer(4), allocatable :: sourcePos(:)
-    complex(8) :: zint, sLap
-    real(8) :: muAir, muSoil
-    integer(4) :: info
+    complex(8), allocatable :: lastSrc(:)
+    integer(4) :: k, info
     logical :: anyVoltage, laplace
 
     laplace = .false.
     if (present(damping)) laplace = damping /= 0.0d0
-    if (laplace) sLap = cmplx(damping, omega, kind=8)
 
     if (.not. this%prepared) call prepareStudy(this)
+
+    call resolveSources(this, "run", sourceNodeIds, sourceCurrents, sourceIsVoltage, sourcePos, anyVoltage)
+    if (.not. allocated(sourcePos)) return
+
+    call solveAtFrequency(this, this%mesh, omega, sourcePos, sourceCurrents, sourceIsVoltage, anyVoltage, &
+                          damping, laplace, lastSrc, info)
+    if (info /= 0) then
+      call raiseError("tStudy%run: linear solve failed (ZGESV INFO /= 0)")
+      return
+    end if
+    this%lastSourceCurrents = lastSrc
+  end subroutine run
+
+  subroutine resolveSources(this, who, sourceNodeIds, sourceCurrents, sourceIsVoltage, sourcePos, anyVoltage)
+    !! Validate the source arguments of `run`/`runSweep` and resolve the
+    !! node IDs to 1-based node indices. Leaves `sourcePos` unallocated after
+    !! raising an error. Done once, before any (possibly threaded) solve.
+    class(tStudy), intent(in) :: this
+    character(len=*), intent(in) :: who
+    character(len=*), intent(in) :: sourceNodeIds(:)
+    complex(8), intent(in) :: sourceCurrents(:)
+    logical, intent(in), optional :: sourceIsVoltage(:)
+    integer(4), allocatable, intent(out) :: sourcePos(:)
+    logical, intent(out) :: anyVoltage
+    integer(4), allocatable :: pos(:)
+    integer(4) :: k
+
+    anyVoltage = .false.
+    allocate(pos(size(sourceNodeIds)))
+    do k = 1, size(sourceNodeIds)
+      pos(k) = this%structure%findNodeIndex(trim(sourceNodeIds(k)))
+      if (pos(k) == 0) then
+        call raiseError("tStudy%" // who // ": source node '" // trim(sourceNodeIds(k)) // "' not found")
+        return
+      end if
+    end do
+
+    if (present(sourceIsVoltage)) then
+      if (size(sourceIsVoltage) /= size(sourceNodeIds)) then
+        call raiseError("tStudy%" // who // ": sourceIsVoltage must have one entry per source")
+        return
+      end if
+      anyVoltage = any(sourceIsVoltage)
+    end if
+    call move_alloc(pos, sourcePos)
+  end subroutine resolveSources
+
+  subroutine solveAtFrequency(this, mesh, omega, sourcePos, sourceValues, sourceIsVoltage, anyVoltage, &
+                              damping, laplace, lastSrc, info)
+    !! One frequency's fill + solve on the caller's `mesh` (ROADMAP Phase 10
+    !! item 4): the study is read-only here (geometry matrices, media), every
+    !! write goes to `mesh` and the returned `lastSrc`, so concurrent calls
+    !! with distinct meshes — one per thread in `runSweep` — are safe.
+    !! Contains the former body of `run`: medium constants, the `calcZSelf`/
+    !! `calcZMutual` fill (ADR 0009), `calcFreq2`, then the current- or
+    !! voltage-source solve (ADR 0010/0016). `info` is the LAPACK status.
+    class(tStudy), intent(in) :: this
+    type(tMesh), intent(inout) :: mesh
+    real(8), intent(in) :: omega
+    integer(4), intent(in) :: sourcePos(:)
+    complex(8), intent(in) :: sourceValues(:)
+    logical, intent(in), optional :: sourceIsVoltage(:)
+    logical, intent(in) :: anyVoltage
+    real(8), intent(in), optional :: damping
+    logical, intent(in) :: laplace
+    complex(8), allocatable, intent(out) :: lastSrc(:)
+    integer(4), intent(out) :: info
+    integer(4) :: nseg, i, j
+    complex(8) :: zint, sLap
+    real(8) :: muAir, muSoil
+
+    info = 0
+    if (laplace) sLap = cmplx(damping, omega, kind=8)
 
     muAir  = this%structure%air%mur * MU0
     muSoil = this%structure%soil%mur * MU0
@@ -278,12 +363,12 @@ contains
     ! whichever concrete model (tLinear, tPortelaSoil, ...) is stored, so any
     ! dispersive soil (ROADMAP Phase 4, ADR 0007) works here without a
     ! type-specific branch.
-    this%mesh%imageModel = this%imageModel
+    mesh%imageModel = this%imageModel
     if (laplace) then
-      call calcParamLaplace(this%mesh, sLap, muAir, this%structure%air%admittanceLaplace(sLap), &
+      call calcParamLaplace(mesh, sLap, muAir, this%structure%air%admittanceLaplace(sLap), &
                              muSoil, this%structure%soil%admittanceLaplace(sLap))
     else
-      call calcParamW(this%mesh, omega, muAir, this%structure%air%admittance(omega), &
+      call calcParamW(mesh, omega, muAir, this%structure%air%admittance(omega), &
                        muSoil, this%structure%soil%admittance(omega))
     end if
 
@@ -296,11 +381,11 @@ contains
           else
             zint = segmentInternalImpedance(this, i, omega)
           end if
-          call calcZSelf(this%mesh, i, this%geomPos(i), &
+          call calcZSelf(mesh, i, this%geomPos(i), &
             this%geomRbar(i,i), this%geomRbari(i,i), this%geomLength(i), &
             zint, this%geomG(i,i), this%geomGi(i,i), this%geomCosThetaI(i,i))
         else
-          call calcZMutual(this%mesh, i, j, this%geomPos(i), this%geomPos(j), &
+          call calcZMutual(mesh, i, j, this%geomPos(i), this%geomPos(j), &
             this%geomRbar(i,j), this%geomRbari(i,j), &
             this%geomLength(i), this%geomLength(j), &
             this%geomG(i,j), this%geomGi(i,j), &
@@ -309,38 +394,17 @@ contains
       end do
     end do
 
-    call calcFreq2(this%mesh)
-
-    allocate(sourcePos(size(sourceNodeIds)))
-    do k = 1, size(sourceNodeIds)
-      sourcePos(k) = this%structure%findNodeIndex(trim(sourceNodeIds(k)))
-      if (sourcePos(k) == 0) then
-        call raiseError("tStudy%run: source node '" // trim(sourceNodeIds(k)) // "' not found")
-        return
-      end if
-    end do
-
-    anyVoltage = .false.
-    if (present(sourceIsVoltage)) then
-      if (size(sourceIsVoltage) /= size(sourceNodeIds)) then
-        call raiseError("tStudy%run: sourceIsVoltage must have one entry per source")
-        return
-      end if
-      anyVoltage = any(sourceIsVoltage)
-    end if
+    call calcFreq2(mesh)
 
     if (anyVoltage) then
-      call solveWithVoltageSources(this, sourcePos, sourceCurrents, sourceIsVoltage)
+      call solveWithVoltageSources(mesh, sourcePos, sourceValues, sourceIsVoltage, lastSrc, info)
     else
-      info = injectSignal(this%mesh, size(sourceNodeIds), sourcePos, sourceCurrents)
-      if (info /= 0) then
-        call raiseError("tStudy%run: injectSignal failed (ZGESV INFO /= 0)")
-      end if
-      this%lastSourceCurrents = sourceCurrents
+      info = injectSignal(mesh, size(sourcePos), sourcePos, sourceValues)
+      lastSrc = sourceValues
     end if
-  end subroutine run
+  end subroutine solveAtFrequency
 
-  subroutine solveWithVoltageSources(this, sourcePos, sourceValues, isVoltage)
+  subroutine solveWithVoltageSources(mesh, sourcePos, sourceValues, isVoltage, lastSrc, info)
     !! Convert ideal voltage sources to equivalent current injections by
     !! unit-injection superposition (ADR 0016, implementing ADR 0010's
     !! study-layer conversion), then superpose the full solution.
@@ -353,23 +417,27 @@ contains
     !!     Σ_k I_k · Vunit(pos_j, k) = U_j   for every voltage source j,
     !! with the current-source injections I_k fixed by the caller. The
     !! full field solution is the same superposition applied to the unit
-    !! solutions, left in `this%mesh%voltage`/`current1`/`current2`
-    !! exactly as `injectSignal` would; the effective injections (fixed +
-    !! solved) are stored in `this%lastSourceCurrents`.
+    !! solutions, left in `mesh%voltage`/`current1`/`current2` exactly as
+    !! `injectSignal` would; the effective injections (fixed + solved) are
+    !! returned in `lastSrc`.
     !!
     !! `mesh%Zeq` holds LU factors afterwards, same as the plain-current
-    !! path — `run` reassembles it (`calcFreq2`) on every call.
-    class(tStudy), intent(inout) :: this
+    !! path — `solveAtFrequency` reassembles it (`calcFreq2`) on every call.
+    type(tMesh), intent(inout) :: mesh
     integer(4), intent(in) :: sourcePos(:)
     !! 1-based node indices of every source
     complex(8), intent(in) :: sourceValues(:)
     !! Current (A) or voltage (V) per source, per `isVoltage`
     logical, intent(in) :: isVoltage(:)
     !! Which entries of `sourceValues` are voltages
+    complex(8), allocatable, intent(out) :: lastSrc(:)
+    !! Effective injected currents per source
+    integer(4), intent(out) :: info
+    !! LAPACK status of the failing solve (0 = success)
     complex(8), allocatable :: unitSigs(:,:), vUnit(:,:), i1Unit(:,:), i2Unit(:,:)
     complex(8), allocatable :: a(:,:), rhs(:), ieff(:)
     integer(4), allocatable :: vIdx(:), ipiv(:)
-    integer(4) :: ns, nV, j, k, l, info
+    integer(4) :: ns, nV, j, k, l
 
     ns = size(sourcePos)
     allocate(unitSigs(ns, ns))
@@ -378,11 +446,8 @@ contains
       unitSigs(k, k) = cmplx(1.0d0, 0.0d0, kind=8)
     end do
 
-    info = injectSignals(this%mesh, ns, sourcePos, unitSigs, vUnit, i1Unit, i2Unit)
-    if (info /= 0) then
-      call raiseError("tStudy%run: unit-injection solve failed (ZGESV INFO /= 0)")
-      return
-    end if
+    info = injectSignals(mesh, ns, sourcePos, unitSigs, vUnit, i1Unit, i2Unit)
+    if (info /= 0) return
 
     nV = count(isVoltage)
     allocate(vIdx(nV))
@@ -407,10 +472,7 @@ contains
     end do
 
     call zgesv(nV, 1, a, nV, ipiv, rhs, nV, info)
-    if (info /= 0) then
-      call raiseError("tStudy%run: voltage-source constraint solve failed (ZGESV INFO /= 0)")
-      return
-    end if
+    if (info /= 0) return
 
     allocate(ieff(ns))
     do k = 1, ns
@@ -420,10 +482,10 @@ contains
       ieff(vIdx(j)) = rhs(j)
     end do
 
-    this%mesh%voltage  = matmul(vUnit,  ieff)
-    this%mesh%current1 = matmul(i1Unit, ieff)
-    this%mesh%current2 = matmul(i2Unit, ieff)
-    this%lastSourceCurrents = ieff
+    mesh%voltage  = matmul(vUnit,  ieff)
+    mesh%current1 = matmul(i1Unit, ieff)
+    mesh%current2 = matmul(i2Unit, ieff)
+    lastSrc = ieff
   end subroutine solveWithVoltageSources
 
   ! =====================================================================
@@ -482,7 +544,10 @@ contains
     !! Damping c (1/s) of the complex frequency s = c + jω (default 0)
     real(8), allocatable :: omegaAxis(:)
     character(256), allocatable :: nodeIds(:), electrodeIds(:)
-    integer(4) :: nf, nno, nseg, i, k
+    integer(4) :: nf, nno, nseg, i, k, info, solveInfo
+    integer(4), allocatable :: sourcePos(:)
+    complex(8), allocatable :: lastSrc(:)
+    logical :: anyVoltage, laplace
 
     if (.not. this%prepared) call prepareStudy(this)
 
@@ -508,19 +573,60 @@ contains
     if (allocated(this%sweepSourceCurrentsFreq)) deallocate(this%sweepSourceCurrentsFreq)
     allocate(this%sweepSourceCurrentsFreq(size(sourceNodeIds), nf))
 
-    do k = 1, nf
-      if (verbosityLevel() .eq. VERB_VERBOSE) write(*, '("f = ",EN0.1E2," Hz")') freqHz(k)
-      call this%run(omegaAxis(k), sourceNodeIds, sourceCurrents, sourceIsVoltage, damping)
+    call resolveSources(this, "runSweep", sourceNodeIds, sourceCurrents, sourceIsVoltage, sourcePos, anyVoltage)
+    if (.not. allocated(sourcePos)) return
+    laplace = .false.
+    if (present(damping)) laplace = damping /= 0.0d0
+    call checkConductorMaterials(this)
 
-      do i = 1, nno
-        call this%voltageResults%set(i, k, this%mesh%voltage(i))
+    ! Frequencies are independent solves of the same read-only geometry
+    ! (ROADMAP Phase 10 item 4, P6), so the loop parallelises over k with one
+    ! thread-private mesh each — no shared mutable state: `this` is only read
+    ! inside `solveAtFrequency`, the result arrays are written at disjoint
+    ! columns k, and the geometry factors were built before the loop. The
+    ! quadrature kernel needs no cache or module state at this point
+    ! (`geometryFactor1D` is re-entrant and runs only in `prepareStudy`).
+    ! Each frequency runs the identical serial operations, so results are
+    ! bit-identical for any thread count. Without -fopenmp the directives are
+    ! comments and the loop is the former serial one.
+    solveInfo = 0
+    call warmUpMachineConstants()
+    !$omp parallel default(shared) private(k, lastSrc, info)
+    block
+      type(tMesh) :: meshLocal
+
+      meshLocal = this%mesh
+      !$omp do schedule(dynamic)
+      do k = 1, nf
+        if (verbosityLevel() .eq. VERB_VERBOSE) write(*, '("f = ",EN0.1E2," Hz")') freqHz(k)
+        call solveAtFrequency(this, meshLocal, omegaAxis(k), sourcePos, sourceCurrents, sourceIsVoltage, &
+                              anyVoltage, damping, laplace, lastSrc, info)
+        if (info /= 0) then
+          !$omp critical (tupaSolveInfo)
+          solveInfo = info
+          !$omp end critical (tupaSolveInfo)
+          cycle
+        end if
+
+        do i = 1, nno
+          call this%voltageResults%set(i, k, meshLocal%voltage(i))
+        end do
+        do i = 1, nseg
+          call this%longCurrentResults%set(i, k, meshLocal%current1(i))
+          call this%transCurrentResults%set(i, k, meshLocal%current2(i))
+        end do
+        this%sweepSourceCurrentsFreq(:, k) = lastSrc
       end do
-      do i = 1, nseg
-        call this%longCurrentResults%set(i, k, this%mesh%current1(i))
-        call this%transCurrentResults%set(i, k, this%mesh%current2(i))
-      end do
-      this%sweepSourceCurrentsFreq(:, k) = this%lastSourceCurrents
-    end do
+      !$omp end do
+    end block
+    !$omp end parallel
+    if (solveInfo /= 0) then
+      call raiseError("tStudy%runSweep: linear solve failed (ZGESV INFO /= 0)")
+      return
+    end if
+    ! Leave the study's own mesh and last-source state as the serial loop
+    ! did: those of the final frequency (for callers reading `this%mesh`).
+    call this%run(omegaAxis(nf), sourceNodeIds, sourceCurrents, sourceIsVoltage, damping)
 
     this%sweepFreqHz = freqHz
     this%sweepDamping = 0.0d0

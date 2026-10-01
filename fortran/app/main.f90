@@ -7,7 +7,7 @@ program main
   !!
   !! **Usage:**
   !!   fpm run -- [-v|--verbose] [-q|--quiet] [--epsrel <value>] [--kernel single|double]
-  !!              [--image-model frequency-dependent|ideal] [--no-cache] <study.json>
+  !!              [--image-model frequency-dependent|ideal] [--threads <n>] [--no-cache] <study.json>
   !!   ./tupa [same options] <study.json>
   !!
   !! **Input:**
@@ -24,6 +24,8 @@ program main
   !! - `--image-model frequency-dependent|ideal` — image reflection
   !!   coefficient: Γ(ω) (default, Phase 10 item 2) or the ideal ±1 limit; a
   !!   study's `numerics.imageModel` overrides it
+  !! - `--threads <n>` — threads for the frequency loop (ROADMAP Phase 10
+  !!   item 4); needs a `-fopenmp` build (`build.sh`), default `OMP_NUM_THREADS`
   !! - `--no-cache` — disable the geometry-factor quadrature memo table
   !!   (`mGeometryCache`); every congruent segment pair is re-integrated
   !!
@@ -57,6 +59,7 @@ program main
   !!     ]
   !!   }
   !!   ```
+  !$ use omp_lib
   use tupa, only: runFromFile
   use mError, only: raiseError
   use mVerbosity, only: setVerbosity, VERB_QUIET, VERB_VERBOSE
@@ -72,6 +75,10 @@ program main
   !! Status flags for argument retrieval/parsing, loop index, argument count
   real(8) :: epsrel
   !! Parsed --epsrel value
+  integer :: nThreads
+  !! Parsed --threads value
+  logical :: threadsGiven = .false.
+  !! Whether --threads was passed
 
   filename = ""
   nargs = command_argument_count()
@@ -119,6 +126,14 @@ program main
       case default
         call raiseError("--image-model: invalid value '" // trim(arg) // "' (expected frequency-dependent or ideal)")
       end select
+    case ("--threads")
+      i = i + 1
+      if (i > nargs) call raiseError("--threads requires a value, e.g. --threads 4")
+      call get_command_argument(i, arg, status=ios)
+      read(arg, *, iostat=iosVal) nThreads
+      if (ios /= 0 .or. iosVal /= 0 .or. nThreads < 1) &
+        call raiseError("--threads: invalid value '" // trim(arg) // "' (must be a positive integer)")
+      threadsGiven = .true.
     case ("--no-cache")
       call geomCacheSetEnabled(.false.)
     case default
@@ -129,8 +144,14 @@ program main
 
   if (len_trim(filename) == 0) then
     print *, "Usage: tupa [-v|--verbose] [-q|--quiet] [--epsrel <value>] [--kernel single|double] "// &
-      "[--image-model frequency-dependent|ideal] [--no-cache] <study.json>"
+      "[--image-model frequency-dependent|ideal] [--threads <n>] [--no-cache] <study.json>"
     call raiseError("missing study file argument")
+  end if
+
+  if (threadsGiven) then
+    !$ call omp_set_num_threads(nThreads)
+    !$ threadsGiven = .false.
+    if (threadsGiven) print *, "tupa: --threads ignored (built without OpenMP; the frequency loop runs serially)"
   end if
 
   call runFromFile(trim(filename))

@@ -100,7 +100,7 @@ module mImpedance
   !! Indices in xgk/wgk that correspond to the 7-point Gauss rule
 
   public :: geometryFactor2D, geometryFactor1D, inverseDistanceIntegrand, lowerLimit, upperLimit, TWODQ, internalImpedance, internalImpedanceLaplace
-  public :: setQuadEpsRel, getQuadEpsRel
+  public :: setQuadEpsRel, getQuadEpsRel, warmUpMachineConstants
 
 contains
 
@@ -125,6 +125,24 @@ contains
   real(8) function getQuadEpsRel() result(eps)
     eps = quadEpsRel
   end function getQuadEpsRel
+
+  subroutine warmUpMachineConstants()
+    !! Initialise SLATEC's lazily-filled machine-constant table before any
+    !! threaded region. `D1MACH` (the fork's version, via LAPACK `DLAMCH`)
+    !! sets its `IFLAG` *before* it fills `DMACH`, so two threads whose first
+    !! ZBESI calls overlap can read an unfilled table (zeros), and ZBESI then
+    !! fails with IERR=2. One serial call per process closes the window
+    !! (ROADMAP Phase 10 item 4). Idempotent and cheap.
+    interface
+      real(8) function d1mach(i)
+        integer, intent(in) :: i
+      end function d1mach
+    end interface
+    real(8) :: dummy
+
+    dummy = d1mach(1) + d1mach(2) + d1mach(3) + d1mach(4) + d1mach(5)
+    if (dummy /= dummy) call raiseError("warmUpMachineConstants: D1MACH returned NaN")
+  end subroutine warmUpMachineConstants
 
   ! =====================================================================
   ! Internal (skin-effect) impedance of a solid cylindrical conductor

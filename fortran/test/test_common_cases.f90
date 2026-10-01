@@ -111,6 +111,10 @@ program test_common_cases
   call compareTransientCase("portela1997_transient_multi")
   call compareTransientCase("portela1997_transient_nlt")
 
+  ! ROADMAP Phase 10 item 6: the 32x32 m grid (185 nodes, 200 electrodes) end
+  ! to end, harmonic sweep and scan-fed transient, through the CLI path
+  call compareMeshGridCase()
+
   call test_summary()
 
 contains
@@ -151,6 +155,40 @@ contains
       end if
     end block
   end subroutine compareCase
+
+  subroutine compareMeshGridCase()
+    !! Run `../common/portelaMesh.json` through `runFromFile` — which honours
+    !! its `outputs` filter and writes both result sets — and diff the
+    !! harmonic CSV against `portelaMesh_expected.csv` and the transient CSV
+    !! against `portelaMesh_transient_expected.csv`.
+    character(len=*), parameter :: stem = "portelaMesh"
+    logical :: exists
+    integer :: u
+    character(len=64), parameter :: outFiles(4) = [character(len=64) :: &
+      "portelaMesh_results.csv", "portelaMesh_results.json", &
+      "portelaMesh_transient_results.csv", "portelaMesh_transient_results.json"]
+    integer :: k
+
+    call test_init("Regression: portelaMesh (32x32 m grid) harmonic sweep and scan-fed transient")
+    call setVerbosity(VERB_QUIET)
+    call runFromFile("../common/" // stem // ".json")
+    call setVerbosity(VERB_NORMAL)
+
+    call test_ok("grid harmonic CSV matches expected fixture within tolerance", &
+                 csvMatches("portelaMesh_results.csv", "../common/portelaMesh_expected.csv", 1.0d-6), &
+                 "numeric drift between a fresh run and the checked-in fixture")
+    call test_ok("grid transient CSV matches expected fixture within tolerance", &
+                 transientCsvMatches("portelaMesh_transient_results.csv", "../common/portelaMesh_transient_expected.csv", 1.0d-6), &
+                 "numeric drift between a fresh run and the checked-in fixture")
+
+    do k = 1, size(outFiles)
+      inquire(file=trim(outFiles(k)), exist=exists)
+      if (exists) then
+        open(newunit=u, file=trim(outFiles(k)), status="old")
+        close(u, status="delete")
+      end if
+    end do
+  end subroutine compareMeshGridCase
 
   subroutine compareTransientCase(caseName)
     !! Run `../common/<caseName>.json` through the CLI entry point
