@@ -163,12 +163,35 @@ end
 @testset "every common/*.json loads, validates and assembles (test_validation)" begin
     cases = filter(endswith(".json"), readdir(COMMON))
     @test length(cases) >= 25
-    for f in cases
+    for f in filter(f -> replace(f, ".json" => "") in PHASE9_LAG, cases)
+        # Phase 9 cases: the loader must refuse them explicitly (lag)
+        err = try
+            load_study(joinpath(COMMON, f)); nothing
+        catch e
+            e
+        end
+        @test err isa TupaError && occursin("ROADMAP Phase 9", err.msg)
+    end
+    for f in filter(f -> replace(f, ".json" => "") in PHASE10_LAG_CASES, cases)
+        # Phase 10 cases: the loader must refuse the `numerics` block explicitly (lag)
+        err = try
+            load_study(joinpath(COMMON, f)); nothing
+        catch e
+            e
+        end
+        @test err isa TupaError && occursin("ROADMAP Phase 10", err.msg)
+    end
+    for f in filter(f -> !(replace(f, ".json" => "") in PHASE9_LAG) &&
+                         !(replace(f, ".json" => "") in PHASE10_LAG_CASES), cases)
         c = validate_study_references!(load_study(joinpath(COMMON, f)))
         @test !isempty(c.study.structure.electrodes)
     end
-    # common/README: 185 nodes, 200 electrodes (pinned in test_mesh_element.f90)
-    st = validate_study_references!(load_study(joinpath(COMMON, "portelaMesh.json"))).study.structure
+    # common/README: 185 nodes, 200 electrodes (pinned in test_mesh_element.f90). The
+    # file's scan-fed transient (Phase 9 `transferFunction`) is not ported: load the
+    # structure from the text without that field.
+    mesh_text = replace(read(joinpath(COMMON, "portelaMesh.json"), String),
+                        r"\"transferFunction\"\s*:\s*\"interpolated\"\s*,\s*" => "")
+    st = validate_study_references!(load_study_string(mesh_text)).study.structure
     @test (length(st.nodes), length(st.electrodes)) == (185, 200)
 end
 

@@ -7,14 +7,25 @@ module mGeometry
   !! This module has no dependency on the object model (`tStructure`,
   !! `tElectrode`) — it operates on plain segment endpoints and radii, so it
   !! can be tested and reasoned about in isolation.
-  use mImpedance, only: geometryFactor2D
+  use mImpedance, only: geometryFactor1D, geometryFactor2D
+  use mError, only: raiseError
   use mGeometryCache, only: geomCacheKey, geomCacheGet, geomCachePut, &
                             geomCacheClear, geomCacheIsEnabled
   implicit none
   private
 
   public :: segmentVector, selfGeometryFactor, mutualGeometryFactor, &
-            directionCosine, imageVector, meanDistance, buildGeometryMatrices
+            directionCosine, imageVector, meanDistance, buildGeometryMatrices, &
+            setGeometryKernel, getGeometryKernel, &
+            GEOM_KERNEL_SINGLE, GEOM_KERNEL_DOUBLE
+
+  integer, parameter :: GEOM_KERNEL_SINGLE = 1
+  !! mHEM single-integral kernel (theory.md §4.2): the default since ROADMAP
+  !! Phase 10 item 1.
+  integer, parameter :: GEOM_KERNEL_DOUBLE = 2
+  !! Nested 2-D Gauss-Kronrod quadrature — the pre-Phase-10 production path,
+  !! kept as the test oracle and selectable (`numerics.kernel: "double"`).
+  integer, save :: geometryKernel = GEOM_KERNEL_SINGLE
 
   real(8), parameter :: PARALLEL_TOL = 1.0d-20
   !! Threshold on |va x vb| below which two unit direction vectors are
@@ -29,6 +40,27 @@ module mGeometry
   !! `NUMP` global (`inicvars.m`).
 
 contains
+
+  ! =====================================================================
+  ! Quadrature kernel selection (ROADMAP Phase 10 item 1)
+  ! =====================================================================
+
+  subroutine setGeometryKernel(kernel)
+    !! Select the quadrature used for non-closed-form pairs. Clears the
+    !! geometry-factor cache: cached values embed the kernel that made them.
+    integer, intent(in) :: kernel
+
+    if (kernel /= GEOM_KERNEL_SINGLE .and. kernel /= GEOM_KERNEL_DOUBLE) then
+      call raiseError("setGeometryKernel: unknown kernel code")
+      return
+    end if
+    geometryKernel = kernel
+    call geomCacheClear()
+  end subroutine setGeometryKernel
+
+  integer function getGeometryKernel() result(kernel)
+    kernel = geometryKernel
+  end function getGeometryKernel
 
   ! =====================================================================
   ! Segment decomposition
@@ -86,6 +118,10 @@ contains
     !! non-parallel pairs, or if the closed form hits a degenerate
     !! (NaN/Inf) edge case, exactly as the reference does.
     !!
+    !! The quadrature is the mHEM single-integral kernel by default
+    !! (`geometryFactor1D`, ROADMAP Phase 10 item 1) or the nested 2-D
+    !! quadrature when `setGeometryKernel(GEOM_KERNEL_DOUBLE)` is in force.
+    !!
     !! The quadrature path is memoised through `mGeometryCache`: congruent
     !! pairs (same lengths and cross endpoint distances — ubiquitous in
     !! regular meshes) reuse the first pair's quadrature result instead of
@@ -121,7 +157,11 @@ contains
       key = geomCacheKey(a1, a2, la, b1, b2, lb)
       if (geomCacheGet(key, g)) return
     end if
-    call geometryFactor2D(a1, va, la, b1, vb, lb, g)
+    if (geometryKernel == GEOM_KERNEL_SINGLE) then
+      call geometryFactor1D(a1, va, la, b1, vb, lb, g)
+    else
+      call geometryFactor2D(a1, va, la, b1, vb, lb, g)
+    end if
     if (useCache) call geomCachePut(key, g)
   end subroutine mutualGeometryFactor
 

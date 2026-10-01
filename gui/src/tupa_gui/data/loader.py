@@ -61,7 +61,9 @@ def load_study(path: str | Path) -> Study:
                     from_node=e["from"],
                     to_node=e["to"],
                     radius=e["radius"],
-                    segments=e["segments"],
+                    # optional since ADR 0024 (a `numerics.maxSegmentLength` target
+                    # may set the count; the view does not expand subdivisions)
+                    segments=e.get("segments", 1),
                     material=e["material"],
                 )
             )
@@ -75,7 +77,7 @@ def load_study(path: str | Path) -> Study:
                     rows_x=e["rowsX"],
                     rows_y=e["rowsY"],
                     radius=e["radius"],
-                    segments=e["segments"],
+                    segments=e.get("segments", 1),
                     material=e["material"],
                 )
             )

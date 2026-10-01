@@ -16,3 +16,4 @@ julia/Manifest.toml
 docs/figures/*.pdf
 benchmarks/cross-impl/results/
 __pycache__/
+benchmarks/tags-xval/tags_hem

@@ -24,7 +24,8 @@ other documents and code comments cite them as "ADR 0017 finding N"
    (equal-permeability Fresnel form, applied to both `Z_t` and `Z_ℓ` image
    parcels) and keeps ideal images behind a `SOLO_IDEAL` switch; the C++
    port kept only the ideal limits. Feeds proposal P2 (ROADMAP §7;
-   theory.md §5 updated accordingly).
+   theory.md §5 updated accordingly). *Implemented 2026-10-01 (Phase 10
+   item 2, ADR 0024 §2).*
 2. **Self geometry factor bug lineage.** The legacy expression
    `r − h + l·log((1 + h)/r)`, `h = hypot(l, r)`, originates in the Matlab
    and was ported verbatim to the C++: it is half the correct `g_self`

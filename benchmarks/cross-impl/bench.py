@@ -118,14 +118,22 @@ def prepare_julia(args) -> list[str] | None:
 # Running
 # ----------------------------------------------------------------------------
 
+FORTRAN_THREADS = "1"  # set from --fortran-threads; serial by default (ROADMAP Phase 10 item 4)
+
+
 def run_once(impl: str, cmd: list[str], case: str, outdir: Path) -> dict:
     outdir.mkdir(parents=True, exist_ok=True)
     if impl == "julia":
         full = cmd + [str(outdir), case]
     else:
         full = cmd + [str(COMMON / f"{case}.json")]
+    env = dict(os.environ)
+    if impl == "fortran":
+        # the Fortran frequency sweep is threaded in `-fopenmp` builds: time it
+        # serially unless asked otherwise, as the Rust and Julia drivers are
+        env["OMP_NUM_THREADS"] = FORTRAN_THREADS
     t0 = time.perf_counter()
-    p = subprocess.run(full, cwd=outdir, capture_output=True, text=True)
+    p = subprocess.run(full, cwd=outdir, capture_output=True, text=True, env=env)
     wall = time.perf_counter() - t0
     row = {"impl": impl, "case": case, "wall_s": wall, "ok": p.returncode == 0,
            "load_s": "", "cold_s": "", "warm_s": ""}
@@ -367,7 +375,11 @@ def main() -> None:
     ap.add_argument("--plots-only", action="store_true", help="re-plot an existing --results directory")
     ap.add_argument("--rust-bin"); ap.add_argument("--fortran-bin"); ap.add_argument("--julia")
     ap.add_argument("--skip-fortran-build", action="store_true")
+    ap.add_argument("--fortran-threads", default="1",
+                    help="OMP_NUM_THREADS for the Fortran runs (default 1: the sweep is threaded since Phase 10)")
     args = ap.parse_args()
+    global FORTRAN_THREADS
+    FORTRAN_THREADS = str(args.fortran_threads)
 
     if args.plots_only:
         if not args.results:

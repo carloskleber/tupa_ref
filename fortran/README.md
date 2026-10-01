@@ -55,6 +55,22 @@ fpm test
 The SLATEC checkout that `build.sh` clones into `fortran/slatec/` is the
 canonical copy (author's fork) and may be fine-tuned in place.
 
+On a toolchain where the plain command does not build or link (verified
+2026-10-01 with gfortran 13, fpm 0.12, Ubuntu, shared LAPACK), the tests need
+long source lines allowed, OpenMP for the threaded sweep, and LAPACK kept on
+the link line after SLATEC (`D1MACH` calls `DLAMCH`):
+
+```bash
+export LIBRARY_PATH=$HOME/.local/lib:$LIBRARY_PATH
+fpm test --profile release \
+  --flag "-ffree-line-length-none -fno-range-check -fopenmp" \
+  --link-flag "-Wl,--no-as-needed -llapack -lblas"
+```
+
+All 17 test programs pass under it (2026-10-01). `test_parallel` checks that a
+sweep is bit-identical for 1 and N threads; run the suite a few times with
+`OMP_NUM_THREADS=4` after touching `runSweep` or anything it calls.
+
 **Test runtimes**: `test_mesh` and `test_assemble` finish in seconds in any
 profile. `test_geometry` and `test_impedance` are quadrature-heavy and only
 practical under `--profile release` — in the default debug profile they run
@@ -63,9 +79,13 @@ no hosted CI; a local `fpm build && fpm test` is the merge gate.
 
 ## Profiling
 
-The hot path is almost always the adaptive quadrature (`TWODQ` /
-`geometryFactor2D` in `Impedance.f90`) behind `mutualGeometryFactor` — see
-the `test_geometry`/`test_impedance` runtime note above. To profile:
+Since ROADMAP Phase 10 the geometry quadrature is the single-integral
+`geometryFactor1D` in `Impedance.f90` (8× cheaper than the nested 2-D
+`TWODQ` path, which remains the oracle and runs under `--kernel double`), and
+for a real-sized study the per-frequency `ZGESV` dominates: on the 585-unknown
+`portelaMesh` the LU is ≈ 100 % of a frequency. Profile what you actually run —
+the `test_geometry`/`test_impedance` runtime note above is about the 2-D
+oracle. To profile:
 
 ```bash
 export LIBRARY_PATH=$HOME/.local/lib:$LIBRARY_PATH
@@ -114,12 +134,23 @@ the study path, in any order, e.g. `fpm run -- -q ../common/portela1997.json`.
 (e.g. an unrecognised element type) still print regardless of verbosity
 (`mVerbosity`, [ARCHITECTURE.md](../docs/ARCHITECTURE.md) §5).
 
-Two flags control the geometry-factor quadrature, the dominant cost of the
-assembly phase:
+These flags control the numerics (a study's own `numerics` block, where it
+states one, takes precedence over the flag; [ADR 0024](../docs/adr/0024-phase10-numerics.md)):
 
+* `--kernel single|double` selects the geometry-factor quadrature: the mHEM
+  single integral (default, `mImpedance%geometryFactor1D`) or the nested
+  2-D quadrature (`geometryFactor2D`, the test oracle).
+* `--image-model frequency-dependent|ideal` selects the image reflection
+  coefficient: `Γ(ω)` (default) or the ideal ±1 limit (the pre-Phase-10
+  behaviour).
+* `--threads <n>` sets the threads of the frequency loop (needs a
+  `-fopenmp` build such as `build.sh`'s; otherwise `OMP_NUM_THREADS`). Results
+  do not depend on the count. With a threaded BLAS use one BLAS thread per
+  solve (`OPENBLAS_NUM_THREADS=1`).
 * `--epsrel <value>` sets the relative-error factor of the adaptive
-  Gauss–Kronrod quadrature (`mImpedance%geometryFactor2D`); default
-  `1.0e-6`. Looser values (e.g. `--epsrel 1e-4`) trade accuracy for speed.
+  Gauss–Kronrod quadrature (`mImpedance%geometryFactor1D`/`geometryFactor2D`);
+  default `1.0e-6`. Looser values (e.g. `--epsrel 1e-4`) trade accuracy for
+  speed.
 * `--no-cache` disables the quadrature memo table (`mGeometryCache`),
   which otherwise reuses the geometry factor of congruent segment pairs
   (same segment lengths and cross endpoint distances, e.g. translated

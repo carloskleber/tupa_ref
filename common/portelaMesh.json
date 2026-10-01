@@ -1,5 +1,5 @@
 {
-  "title": "Portela grounding mesh (32x32 m, 8 m pitch, corner at [0,-32,-1])",
+  "title": "Portela grounding mesh (32x32 m, 8 m pitch, corner at [0,-32,-1]) - harmonic sweep and scan-fed transient",
   "soil": {
     "conductivity": 0.001,
     "permittivity": 10.0,
@@ -7,13 +7,22 @@
   },
   "nodes": [],
   "materials": [
-    { "id": "copper", "epsilonr": 1.0, "mur": 1.0, "sigma": 5.96e7 }
+    {
+      "id": "copper",
+      "epsilonr": 1.0,
+      "mur": 1.0,
+      "sigma": 59600000.0
+    }
   ],
   "elements": [
     {
       "type": "mesh",
       "id": "m",
-      "position": [0.0, -32.0, -1.0],
+      "position": [
+        0.0,
+        -32.0,
+        -1.0
+      ],
       "lengthX": 32.0,
       "lengthY": 32.0,
       "rowsX": 5,
@@ -23,10 +32,35 @@
       "material": "copper"
     }
   ],
-  "sources": [ { "node": "m-0000", "current": { "re": 1.0, "im": 0.0 } } ],
-  "frequencies": { "min": 100.0, "max": 1.0e7, "pointsPerDecade": 8 },
+  "sources": [
+    {
+      "node": "m-0000",
+      "current": {
+        "re": 1.0,
+        "im": 0.0
+      }
+    }
+  ],
+  "frequencies": {
+    "min": 100.0,
+    "max": 10000000.0,
+    "pointsPerDecade": 4
+  },
   "outputs": {
-    "quantities": ["voltage", "i1", "i2", "inputImpedance"]
+    "nodes": [
+      "m-0000",
+      "m-0202",
+      "m-0404"
+    ],
+    "electrodes": [
+      "m-0000-0001_e1"
+    ],
+    "quantities": [
+      "voltage",
+      "i1",
+      "i2",
+      "inputImpedance"
+    ]
   },
   "signal": {
     "waveform": "doubleExp",
@@ -34,9 +68,17 @@
     "front": "f1_2_50",
     "jones": false,
     "sourceNode": "m-0000",
-    "observeNodes": ["m-0000", "m-0001", "m-0101"],
-    "observeElectrodes": ["m-0000-0001_e1"],
-    "nyquistHz": 1.0e7,
-    "fftPoints": 4096
+    "observeNodes": [
+      "m-0000",
+      "m-0202",
+      "m-0404"
+    ],
+    "observeElectrodes": [
+      "m-0000-0001_e1"
+    ],
+    "nyquistHz": 500000.0,
+    "fftPoints": 512,
+    "transferFunction": "interpolated",
+    "freqZeroHz": 100.0
   }
 }

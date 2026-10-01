@@ -99,6 +99,14 @@ function load_study_string(text::AbstractString)
     end
     root isa AbstractDict || raise_error("JSON error: the case file must be a JSON object")
 
+    # ROADMAP Phase 10 `numerics` block (ADR 0024: kernel, imageModel,
+    # maxSegmentLength) that this port does not implement yet: rejected rather
+    # than silently ignored. Without the block the Julia port still computes
+    # the pre-Phase-10 numerics (2-D kernel, ideal images) — see julia/README.md.
+    field(root, "numerics") === nothing ||
+        raise_error("mTupa: numerics (ROADMAP Phase 10) is not implemented in the Julia port yet " *
+                    "(follow-along lag, see julia/README.md)")
+
     soil_spec = field(root, "soil")
     soil_type = json_str(soil_spec, "type", "linear")
     soil = if soil_type == "linear"
@@ -178,7 +186,18 @@ function load_source(s)
     return Source(node, 0.0im, false)
 end
 
+# ROADMAP Phase 9 signal fields (ADR 0015 amendment 2026-09-30) that this
+# port does not implement yet: rejected rather than silently ignored, so a
+# case never runs as a plain-FFT transient by mistake (julia/README.md
+# conformance table).
+const PHASE9_SIGNAL_FIELDS = ("sources", "window", "transform", "nltDamping", "transferFunction")
+
 function load_signal(s)
+    for key in PHASE9_SIGNAL_FIELDS
+        field(s, key) === nothing ||
+            raise_error("mTupa: signal.$key (ROADMAP Phase 9) is not implemented in the Julia port yet " *
+                        "(follow-along lag, see julia/README.md)")
+    end
     imax = field(s, "imax") === nothing ? nothing : json_real(s, "imax")
     wf = json_str(s, "waveform")
     signal = if wf == "heidler"

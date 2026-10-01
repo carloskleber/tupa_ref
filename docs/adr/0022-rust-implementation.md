@@ -128,3 +128,19 @@ see "Follow-ups".
 - Phase 8 item 9: `docs/validation/fortran-vs-rust.md` (needs Fortran
   outputs for the non-golden cases).
 - Phase 10 items 1–2 carry Rust counterparts (follow-along rule, item 10).
+  **Done 2026-10-01** (with the `numerics` block, the optional `segments` and
+  the item 6 fixtures): see "Update 2026-10-01" below.
+
+
+## Update 2026-10-01 (ROADMAP Phase 10)
+
+Fortran was run in the session that implemented Phase 10 (gfortran 13, fpm
+0.12): the positional `test_common_cases` comparison did fail on
+`grid_expected.csv`, as suspected, and the fixture was **regenerated** — it
+is now in declaration order, so the keyed comparison is no longer needed for
+it (it is kept). All fixtures were regenerated once for the Phase 10
+defaults; the Rust port implements the single-integral kernel, the `Γ(ω)`
+images and the `numerics` block and matches every fixture (worst 1.3e-10
+harmonic, 1.5e-8 NLT), including the two new ones (`portela1997_ideal`,
+`portelaMesh`). Phase 8 item 1 (the other widened fixtures, the
+structure-dump format, the conformance tag) is still open.

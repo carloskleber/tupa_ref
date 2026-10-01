@@ -55,8 +55,8 @@ entries.
   (theory.md §7).
 - **Image method** — the air-soil interface ($z = 0$) represented by mirror
   segments; ideal limits give the ± sign rules of theory.md §5 (ADR 0005);
-  the frequency-dependent coefficient $\Gamma(\omega)$ is the planned
-  refinement (ROADMAP P2).
+  the frequency-dependent coefficient $\Gamma(\omega)$ is the default
+  since ROADMAP Phase 10 item 2 (ADR 0024), the ideal limits selectable.
 - **Internal impedance $Z_{int}$** — per-segment skin-effect impedance of
   the conductor itself, from the $I_0/I_1$ Bessel ratio (theory.md §4.3).
 - **Dispersive soil** — soil whose σ and ε vary with frequency; modelled by
@@ -72,7 +72,8 @@ entries.
   ROADMAP Phase 14 item 2).
 - **NLT (Numerical Laplace Transform)** — time-domain route solving at
   damped complex frequencies $s = c + j\omega$ with data windows [17];
-  planned replacement for the plain FFT drive (ROADMAP P4).
+  opt-in alternative to the plain FFT drive (`signal.transform: "nlt"`,
+  ROADMAP P4 / Phase 9 item 5, theory.md §8).
 - **Thin-wire approximation** — conductors represented by axial line
   sources with field points on the surface; requires segment length large
   vs radius and small vs wavelength (theory.md §4.1).
@@ -116,7 +117,7 @@ identifier(s) that hold them. Types live in `fortran/src/`: `tMesh`
 | --- | --- | --- | --- |
 | $c_E$ | Electric constant, $1/(4\pi(\sigma+j\omega\varepsilon))$ | §5 | `tMesh%cEAir`, `tMesh%cESoil` |
 | $c_M$ | Magnetic constant, $j\omega\mu/4\pi$ | §5 | `tMesh%cMAir`, `tMesh%cMSoil` |
-| $\Gamma_t$, $\Gamma_\ell$ | Frequency-dependent reflection coefficients | §5 | not implemented; ideal $\pm1$ limits are hardcoded in `mMesh%calcZSelf`/`calcZMutual` (ROADMAP P2) |
+| $\Gamma_t$, $\Gamma_\ell$ | Frequency-dependent reflection coefficients | §5 | `tMesh%gammaAir`, `tMesh%gammaSoil` (`calcImageCoefficients`; applied to both image parcels, ideal $\pm1$ selectable — ROADMAP P2, ADR 0024) |
 | $g_i$, $\bar R_i$ | Image geometry factor / mean distance | §5 | `tStudy%geomGi`, `tStudy%geomRbari` |
 | $\cos\theta_i$ | Direction cosine against the image | §5 | `tStudy%geomCosThetaI` |
 

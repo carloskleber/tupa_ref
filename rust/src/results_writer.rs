@@ -209,21 +209,43 @@ pub fn results_json(
     Ok(out)
 }
 
-/// Transient results as CSV (`time_s,quantity,id,value`).
+/// Transient results as CSV (`time_s,quantity,id,value`). With several
+/// sources, one `injectedCurrent` row per distinct source node (first-appearance
+/// order) holding the net current injected there (ADR 0015 amendment
+/// 2026-09-30).
 pub fn transient_csv(
-    source_node: &str,
+    source_nodes: &[String],
     observe_nodes: &[String],
     observe_electrodes: &[String],
     r: &TransientResult,
 ) -> String {
+    let first_of: Vec<usize> = (0..source_nodes.len())
+        .map(|i| {
+            (0..i)
+                .find(|&j| source_nodes[j] == source_nodes[i])
+                .unwrap_or(i)
+        })
+        .collect();
     let mut out = String::from("time_s,quantity,id,value\n");
     for k in 0..r.t.len() {
         let t = fmt_real(r.t[k]);
-        let _ = writeln!(
-            out,
-            "{t},injectedCurrent,{source_node},{}",
-            fmt_real(r.injected_current[k])
-        );
+        for i in 0..source_nodes.len() {
+            if first_of[i] != i {
+                continue;
+            }
+            let mut net = r.injected_currents[i][k];
+            for (j, &f) in first_of.iter().enumerate().skip(i + 1) {
+                if f == i {
+                    net += r.injected_currents[j][k];
+                }
+            }
+            let _ = writeln!(
+                out,
+                "{t},injectedCurrent,{},{}",
+                source_nodes[i],
+                fmt_real(net)
+            );
+        }
         for (i, id) in observe_nodes.iter().enumerate() {
             let _ = writeln!(out, "{t},voltage,{id},{}", fmt_real(r.node_responses[i][k]));
         }
@@ -242,10 +264,12 @@ fn join_real(v: &[f64]) -> String {
         .join(", ")
 }
 
-/// Transient results as JSON (ADR 0015).
+/// Transient results as JSON (ADR 0015). `sourceNode`/`injectedCurrent` are
+/// the first source; `sources` lists every source when there is more than one
+/// (ADR 0015 amendment 2026-09-30).
 pub fn transient_json(
     title: &str,
-    source_node: &str,
+    source_nodes: &[String],
     observe_nodes: &[String],
     observe_electrodes: &[String],
     r: &TransientResult,
@@ -253,13 +277,33 @@ pub fn transient_json(
     let mut out = String::new();
     out.push_str("{\n");
     let _ = writeln!(out, "  \"title\": \"{}\",", json_escape(title));
-    let _ = writeln!(out, "  \"sourceNode\": \"{}\",", json_escape(source_node));
+    let _ = writeln!(
+        out,
+        "  \"sourceNode\": \"{}\",",
+        json_escape(&source_nodes[0])
+    );
     let _ = writeln!(out, "  \"time\": [{}],", join_real(&r.t));
     let _ = writeln!(
         out,
         "  \"injectedCurrent\": [{}],",
-        join_real(&r.injected_current)
+        join_real(&r.injected_currents[0])
     );
+    if source_nodes.len() > 1 {
+        out.push_str("  \"sources\": [\n");
+        for (i, id) in source_nodes.iter().enumerate() {
+            let _ = write!(
+                out,
+                "    {{ \"node\": \"{}\", \"current\": [{}] }}",
+                json_escape(id),
+                join_real(&r.injected_currents[i])
+            );
+            if i + 1 < source_nodes.len() {
+                out.push(',');
+            }
+            out.push('\n');
+        }
+        out.push_str("  ],\n");
+    }
     out.push_str("  \"nodes\": [\n");
     for (i, id) in observe_nodes.iter().enumerate() {
         let _ = write!(

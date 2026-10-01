@@ -34,6 +34,14 @@ program test_transient
   real(dp) :: imax, nyquistHz, freqZeroHz, ratioAtPeak, zinLowFreqMag
   integer(4), parameter :: nSamples = 1024
   integer(4) :: iPeak
+  ! Phase 9 (ADR 0015 amendment 2026-09-30)
+  type(tTransientOptions) :: opts
+  type(tSignalSlot) :: slots(2)
+  real(dp), allocatable :: w(:), respFull(:,:), respInterp(:,:), injected2(:,:), respA(:,:), respB(:,:)
+  real(dp), allocatable :: respSum(:,:), respLong(:,:), respNlt(:,:), respFft(:,:), tLong(:), xk(:), yk(:)
+  complex(dp), allocatable :: yq(:)
+  real(dp) :: peak, errNlt, errFft
+  integer(4) :: nCompare, k
 
   study%title = "Phase 6 transient test - buried conductor (Portela 1997 parameters)"
   call study%structure%addNode(newNode("Node_1", [0.0d0, 0.0d0, -depth]))
@@ -121,6 +129,126 @@ program test_transient
   call test_ok("response/current at the excitation peak ~= |Zin(low freq)| within 25%", &
                abs(ratioAtPeak - zinLowFreqMag) < 0.25d0 * zinLowFreqMag, &
                "transient GPR does not track the resistive low-frequency impedance")
+
+  ! ================================================================
+  ! ROADMAP Phase 9 (ADR 0015 amendment 2026-09-30)
+  ! ================================================================
+
+  call test_init("Phase 9 item 2: half-Hann window")
+  w = hannHalfWindow(101)
+  call test_ok("window is 1 at the first sample", abs(w(1) - 1.0_dp) < 1.0d-15, "")
+  call test_ok("window is 0 at the last sample", abs(w(101)) < 1.0d-15, "")
+  call test_ok("window is 1/2 at the midpoint", abs(w(51) - 0.5_dp) < 1.0d-15, "")
+  call test_ok("window is monotonically non-increasing", all(w(2:) <= w(:100)), "")
+  antialias = tukeyAntialiasFilter(101, 1.0d-12)
+  call test_ok("spectral Hann = Tukey band-edge filter in the s -> 0 limit", &
+               maxval(abs(antialias - w)) < 1.0d-9, "")
+
+  call test_init("Phase 9 item 1: pchip interpolation (Matlab pchip port)")
+  xk = [0.0_dp, 1.0_dp, 2.5_dp, 4.0_dp, 7.0_dp]
+  yq = pchipInterpolate(xk, cmplx(3.0_dp * xk - 1.0_dp, -2.0_dp * xk, kind=dp), [0.3_dp, 2.0_dp, 6.9_dp])
+  call test_ok("linear data are reproduced exactly (Re and Im)", &
+               maxval(abs(yq - cmplx(3.0_dp * [0.3_dp, 2.0_dp, 6.9_dp] - 1.0_dp, &
+                                     -2.0_dp * [0.3_dp, 2.0_dp, 6.9_dp], kind=dp))) < 1.0d-13, "")
+  yk = [0.0_dp, 0.0_dp, 1.0_dp, 1.0_dp, 5.0_dp]
+  yq = pchipInterpolate(xk, cmplx(yk, 0.0_dp, kind=dp), xk)
+  call test_ok("knots are interpolated exactly", maxval(abs(real(yq) - yk)) < 1.0d-15, "")
+  yq = pchipInterpolate(xk, cmplx(yk, 0.0_dp, kind=dp), [(0.07_dp * k, k = 0, 100)])
+  call test_ok("monotone data give a monotone interpolant (no overshoot)", &
+               all(real(yq(2:)) >= real(yq(:100)) - 1.0d-15) .and. minval(real(yq)) >= -1.0d-15 &
+               .and. maxval(real(yq)) <= 5.0_dp + 1.0d-15, "")
+  ! Reference values from SciPy's PchipInterpolator (the same Fritsch-Butland
+  ! interior / one-sided end-slope algorithm as Matlab pchip, Moler NCM §3.4);
+  ! the first set also follows by hand: slopes d = [5.5, 0, 0, 2.5].
+  yq = pchipInterpolate([1.0_dp, 2.0_dp, 3.0_dp, 4.0_dp], cmplx([1.0_dp, 4.0_dp, 2.0_dp, 3.0_dp], 0.0_dp, kind=dp), &
+                        [1.5_dp, 2.5_dp, 3.5_dp])
+  call test_ok("sign changes: zero interior slopes, one-sided end slopes (reference values)", &
+               maxval(abs(real(yq) - [3.1875_dp, 3.0_dp, 2.1875_dp])) < 1.0d-14, "")
+  yq = pchipInterpolate([0.0_dp, 1.0_dp, 3.0_dp, 4.0_dp, 7.0_dp], &
+                        cmplx(0.0_dp, [0.0_dp, 2.0_dp, 3.0_dp, 7.0_dp, 8.0_dp], kind=dp), &
+                        [0.5_dp, 2.0_dp, 3.5_dp, 5.5_dp, 6.9_dp])
+  call test_ok("non-uniform monotone data: weighted harmonic-mean slopes (reference values, Im part)", &
+               maxval(abs(aimag(yq) - [1.2053571428571428_dp, 2.471042471042471_dp, 5.032069382815652_dp, &
+                                       7.76865671641791_dp, 7.999049198452184_dp])) < 1.0d-12, "")
+
+  call test_init("Phase 9 item 1: interpolated vs full transfer function")
+  call transientResponse(study, surge, "Node_1", ["Node_1", "Node_2"], nyquistHz, nSamples, freqZeroHz, &
+                          t, injectedCurrent, respFull)
+  opts%transferFunction = "interpolated"
+  opts%scanFreqHz = logFrequencyAxis(freqZeroHz, nyquistHz, 101)
+  call transientResponse(study, surge, "Node_1", ["Node_1", "Node_2"], nyquistHz, nSamples, freqZeroHz, &
+                          t, injectedCurrent, respInterp, options=opts)
+  peak = maxval(abs(respFull))
+  call test_ok("scan-fed transient (101 log points) within 1e-4 of peak of the per-bin solve", &
+               maxval(abs(respInterp - respFull)) < 1.0d-4 * peak, "")
+  opts = tTransientOptions()
+
+  call test_init("Phase 9 item 4: multiple injections superpose")
+  allocate(slots(1)%sig, source=newDoubleExpSignal(0.5_dp * imax, "f250_2500"))
+  allocate(slots(2)%sig, source=newDoubleExpSignal(0.5_dp * imax, "f250_2500"))
+  call transientResponseSources(study, slots, ["Node_1", "Node_1"], ["Node_1", "Node_2"], nyquistHz, &
+                                 nSamples, freqZeroHz, t, injected2, respSum)
+  call test_ok("two half-amplitude sources at one node = one full source", &
+               maxval(abs(respSum - respFull)) < 1.0d-12 * peak, "")
+  call test_ok("one injected-current row per source", size(injected2, 1) == 2, "")
+  deallocate(slots(2)%sig)
+  allocate(slots(2)%sig, source=newSineSignal(0.2_dp * imax, 2.0d3, 30.0_dp))
+  call transientResponseSources(study, slots, ["Node_1", "Node_2"], ["Node_1", "Node_2"], nyquistHz, &
+                                 nSamples, freqZeroHz, t, injected2, respSum)
+  call transientResponseSources(study, slots(1:1), ["Node_1"], ["Node_1", "Node_2"], nyquistHz, &
+                                 nSamples, freqZeroHz, t, injected2, respA)
+  call transientResponseSources(study, slots(2:2), ["Node_2"], ["Node_1", "Node_2"], nyquistHz, &
+                                 nSamples, freqZeroHz, t, injected2, respB)
+  call test_ok("different waveforms at different nodes = sum of single-source runs (linearity)", &
+               maxval(abs(respSum - (respA + respB))) < 1.0d-10 * maxval(abs(respSum)), "")
+
+  call test_init("Phase 9 item 2: window placements")
+  opts%window = "hann"
+  opts%windowPlacement = "time"
+  call transientResponse(study, surge, "Node_1", ["Node_1"], nyquistHz, nSamples, freqZeroHz, &
+                          t, injectedCurrent, respA, options=opts)
+  call test_ok("time window multiplies the sampled excitation", &
+               maxval(abs(injectedCurrent - surge%waveform(t) * tailTaper(nSamples) * hannHalfWindow(nSamples))) &
+               < 1.0d-12 * imax, "")
+  opts%windowPlacement = "spectral"
+  call transientResponse(study, surge, "Node_1", ["Node_1"], nyquistHz, nSamples, freqZeroHz, &
+                          t, injectedCurrent, respA, options=opts)
+  call transientResponse(study, surge, "Node_1", ["Node_1"], nyquistHz, nSamples, freqZeroHz, &
+                          t, injectedCurrent, respB, antialiasStart=1.0d-12)
+  call test_ok("spectral Hann = band-edge filter with antialiasStart -> 0", &
+               maxval(abs(respA - respB)) < 1.0d-8 * maxval(abs(respA)), "")
+  call test_ok("spectral window leaves the excitation untouched", &
+               maxval(abs(injectedCurrent - surge%waveform(t) * tailTaper(nSamples))) < 1.0d-12 * imax, "")
+  opts = tTransientOptions()
+
+  call test_init("Phase 9 item 5: Numerical Laplace Transform")
+  ! Reference: plain FFT on a 16x longer record (same dt), where record
+  ! wrap-around is negligible over the first part of the short record. The
+  ! short record (256 samples, 12.8 ms, ~5 tail time constants of the
+  ! 250/2500 us surge) is deliberately wrap-around-limited: that is where
+  ! the NLT damping pays off. No window: a spectral window acts on the
+  ! damped spectrum under NLT, so its smoothing is not the same as on the
+  ! undamped FFT reference, and with a front only ~5 samples long that
+  ! difference would dominate the comparison.
+  call transientResponse(study, surge, "Node_1", ["Node_1"], nyquistHz, 4 * nSamples, freqZeroHz, &
+                          tLong, injectedCurrent, respLong, options=opts)
+  call transientResponse(study, surge, "Node_1", ["Node_1"], nyquistHz, nSamples / 4, freqZeroHz, &
+                          t, injectedCurrent, respFft, options=opts)
+  opts%transform = "nlt"
+  call transientResponse(study, surge, "Node_1", ["Node_1"], nyquistHz, nSamples / 4, freqZeroHz, &
+                          t, injectedCurrent, respNlt, options=opts)
+  nCompare = nSamples / 8   ! first half of the short record, before its tail taper
+  peak = maxval(abs(respLong(1, 1:nCompare)))
+  errNlt = maxval(abs(respNlt(1, 1:nCompare) - respLong(1, 1:nCompare))) / peak
+  errFft = maxval(abs(respFft(1, 1:nCompare) - respLong(1, 1:nCompare))) / peak
+  print '(A,ES10.3,A,ES10.3)', "     NLT vs long-record FFT: ", errNlt, ";  FFT vs long-record FFT: ", errFft
+  call test_ok("NLT response is finite", .not. any(ieee_is_nan(respNlt)), "")
+  call test_ok("NLT tracks the long-record reference within 1e-4 of peak (first half)", errNlt < 1.0d-4, "")
+  call test_ok("NLT suppresses record wrap-around better than the plain FFT", errNlt < errFft, "")
+  call test_ok("default damping is ln(N^2)/T", &
+               abs(nltDefaultDamping(nyquistHz, nSamples) - log(real(nSamples, dp)**2) &
+                   / (real(nSamples, dp) / (2.0_dp * nyquistHz))) < 1.0d-12 * nltDefaultDamping(nyquistHz, nSamples), "")
+  opts = tTransientOptions()
 
   call test_summary()
 

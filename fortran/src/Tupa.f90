@@ -35,15 +35,17 @@ module tupa
   !!
   !! Future versions will add tCircumference, tTower.
   use mStudy
+  use mMesh, only: IMAGE_FREQ_DEPENDENT, IMAGE_IDEAL
+  use mGeometry, only: GEOM_KERNEL_SINGLE, GEOM_KERNEL_DOUBLE
   use mNode
   use mMaterial
   use mElementLine
   use mElementMesh
   use mElementCatenary
   use mJsonParser
-  use mSignal, only: tSignal, newHeidlerSignal, newHeidlerSignalTerms, newDoubleExpSignal, &
-                     newPortelaSignal
-  use mTransient, only: transientResponse
+  use mSignal, only: tSignal, tSignalSlot, newHeidlerSignal, newHeidlerSignalTerms, newDoubleExpSignal, &
+                     newPortelaSignal, newSineSignal
+  use mTransient, only: transientResponseSources, tTransientOptions
   use mResultsWriter, only: writeResultsCsv, writeResultsJson, &
                              writeTransientResultsCsv, writeTransientResultsJson
   use mError, only: raiseError
@@ -56,13 +58,48 @@ module tupa
 contains
 
   ! =====================================================================
+  ! Segmentation helpers (ROADMAP Phase 10 item 3)
+  ! =====================================================================
+
+  function nodeDistance(study, idA, idB) result(d)
+    !! Chord length between two already-loaded boundary nodes (m); 0 when
+    !! either is unknown (the element's own reference check reports that).
+    type(tStudy), intent(in) :: study
+    character(len=*), intent(in) :: idA, idB
+    real(8) :: d
+    integer :: ia, ib
+
+    d = 0.0d0
+    ia = study%structure%findNodeIndex(trim(idA))
+    ib = study%structure%findNodeIndex(trim(idB))
+    if (ia == 0 .or. ib == 0) return
+    d = norm2(study%structure%nodes(ia)%p - study%structure%nodes(ib)%p)
+  end function nodeDistance
+
+  integer function readSegments(elemObj, maxLen, length) result(n)
+    !! Segment count of one element: the explicit `segments` field (default
+    !! 1 when absent), raised to ceil(length / maxLen) when the study carries
+    !! a `numerics.maxSegmentLength` target — the target only ever refines.
+    type(tJsonValue), pointer, intent(in) :: elemObj
+    real(8), intent(in) :: maxLen
+    !! Study segment-length target (m); 0 = none
+    real(8), intent(in) :: length
+    !! Element length (m)
+
+    n = 1
+    if (json_has(elemObj, "segments")) n = json_int(elemObj, "segments")
+    if (maxLen > 0.0d0 .and. length > 0.0d0) n = max(n, ceiling(length / maxLen - 1.0d-9))
+  end function readSegments
+
+  ! =====================================================================
   ! JSON parsing and study loading
   ! =====================================================================
 
   subroutine loadStudy(filename, study, sourceNodeIds, sourceCurrents, sourceIsVoltage, freqHz, &
                         outputNodeIds, outputElectrodeIds, outputQuantities, &
                         signal, signalSourceNode, signalObserveNodeIds, signalObserveElectrodeIds, &
-                        signalNyquistHz, signalFftPoints, signalFreqZeroHz, signalAntialiasStart)
+                        signalNyquistHz, signalFftPoints, signalFreqZeroHz, signalAntialiasStart, &
+                        signalSources, signalSourceNodeIds, signalOptions)
     !! Parse a JSON study file and populate all fields of a tStudy object.
     !!
     !! Performs the following steps:
@@ -77,7 +114,11 @@ contains
     !!    optional output arguments; a structure-only case file (no such
     !!    blocks) leaves them unallocated.
     !! 8. If present (ADR 0015), parse the optional "signal" block into the
-    !!    corresponding optional output arguments.
+    !!    corresponding optional output arguments — including the ROADMAP
+    !!    Phase 9 fields (ADR 0015 amendment 2026-09-30): `sources[]`
+    !!    (several injections, each with its own waveform), `window`,
+    !!    `transferFunction` ("interpolated" reuses the case's
+    !!    `frequencies` axis as the scan grid) and `transform`/`nltDamping`.
     !!
     !! After this call, `study%structure` is fully populated and ready for assembly.
     !! Call `study%structure%assembleStructure()` to discretise elements into nodes
@@ -122,6 +163,15 @@ contains
     real(8), intent(out), optional :: signalAntialiasStart
     !! "signal.antialiasStart" (ADR 0021), in (0, 1]; default 1.0 (no
     !! anti-aliasing filter) if absent from the JSON
+    type(tSignalSlot), allocatable, intent(out), optional :: signalSources(:)
+    !! Every injection's waveform: "signal.sources[]", or the single
+    !! top-level waveform. `signal` holds a copy of the first entry.
+    character(len=256), allocatable, intent(out), optional :: signalSourceNodeIds(:)
+    !! Injection node per `signalSources` entry ("sources[].node", or
+    !! "sourceNode"); `signalSourceNode` holds the first
+    type(tTransientOptions), intent(out), optional :: signalOptions
+    !! Phase 9 transient options, including `antialiasStart` and, for
+    !! "transferFunction": "interpolated", the scan axis
 
     type(tJsonValue), target  :: root
     !! Root of the parsed JSON tree (must be TARGET for child pointers)
@@ -132,7 +182,7 @@ contains
     type(tJsonValue), pointer :: sources_arr, src_obj, current_obj
     type(tJsonValue), pointer :: freq_obj, outputs_obj, strArr
     !! Pointers for the sources/frequencies/outputs blocks (ADR 0013)
-    type(tJsonValue), pointer :: signal_obj
+    type(tJsonValue), pointer :: signal_obj, numerics_obj
     !! Pointer for the "signal" block (ADR 0015)
     class(tMaterial), allocatable :: mat
     !! Temporary material object for adding to structure
@@ -142,7 +192,8 @@ contains
     !! Loop indices, segment count, and "mesh" row/column counts
     character(len=256) :: id, from_id, to_id, mat_id, elem_type
     !! String fields from JSON: identifiers and element type
-    real(8) :: x, y, z, radius, sigma, epsr, mur_val, lengthX, lengthY
+    real(8) :: x, y, z, radius, sigma, epsr, mur_val, lengthX, lengthY, segLen, sag
+    integer :: idxA, idxB
     !! Geometric and material parameters
 
     call parseJsonFile(filename, root)
@@ -176,6 +227,45 @@ contains
                        "' (expected linear, portela or alipio-visacro)")
       return
     end select
+
+    ! Optional numerics block (ADR 0024, ROADMAP Phase 10): kernel, image
+    ! model and the segment-length target. Parsed before the elements, whose
+    ! segment counts the target can raise.
+    if (json_has(root, "numerics")) then
+      numerics_obj => json_child(root, "numerics")
+      if (json_has(numerics_obj, "kernel")) then
+        elem_type = json_str(numerics_obj, "kernel")
+        select case (trim(elem_type))
+        case ("single")
+          study%geometryKernel = GEOM_KERNEL_SINGLE
+        case ("double")
+          study%geometryKernel = GEOM_KERNEL_DOUBLE
+        case default
+          call raiseError("mTupa: unknown numerics.kernel '" // trim(elem_type) // "' (expected single or double)")
+          return
+        end select
+      end if
+      if (json_has(numerics_obj, "imageModel")) then
+        elem_type = json_str(numerics_obj, "imageModel")
+        select case (trim(elem_type))
+        case ("frequency-dependent")
+          study%imageModel = IMAGE_FREQ_DEPENDENT
+        case ("ideal")
+          study%imageModel = IMAGE_IDEAL
+        case default
+          call raiseError("mTupa: unknown numerics.imageModel '" // trim(elem_type) // &
+                          "' (expected frequency-dependent or ideal)")
+          return
+        end select
+      end if
+      if (json_has(numerics_obj, "maxSegmentLength")) then
+        study%maxSegmentLength = json_real(numerics_obj, "maxSegmentLength")
+        if (study%maxSegmentLength <= 0.0d0) then
+          call raiseError("mTupa: numerics.maxSegmentLength must be positive")
+          return
+        end if
+      end if
+    end if
 
     if (json_has(root, "nodes")) then
       nodes_arr => json_child(root, "nodes")
@@ -217,7 +307,7 @@ contains
           from_id = json_str(elem_obj, "from")
           to_id   = json_str(elem_obj, "to")
           radius  = json_real(elem_obj, "radius")
-          nseg    = json_int(elem_obj, "segments")
+          nseg    = readSegments(elem_obj, study%maxSegmentLength, nodeDistance(study, from_id, to_id))
           mat_id  = json_str(elem_obj, "material")
           elem = newElementLine(trim(id), trim(from_id), trim(to_id), &
                                 radius, nseg, trim(mat_id))
@@ -227,10 +317,14 @@ contains
           from_id = json_str(elem_obj, "from")
           to_id   = json_str(elem_obj, "to")
           radius  = json_real(elem_obj, "radius")
-          nseg    = json_int(elem_obj, "segments")
+          sag     = json_real(elem_obj, "sag")
+          segLen  = nodeDistance(study, from_id, to_id)
+          ! parabolic arc length: c + 8 s² / (3 c) (theory.md §4.4)
+          if (segLen > 0.0d0) segLen = segLen + 8.0d0 * sag * sag / (3.0d0 * segLen)
+          nseg    = readSegments(elem_obj, study%maxSegmentLength, segLen)
           mat_id  = json_str(elem_obj, "material")
           elem = newElementCatenary(trim(id), trim(from_id), trim(to_id), &
-                                    json_real(elem_obj, "sag"), radius, nseg, trim(mat_id))
+                                    sag, radius, nseg, trim(mat_id))
           call study%structure%addElement(elem)
         case ("mesh")
           id       = json_str(elem_obj, "id")
@@ -243,7 +337,9 @@ contains
           rowsX    = json_int(elem_obj, "rowsX")
           rowsY    = json_int(elem_obj, "rowsY")
           radius   = json_real(elem_obj, "radius")
-          nseg     = json_int(elem_obj, "segments")
+          ! One count serves every bar, so the longest bar sets the target
+          nseg     = readSegments(elem_obj, study%maxSegmentLength, &
+                                  max(lengthX / real(max(rowsX, 1), kind=8), lengthY / real(max(rowsY, 1), kind=8)))
           mat_id   = json_str(elem_obj, "material")
           elem = newElementMesh(trim(id), [x, y, z], lengthX, lengthY, rowsX, rowsY, &
                                 radius, nseg, trim(mat_id))
@@ -292,16 +388,7 @@ contains
 
     if (present(freqHz) .and. json_has(root, "frequencies")) then
       freq_obj => json_child(root, "frequencies")
-      block
-        real(8) :: fMin, fMax, pointsPerDecade
-        integer :: nPoints
-        fMin = json_real(freq_obj, "min")
-        fMax = json_real(freq_obj, "max")
-        pointsPerDecade = json_real(freq_obj, "pointsPerDecade")
-        ! ADR 0013: nPoints = round(pointsPerDecade * log10(max/min)) + 1
-        nPoints = nint(pointsPerDecade * log10(fMax / fMin)) + 1
-        freqHz = logFrequencyAxis(fMin, fMax, max(2, nPoints))
-      end block
+      freqHz = readFrequencyAxis(freq_obj)
     end if
 
     if (json_has(root, "outputs")) then
@@ -325,57 +412,122 @@ contains
     ! of sources/frequencies (a case may carry either, both, or neither).
     ! ------------------------------------------------------------------
 
-    if (present(signal) .and. json_has(root, "signal")) then
+    if ((present(signal) .or. present(signalSources)) .and. json_has(root, "signal")) then
       signal_obj => json_child(root, "signal")
       block
-        character(len=256) :: waveformType, front
-        real(8) :: imax
-        type(tJsonValue), pointer :: terms_arr, term_obj
-        real(8), allocatable :: hI0(:), hN(:), hTau1(:), hTau2(:)
-        integer :: nTerms, iTerm
+        type(tSignalSlot), allocatable :: slots(:)
+        character(len=256), allocatable :: srcNodes(:)
+        type(tJsonValue), pointer :: srcArr, srcObj, winObj
+        type(tTransientOptions) :: opts
+        integer :: nSrc, iSrc
+        character(len=256) :: str
 
-        waveformType = json_str(signal_obj, "waveform")
-        imax = json_real(signal_obj, "imax")
-        select case (trim(waveformType))
-        case ("heidler")
-          if (json_has(signal_obj, "terms")) then
-            ! Standard parametrised Heidler (Heidler 1985 / IEC 62305-1,
-            ! ADR 0015 amendment): one {i0, n, tau1, tau2} object per term.
-            ! "imax" is optional here — absent means physical amplitudes
-            ! (no peak rescale).
-            terms_arr => json_child(signal_obj, "terms")
-            nTerms = json_size(terms_arr)
-            allocate(hI0(nTerms), hN(nTerms), hTau1(nTerms), hTau2(nTerms))
-            do iTerm = 1, nTerms
-              term_obj => json_item(terms_arr, iTerm)
-              hI0(iTerm)   = json_real(term_obj, "i0")
-              hN(iTerm)    = json_real(term_obj, "n")
-              hTau1(iTerm) = json_real(term_obj, "tau1")
-              hTau2(iTerm) = json_real(term_obj, "tau2")
-            end do
-            if (json_has(signal_obj, "imax")) then
-              allocate(signal, source=newHeidlerSignalTerms(hI0, hN, hTau1, hTau2, imax=imax))
-            else
-              allocate(signal, source=newHeidlerSignalTerms(hI0, hN, hTau1, hTau2))
-            end if
-          else
-            ! Legacy fixed 6-term set, peak-rescaled to the required imax.
-            allocate(signal, source=newHeidlerSignal(imax))
+        if (json_has(signal_obj, "sources")) then
+          ! Several simultaneous injections (ROADMAP Phase 9 item 4)
+          if (json_has(signal_obj, "sourceNode") .or. json_has(signal_obj, "waveform")) then
+            call raiseError("mTupa: signal.sources cannot be combined with signal.sourceNode/waveform")
+            return
           end if
-        case ("doubleExp")
-          front = json_str(signal_obj, "front")
-          allocate(signal, source=newDoubleExpSignal(imax, trim(front), jones=json_getbool(signal_obj, "jones")))
-        case ("portela")
-          allocate(signal, source=newPortelaSignal(imax, json_real(signal_obj, "alpha"), &
-            json_real(signal_obj, "tFront"), json_real(signal_obj, "tTopEnd"), &
-            json_real(signal_obj, "tTailEnd")))
-        case default
-          call raiseError("mTupa: unknown signal.waveform '" // trim(waveformType) // &
-                           "' (expected heidler, doubleExp or portela)")
-          return
-        end select
+          srcArr => json_child(signal_obj, "sources")
+          nSrc = json_size(srcArr)
+          if (nSrc < 1) then
+            call raiseError("mTupa: signal.sources must hold at least one source")
+            return
+          end if
+          allocate(slots(nSrc), srcNodes(nSrc))
+          do iSrc = 1, nSrc
+            srcObj => json_item(srcArr, iSrc)
+            srcNodes(iSrc) = json_str(srcObj, "node")
+            call parseSignalWaveform(srcObj, slots(iSrc)%sig)
+            if (.not. allocated(slots(iSrc)%sig)) return
+          end do
+        else
+          allocate(slots(1), srcNodes(1))
+          srcNodes(1) = json_str(signal_obj, "sourceNode")
+          call parseSignalWaveform(signal_obj, slots(1)%sig)
+          if (.not. allocated(slots(1)%sig)) return
+        end if
 
-        if (present(signalSourceNode)) signalSourceNode = json_str(signal_obj, "sourceNode")
+        ! Options (ADR 0021, ADR 0015 amendment 2026-09-30)
+        if (json_has(signal_obj, "antialiasStart")) then
+          opts%antialiasStart = json_real(signal_obj, "antialiasStart")
+          if (opts%antialiasStart <= 0.0d0 .or. opts%antialiasStart > 1.0d0) then
+            call raiseError("mTupa: signal.antialiasStart must be in (0, 1]")
+            return
+          end if
+        end if
+        if (json_has(signal_obj, "window")) then
+          winObj => json_child(signal_obj, "window")
+          ! Validate the full strings before storing them in the short
+          ! option fields, so a long value cannot truncate into a valid one
+          str = json_str(winObj, "type")
+          select case (trim(str))
+          case ("none", "hann")
+            opts%window = trim(str)
+          case default
+            call raiseError("mTupa: unknown signal.window.type '" // trim(str) // "' (expected none or hann)")
+            return
+          end select
+          if (json_has(winObj, "placement")) then
+            str = json_str(winObj, "placement")
+            select case (trim(str))
+            case ("spectral", "time")
+              opts%windowPlacement = trim(str)
+            case default
+              call raiseError("mTupa: unknown signal.window.placement '" // trim(str) // &
+                              "' (expected spectral or time)")
+              return
+            end select
+          end if
+        end if
+        if (json_has(signal_obj, "transform")) then
+          str = json_str(signal_obj, "transform")
+          select case (trim(str))
+          case ("fft", "nlt")
+            opts%transform = trim(str)
+          case default
+            call raiseError("mTupa: unknown signal.transform '" // trim(str) // "' (expected fft or nlt)")
+            return
+          end select
+        end if
+        if (json_has(signal_obj, "nltDamping")) then
+          opts%nltDamping = json_real(signal_obj, "nltDamping")
+          if (opts%nltDamping <= 0.0d0) then
+            call raiseError("mTupa: signal.nltDamping must be > 0")
+            return
+          end if
+          if (trim(opts%transform) /= "nlt") then
+            call raiseError("mTupa: signal.nltDamping requires signal.transform = ""nlt""")
+            return
+          end if
+        end if
+        if (json_has(signal_obj, "transferFunction")) then
+          str = json_str(signal_obj, "transferFunction")
+          select case (trim(str))
+          case ("full")
+          case ("interpolated")
+            opts%transferFunction = "interpolated"
+            if (trim(opts%transform) == "nlt") then
+              call raiseError("mTupa: signal.transform ""nlt"" cannot be combined with " // &
+                              "signal.transferFunction ""interpolated""")
+              return
+            end if
+            if (.not. json_has(root, "frequencies")) then
+              call raiseError("mTupa: signal.transferFunction ""interpolated"" needs a ""frequencies"" block " // &
+                              "(the scan grid)")
+              return
+            end if
+            opts%scanFreqHz = readFrequencyAxis(json_child(root, "frequencies"))
+          case default
+            call raiseError("mTupa: unknown signal.transferFunction '" // trim(str) // &
+                            "' (expected full or interpolated)")
+            return
+          end select
+        end if
+
+        if (present(signal)) allocate(signal, source=slots(1)%sig)
+        if (present(signalSourceNode)) signalSourceNode = srcNodes(1)
+        if (present(signalSourceNodeIds)) signalSourceNodeIds = srcNodes
         if (present(signalObserveNodeIds)) then
           strArr => json_child(signal_obj, "observeNodes")
           call readJsonStringArray(strArr, signalObserveNodeIds)
@@ -393,20 +545,104 @@ contains
             signalFreqZeroHz = 1.0d-6
           end if
         end if
-        if (present(signalAntialiasStart)) then
-          if (json_has(signal_obj, "antialiasStart")) then
-            signalAntialiasStart = json_real(signal_obj, "antialiasStart")
-            if (signalAntialiasStart <= 0.0d0 .or. signalAntialiasStart > 1.0d0) then
-              call raiseError("mTupa: signal.antialiasStart must be in (0, 1]")
+        if (present(signalAntialiasStart)) signalAntialiasStart = opts%antialiasStart
+
+        ! The loader rejects a scan axis it would have to extrapolate
+        ! (ROADMAP Phase 9 item 1): it must span [freqZeroHz, nyquistHz].
+        if (trim(opts%transferFunction) == "interpolated") then
+          block
+            real(8) :: fz, fn
+            integer :: ns
+            fz = 1.0d-6
+            if (json_has(signal_obj, "freqZeroHz")) fz = json_real(signal_obj, "freqZeroHz")
+            fn = json_real(signal_obj, "nyquistHz")
+            ns = size(opts%scanFreqHz)
+            if (opts%scanFreqHz(1) > fz * (1.0d0 + 1.0d-9) .or. opts%scanFreqHz(ns) < fn * (1.0d0 - 1.0d-9)) then
+              write(str, '(ES10.3," .. ",ES10.3," Hz")') fz, fn
+              call raiseError("mTupa: signal.transferFunction ""interpolated"": the frequencies axis must span " // &
+                              "[freqZeroHz, nyquistHz] = " // trim(str) // " (no extrapolation)")
               return
             end if
-          else
-            signalAntialiasStart = 1.0d0
-          end if
+          end block
         end if
+
+        if (present(signalSources)) call move_alloc(slots, signalSources)
+        if (present(signalOptions)) signalOptions = opts
       end block
     end if
   end subroutine loadStudy
+
+  function readFrequencyAxis(freq_obj) result(freqHz)
+    !! Log-spaced axis of a "frequencies" block (`min`/`max`/
+    !! `pointsPerDecade`, ADR 0013): nPoints = round(ppd·log10(max/min)) + 1.
+    type(tJsonValue), pointer, intent(in) :: freq_obj
+    real(8), allocatable :: freqHz(:)
+    real(8) :: fMin, fMax, pointsPerDecade
+    integer :: nPoints
+
+    fMin = json_real(freq_obj, "min")
+    fMax = json_real(freq_obj, "max")
+    pointsPerDecade = json_real(freq_obj, "pointsPerDecade")
+    nPoints = nint(pointsPerDecade * log10(fMax / fMin)) + 1
+    freqHz = logFrequencyAxis(fMin, fMax, max(2, nPoints))
+  end function readFrequencyAxis
+
+  subroutine parseSignalWaveform(obj, sig)
+    !! Build one excitation waveform from a JSON object carrying
+    !! "waveform" and its fields (ADR 0015 and amendments): the "signal"
+    !! block itself, or one "signal.sources[]" entry (ROADMAP Phase 9
+    !! item 4). `sig` stays unallocated on error.
+    type(tJsonValue), pointer, intent(in) :: obj
+    class(tSignal), allocatable, intent(out) :: sig
+    character(len=256) :: waveformType, front
+    real(8) :: imax, phaseDeg
+    type(tJsonValue), pointer :: terms_arr, term_obj
+    real(8), allocatable :: hI0(:), hN(:), hTau1(:), hTau2(:)
+    integer :: nTerms, iTerm
+
+    waveformType = json_str(obj, "waveform")
+    imax = json_real(obj, "imax")
+    select case (trim(waveformType))
+    case ("heidler")
+      if (json_has(obj, "terms")) then
+        ! Standard parametrised Heidler (Heidler 1985 / IEC 62305-1,
+        ! ADR 0015 amendment): one {i0, n, tau1, tau2} object per term.
+        ! "imax" is optional here — absent means physical amplitudes
+        ! (no peak rescale).
+        terms_arr => json_child(obj, "terms")
+        nTerms = json_size(terms_arr)
+        allocate(hI0(nTerms), hN(nTerms), hTau1(nTerms), hTau2(nTerms))
+        do iTerm = 1, nTerms
+          term_obj => json_item(terms_arr, iTerm)
+          hI0(iTerm)   = json_real(term_obj, "i0")
+          hN(iTerm)    = json_real(term_obj, "n")
+          hTau1(iTerm) = json_real(term_obj, "tau1")
+          hTau2(iTerm) = json_real(term_obj, "tau2")
+        end do
+        if (json_has(obj, "imax")) then
+          allocate(sig, source=newHeidlerSignalTerms(hI0, hN, hTau1, hTau2, imax=imax))
+        else
+          allocate(sig, source=newHeidlerSignalTerms(hI0, hN, hTau1, hTau2))
+        end if
+      else
+        ! Legacy fixed 6-term set, peak-rescaled to the required imax.
+        allocate(sig, source=newHeidlerSignal(imax))
+      end if
+    case ("doubleExp")
+      front = json_str(obj, "front")
+      allocate(sig, source=newDoubleExpSignal(imax, trim(front), jones=json_getbool(obj, "jones")))
+    case ("portela")
+      allocate(sig, source=newPortelaSignal(imax, json_real(obj, "alpha"), &
+        json_real(obj, "tFront"), json_real(obj, "tTopEnd"), json_real(obj, "tTailEnd")))
+    case ("sine")
+      phaseDeg = 0.0d0
+      if (json_has(obj, "phaseDeg")) phaseDeg = json_real(obj, "phaseDeg")
+      allocate(sig, source=newSineSignal(imax, json_real(obj, "frequencyHz"), phaseDeg))
+    case default
+      call raiseError("mTupa: unknown signal.waveform '" // trim(waveformType) // &
+                       "' (expected heidler, doubleExp, portela or sine)")
+    end select
+  end subroutine parseSignalWaveform
 
   subroutine readJsonStringArray(arr, out)
     !! Read a JSON array of strings into an allocatable character array
@@ -434,7 +670,7 @@ contains
 
   subroutine validateStudyReferences(study, sourceNodeIds, signal, signalSourceNode, &
                                       signalObserveNodeIds, signalObserveElectrodeIds, &
-                                      outputNodeIds, outputElectrodeIds)
+                                      outputNodeIds, outputElectrodeIds, signalSourceNodeIds)
     !! Resolve every ID a case file references — `sources[].node`,
     !! `signal.sourceNode`/`observeNodes`/`observeElectrodes`,
     !! `outputs.nodes`/`electrodes` — against the assembled structure,
@@ -468,6 +704,9 @@ contains
     !! "outputs.nodes"
     character(len=*), intent(in), optional :: outputElectrodeIds(:)
     !! "outputs.electrodes"
+    character(len=*), intent(in), optional :: signalSourceNodeIds(:)
+    !! "signal.sources[].node" (ROADMAP Phase 9 item 4), or the single
+    !! "signal.sourceNode"
     integer :: i
 
     call study%structure%assembleStructure()
@@ -482,6 +721,11 @@ contains
       if (allocated(signal)) then
         if (present(signalSourceNode)) &
           call requireNodeReference(study, trim(signalSourceNode), "signal.sourceNode")
+        if (present(signalSourceNodeIds)) then
+          do i = 1, size(signalSourceNodeIds)
+            call requireNodeReference(study, trim(signalSourceNodeIds(i)), "signal.sources[].node")
+          end do
+        end if
         if (present(signalObserveNodeIds)) then
           do i = 1, size(signalObserveNodeIds)
             call requireNodeReference(study, trim(signalObserveNodeIds(i)), "signal.observeNodes")
@@ -577,7 +821,10 @@ contains
     character(len=256), allocatable :: signalObserveNodeIds(:), signalObserveElectrodeIds(:)
     real(8) :: signalNyquistHz, signalFreqZeroHz, signalAntialiasStart
     integer :: signalFftPoints
-    real(8), allocatable :: t(:), injectedCurrent(:), nodeResponses(:,:), i1Responses(:,:), i2Responses(:,:)
+    type(tSignalSlot), allocatable :: signalSources(:)
+    character(len=256), allocatable :: signalSourceNodeIds(:)
+    type(tTransientOptions) :: signalOptions
+    real(8), allocatable :: t(:), injectedCurrents(:,:), nodeResponses(:,:), i1Responses(:,:), i2Responses(:,:)
     logical :: ranSweep, ranTransient
     character(len=512) :: base, csvFile, jsonFile
     integer(8) :: clockStart, clockEnd, clockRate
@@ -596,13 +843,15 @@ contains
                    signalObserveNodeIds=signalObserveNodeIds, &
                    signalObserveElectrodeIds=signalObserveElectrodeIds, &
                    signalNyquistHz=signalNyquistHz, signalFftPoints=signalFftPoints, &
-                   signalFreqZeroHz=signalFreqZeroHz, signalAntialiasStart=signalAntialiasStart)
+                   signalFreqZeroHz=signalFreqZeroHz, signalAntialiasStart=signalAntialiasStart, &
+                   signalSources=signalSources, signalSourceNodeIds=signalSourceNodeIds, &
+                   signalOptions=signalOptions)
 
     call validateStudyReferences(study, sourceNodeIds=sourceNodeIds, signal=signal, &
-                                  signalSourceNode=signalSourceNode, &
                                   signalObserveNodeIds=signalObserveNodeIds, &
                                   signalObserveElectrodeIds=signalObserveElectrodeIds, &
-                                  outputNodeIds=outputNodeIds, outputElectrodeIds=outputElectrodeIds)
+                                  outputNodeIds=outputNodeIds, outputElectrodeIds=outputElectrodeIds, &
+                                  signalSourceNodeIds=signalSourceNodeIds)
 
     ranSweep     = allocated(sourceNodeIds) .and. allocated(freqHz)
     ranTransient = allocated(signal)
@@ -623,23 +872,23 @@ contains
 
     if (ranTransient) then
       if (allocated(signalObserveElectrodeIds)) then
-        call transientResponse(study, signal, trim(signalSourceNode), signalObserveNodeIds, &
-          signalNyquistHz, signalFftPoints, signalFreqZeroHz, t, injectedCurrent, nodeResponses, &
+        call transientResponseSources(study, signalSources, signalSourceNodeIds, signalObserveNodeIds, &
+          signalNyquistHz, signalFftPoints, signalFreqZeroHz, t, injectedCurrents, nodeResponses, &
           observeElectrodeIds=signalObserveElectrodeIds, i1Responses=i1Responses, i2Responses=i2Responses, &
-          antialiasStart=signalAntialiasStart)
+          options=signalOptions)
       else
-        call transientResponse(study, signal, trim(signalSourceNode), signalObserveNodeIds, &
-          signalNyquistHz, signalFftPoints, signalFreqZeroHz, t, injectedCurrent, nodeResponses, &
-          antialiasStart=signalAntialiasStart)
+        call transientResponseSources(study, signalSources, signalSourceNodeIds, signalObserveNodeIds, &
+          signalNyquistHz, signalFftPoints, signalFreqZeroHz, t, injectedCurrents, nodeResponses, &
+          options=signalOptions)
       end if
       if (.not. ranSweep) call study%report()
 
       csvFile  = trim(base) // "_transient_results.csv"
       jsonFile = trim(base) // "_transient_results.json"
-      call writeTransientResultsCsv(trim(signalSourceNode), t, injectedCurrent, &
+      call writeTransientResultsCsv(signalSourceNodeIds, t, injectedCurrents, &
         signalObserveNodeIds, nodeResponses, trim(csvFile), &
         observeElectrodeIds=signalObserveElectrodeIds, i1Responses=i1Responses, i2Responses=i2Responses)
-      call writeTransientResultsJson(study%title, trim(signalSourceNode), t, injectedCurrent, &
+      call writeTransientResultsJson(study%title, signalSourceNodeIds, t, injectedCurrents, &
         signalObserveNodeIds, nodeResponses, trim(jsonFile), &
         observeElectrodeIds=signalObserveElectrodeIds, i1Responses=i1Responses, i2Responses=i2Responses)
       call verbose(VERB_NORMAL, "Wrote " // trim(csvFile) // " and " // trim(jsonFile))

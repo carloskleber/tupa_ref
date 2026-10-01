@@ -8,14 +8,20 @@
 
 use crate::element::{Catenary, Element, Line, MeshElement};
 use crate::error::{Result, TupaError};
+use crate::geometry::GeometryKernel;
 use crate::material::{AlipioVisacroSoil, Linear, Medium, PortelaSoil};
+use crate::mesh::ImageModel;
 use crate::node::Node;
 use crate::signal::{
-    Signal, new_double_exp_signal, new_heidler_signal, new_heidler_signal_terms, new_portela_signal,
+    Signal, new_double_exp_signal, new_heidler_signal, new_heidler_signal_terms,
+    new_portela_signal, new_sine_signal,
 };
 use crate::structure::Structure;
 use crate::study::{Source, Study, log_frequency_axis};
-use crate::transient::TransientSpec;
+use crate::transient::{
+    TransferFunction, Transform, TransientOptions, TransientSource, TransientSpec, Window,
+    WindowPlacement,
+};
 use serde::Deserialize;
 
 #[derive(Debug, Default, Deserialize)]
@@ -56,7 +62,7 @@ struct ElementSpec {
     from: String,
     to: String,
     radius: f64,
-    segments: f64,
+    segments: Option<f64>,
     material: String,
     position: Vec<f64>,
     #[serde(rename = "lengthX")]
@@ -111,9 +117,11 @@ struct HeidlerTermSpec {
     tau2: f64,
 }
 
+/// Waveform fields shared by the `signal` block and each `signal.sources[]`
+/// entry (ROADMAP Phase 9 item 4).
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
-struct SignalSpec {
+struct WaveformSpec {
     waveform: String,
     imax: Option<f64>,
     front: String,
@@ -126,6 +134,40 @@ struct SignalSpec {
     t_top_end: f64,
     #[serde(rename = "tTailEnd")]
     t_tail_end: f64,
+    #[serde(rename = "frequencyHz")]
+    frequency_hz: f64,
+    #[serde(rename = "phaseDeg")]
+    phase_deg: f64,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct SignalSourceSpec {
+    node: String,
+    #[serde(flatten)]
+    wave: WaveformSpec,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct WindowSpec {
+    #[serde(rename = "type")]
+    kind: String,
+    placement: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct SignalSpec {
+    #[serde(flatten)]
+    wave: WaveformSpec,
+    sources: Option<Vec<SignalSourceSpec>>,
+    window: Option<WindowSpec>,
+    transform: Option<String>,
+    #[serde(rename = "nltDamping")]
+    nlt_damping: Option<f64>,
+    #[serde(rename = "transferFunction")]
+    transfer_function: Option<String>,
     #[serde(rename = "sourceNode")]
     source_node: String,
     #[serde(rename = "observeNodes")]
@@ -142,11 +184,23 @@ struct SignalSpec {
     antialias_start: Option<f64>,
 }
 
+/// `numerics` block (ADR 0024, ROADMAP Phase 10).
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct NumericsSpec {
+    kernel: Option<String>,
+    #[serde(rename = "imageModel")]
+    image_model: Option<String>,
+    #[serde(rename = "maxSegmentLength")]
+    max_segment_length: Option<f64>,
+}
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 struct CaseSpec {
     title: String,
     soil: SoilSpec,
+    numerics: Option<NumericsSpec>,
     nodes: Vec<NodeSpec>,
     materials: Vec<MaterialSpec>,
     elements: Vec<ElementSpec>,
@@ -240,21 +294,101 @@ fn build(spec: CaseSpec) -> Result<LoadedCase> {
         }
     };
 
+    let mut kernel = None;
+    let mut image_model = None;
+    let mut max_segment_length = 0.0;
+    if let Some(num) = &spec.numerics {
+        kernel = match num.kernel.as_deref() {
+            None => None,
+            Some("single") => Some(GeometryKernel::Single),
+            Some("double") => Some(GeometryKernel::Double),
+            Some(other) => {
+                return Err(TupaError::new(format!(
+                    "mTupa: unknown numerics.kernel '{other}' (expected single or double)"
+                )));
+            }
+        };
+        image_model = match num.image_model.as_deref() {
+            None => None,
+            Some("frequency-dependent") => Some(ImageModel::FrequencyDependent),
+            Some("ideal") => Some(ImageModel::Ideal),
+            Some(other) => {
+                return Err(TupaError::new(format!(
+                    "mTupa: unknown numerics.imageModel '{other}' (expected frequency-dependent or ideal)"
+                )));
+            }
+        };
+        if let Some(l) = num.max_segment_length {
+            if l <= 0.0 {
+                return Err(TupaError::new(
+                    "mTupa: numerics.maxSegmentLength must be positive",
+                ));
+            }
+            max_segment_length = l;
+        }
+    }
+
     let mut structure = Structure::new(soil);
     for n in &spec.nodes {
         structure.add_node(Node::new(n.id.clone(), pos3(&n.position)));
     }
+    let chord = |from: &str, to: &str| -> f64 {
+        match (
+            structure.find_node_index(from),
+            structure.find_node_index(to),
+        ) {
+            (Some(a), Some(b)) => {
+                let (pa, pb) = (structure.nodes[a].p, structure.nodes[b].p);
+                ((pa[0] - pb[0]).powi(2) + (pa[1] - pb[1]).powi(2) + (pa[2] - pb[2]).powi(2)).sqrt()
+            }
+            _ => 0.0,
+        }
+    };
+    // Segment counts: `segments` (default 1), raised to ceil(length / target)
+    // when the study carries a target — the target only ever refines
+    // (ROADMAP Phase 10 item 3)
+    let segments_for = |e: &ElementSpec, length: f64| -> usize {
+        let mut n = e.segments.map(count).unwrap_or(1);
+        if max_segment_length > 0.0 && length > 0.0 {
+            n = n.max((length / max_segment_length - 1.0e-9).ceil() as usize);
+        }
+        n
+    };
+    let element_segments: Vec<usize> = spec
+        .elements
+        .iter()
+        .map(|e| match e.kind.as_str() {
+            "line" => segments_for(e, chord(&e.from, &e.to)),
+            "catenary" => {
+                let c = chord(&e.from, &e.to);
+                // parabolic arc length: c + 8 s² / (3 c)
+                let arc = if c > 0.0 {
+                    c + 8.0 * e.sag * e.sag / (3.0 * c)
+                } else {
+                    c
+                };
+                segments_for(e, arc)
+            }
+            "mesh" => {
+                // one count serves every bar: the longest bar sets the target
+                let bar_x = e.length_x / (count(e.rows_x).max(1) as f64);
+                let bar_y = e.length_y / (count(e.rows_y).max(1) as f64);
+                segments_for(e, bar_x.max(bar_y))
+            }
+            _ => 0,
+        })
+        .collect();
     for m in &spec.materials {
         structure.add_material(Linear::new(m.id.clone(), m.epsilonr, m.mur, m.sigma));
     }
-    for e in &spec.elements {
+    for (e, &nseg) in spec.elements.iter().zip(&element_segments) {
         match e.kind.as_str() {
             "line" => structure.add_element(Element::Line(Line::new(
                 e.id.clone(),
                 e.from.clone(),
                 e.to.clone(),
                 e.radius,
-                count(e.segments),
+                nseg,
                 e.material.clone(),
             ))),
             "catenary" => structure.add_element(Element::Catenary(Catenary {
@@ -263,7 +397,7 @@ fn build(spec: CaseSpec) -> Result<LoadedCase> {
                     e.from.clone(),
                     e.to.clone(),
                     e.radius,
-                    count(e.segments),
+                    nseg,
                     e.material.clone(),
                 ),
                 sag: e.sag,
@@ -276,14 +410,17 @@ fn build(spec: CaseSpec) -> Result<LoadedCase> {
                 rows_x: count(e.rows_x),
                 rows_y: count(e.rows_y),
                 radius: e.radius,
-                segments: count(e.segments),
+                segments: nseg,
                 id_material: e.material.clone(),
             })),
             other => eprintln!(" mTupa: unknown element type '{other}' — skipped"),
         }
     }
 
-    let study = Study::new(spec.title.clone(), structure);
+    let mut study = Study::new(spec.title.clone(), structure);
+    study.kernel = kernel;
+    study.image_model = image_model;
+    study.max_segment_length = max_segment_length;
 
     let sources = spec.sources.as_ref().map(|list| {
         list.iter()
@@ -336,7 +473,7 @@ fn build(spec: CaseSpec) -> Result<LoadedCase> {
         .unwrap_or_default();
 
     let transient = match spec.signal {
-        Some(s) => Some(build_signal(s)?),
+        Some(s) => Some(build_signal(s, freq_hz.as_deref())?),
         None => None,
     };
 
@@ -349,47 +486,154 @@ fn build(spec: CaseSpec) -> Result<LoadedCase> {
     })
 }
 
-fn build_signal(s: SignalSpec) -> Result<TransientSpec> {
-    let imax = s.imax.unwrap_or(0.0);
-    let signal: Signal = match s.waveform.as_str() {
-        "heidler" => match &s.terms {
+fn build_waveform(w: &WaveformSpec) -> Result<Signal> {
+    let imax = w.imax.unwrap_or(0.0);
+    Ok(match w.waveform.as_str() {
+        "heidler" => match &w.terms {
             Some(terms) => {
                 let i0: Vec<f64> = terms.iter().map(|t| t.i0).collect();
                 let n: Vec<f64> = terms.iter().map(|t| t.n).collect();
                 let tau1: Vec<f64> = terms.iter().map(|t| t.tau1).collect();
                 let tau2: Vec<f64> = terms.iter().map(|t| t.tau2).collect();
-                new_heidler_signal_terms(&i0, &n, &tau1, &tau2, s.imax)?
+                new_heidler_signal_terms(&i0, &n, &tau1, &tau2, w.imax)?
             }
             None => new_heidler_signal(imax),
         },
-        "doubleExp" => new_double_exp_signal(imax, &s.front, s.jones)?,
-        "portela" => new_portela_signal(imax, s.alpha, s.t_front, s.t_top_end, s.t_tail_end)?,
+        "doubleExp" => new_double_exp_signal(imax, &w.front, w.jones)?,
+        "portela" => new_portela_signal(imax, w.alpha, w.t_front, w.t_top_end, w.t_tail_end)?,
+        "sine" => new_sine_signal(imax, w.frequency_hz, w.phase_deg)?,
         other => {
             return Err(TupaError::new(format!(
-                "mTupa: unknown signal.waveform '{other}' (expected heidler, doubleExp or portela)"
+                "mTupa: unknown signal.waveform '{other}' (expected heidler, doubleExp, portela or sine)"
             )));
         }
-    };
-    let antialias_start = match s.antialias_start {
-        Some(a) => {
-            if a <= 0.0 || a > 1.0 {
+    })
+}
+
+fn build_signal(s: SignalSpec, freq_hz: Option<&[f64]>) -> Result<TransientSpec> {
+    let sources = match &s.sources {
+        Some(list) => {
+            if !s.source_node.is_empty() || !s.wave.waveform.is_empty() {
                 return Err(TupaError::new(
-                    "mTupa: signal.antialiasStart must be in (0, 1]",
+                    "mTupa: signal.sources cannot be combined with signal.sourceNode/waveform",
                 ));
             }
-            a
+            if list.is_empty() {
+                return Err(TupaError::new(
+                    "mTupa: signal.sources must hold at least one source",
+                ));
+            }
+            list.iter()
+                .map(|src| {
+                    Ok(TransientSource {
+                        node: src.node.clone(),
+                        signal: build_waveform(&src.wave)?,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?
         }
-        None => 1.0,
+        None => vec![TransientSource {
+            node: s.source_node.clone(),
+            signal: build_waveform(&s.wave)?,
+        }],
     };
+
+    let mut options = TransientOptions::default();
+    if let Some(a) = s.antialias_start {
+        if a <= 0.0 || a > 1.0 {
+            return Err(TupaError::new(
+                "mTupa: signal.antialiasStart must be in (0, 1]",
+            ));
+        }
+        options.antialias_start = a;
+    }
+    if let Some(w) = &s.window {
+        options.window = match w.kind.as_str() {
+            "none" => Window::None,
+            "hann" => Window::Hann,
+            other => {
+                return Err(TupaError::new(format!(
+                    "mTupa: unknown signal.window.type '{other}' (expected none or hann)"
+                )));
+            }
+        };
+        options.window_placement = match w.placement.as_deref().unwrap_or("spectral") {
+            "spectral" => WindowPlacement::Spectral,
+            "time" => WindowPlacement::Time,
+            other => {
+                return Err(TupaError::new(format!(
+                    "mTupa: unknown signal.window.placement '{other}' (expected spectral or time)"
+                )));
+            }
+        };
+    }
+    if let Some(t) = &s.transform {
+        options.transform = match t.as_str() {
+            "fft" => Transform::Fft,
+            "nlt" => Transform::Nlt,
+            other => {
+                return Err(TupaError::new(format!(
+                    "mTupa: unknown signal.transform '{other}' (expected fft or nlt)"
+                )));
+            }
+        };
+    }
+    if let Some(c) = s.nlt_damping {
+        if c <= 0.0 {
+            return Err(TupaError::new("mTupa: signal.nltDamping must be > 0"));
+        }
+        if options.transform != Transform::Nlt {
+            return Err(TupaError::new(
+                "mTupa: signal.nltDamping requires signal.transform = \"nlt\"",
+            ));
+        }
+        options.nlt_damping = c;
+    }
+    let freq_zero_hz = s.freq_zero_hz.unwrap_or(1.0e-6);
+    if let Some(tf) = &s.transfer_function {
+        match tf.as_str() {
+            "full" => {}
+            "interpolated" => {
+                if options.transform == Transform::Nlt {
+                    return Err(TupaError::new(
+                        "mTupa: signal.transform \"nlt\" cannot be combined with \
+                         signal.transferFunction \"interpolated\"",
+                    ));
+                }
+                let Some(axis) = freq_hz else {
+                    return Err(TupaError::new(
+                        "mTupa: signal.transferFunction \"interpolated\" needs a \"frequencies\" \
+                         block (the scan grid)",
+                    ));
+                };
+                let (first, last) = (axis[0], axis[axis.len() - 1]);
+                if first > freq_zero_hz * (1.0 + 1e-9) || last < s.nyquist_hz * (1.0 - 1e-9) {
+                    return Err(TupaError::new(format!(
+                        "mTupa: signal.transferFunction \"interpolated\": the frequencies axis must \
+                         span [freqZeroHz, nyquistHz] = {freq_zero_hz:.3E} .. {:.3E} Hz (no \
+                         extrapolation)",
+                        s.nyquist_hz
+                    )));
+                }
+                options.transfer_function = TransferFunction::Interpolated;
+                options.scan_freq_hz = axis.to_vec();
+            }
+            other => {
+                return Err(TupaError::new(format!(
+                    "mTupa: unknown signal.transferFunction '{other}' (expected full or interpolated)"
+                )));
+            }
+        }
+    }
+
     Ok(TransientSpec {
-        signal,
-        source_node: s.source_node,
+        sources,
         observe_nodes: s.observe_nodes,
         observe_electrodes: s.observe_electrodes.unwrap_or_default(),
         nyquist_hz: s.nyquist_hz,
         fft_points: count(s.fft_points),
-        freq_zero_hz: s.freq_zero_hz.unwrap_or(1.0e-6),
-        antialias_start,
+        freq_zero_hz,
+        options,
     })
 }
 
@@ -424,7 +668,14 @@ pub fn validate_study_references(case: &mut LoadedCase) -> Result<()> {
         }
     }
     if let Some(t) = &case.transient {
-        require_node(study, &t.source_node, "signal.sourceNode")?;
+        let field = if t.sources.len() > 1 {
+            "signal.sources[].node"
+        } else {
+            "signal.sourceNode"
+        };
+        for src in &t.sources {
+            require_node(study, &src.node, field)?;
+        }
         for id in &t.observe_nodes {
             require_node(study, id, "signal.observeNodes")?;
         }
@@ -545,7 +796,7 @@ mod tests {
         let t = c.transient.unwrap();
         assert_eq!(t.fft_points, 1024);
         assert_eq!(t.freq_zero_hz, 1.0e-6);
-        assert_eq!(t.antialias_start, 1.0);
+        assert_eq!(t.options.antialias_start, 1.0);
         assert!(t.observe_electrodes.is_empty());
     }
 

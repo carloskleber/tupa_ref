@@ -6,8 +6,8 @@
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Architectural vision: components, layers, flows, data management, state, extension mechanisms, known debts |
 | [CONVENTIONS.md](CONVENTIONS.md) | Coding and project conventions (absorbs the retired CLAUDE.md) |
 | [ROADMAP.md](ROADMAP.md) | Current-state gap analysis, phased plan, proposals from the open-source comparison, author-interview decisions (formerly `implementation-plan.md`) |
-| [BENCHMARKS.md](BENCHMARKS.md) | Validation anchors, execution status, cross-code benchmark setup, comparison policy |
-| [validation/](validation/) | Case-by-case comparisons against published papers' own figures (digitized plots, not tabulated data) |
+| [BENCHMARKS.md](BENCHMARKS.md) | Validation anchors, execution status, cross-code benchmark setup, comparison policy, Phase 10 performance measurements |
+| [validation/](validation/) | Case-by-case comparisons against published papers' own figures (digitized plots, not tabulated data), the TAGS cross-code check and the Phase 10 image-model study |
 | [DISTRIBUTION.md](DISTRIBUTION.md) | Build chain, dependency inventory, packaging/release, licensing, security surface |
 | [GLOSSARY.md](GLOSSARY.md) | Main model and software terms |
 | [references.md](references.md) | Bibliography, numbered as cited in the theory doc |
@@ -36,7 +36,7 @@ ARCHITECTURE → theory.md; contributors add CONVENTIONS and ROADMAP.
 | [0012](adr/0012-results-json-schema.md) | Results JSON schema v0 (harmonic sweep) | Accepted |
 | [0013](adr/0013-input-schema-sources-frequencies-outputs.md) | Input schema: `sources`/`frequencies`/`outputs` blocks | Accepted |
 | [0014](adr/0014-fft-implementation.md) | In-repo double-precision radix-2 FFT | Accepted |
-| [0015](adr/0015-time-domain-signal-schema.md) | Input schema: `signal`; transient results schema v0 (amended: Heidler `terms`) | Accepted |
+| [0015](adr/0015-time-domain-signal-schema.md) | Input schema: `signal`; transient results schema v0 (amended: Heidler `terms`; 2026-09-30 Phase 9: `sources`, `window`, `transferFunction`, `transform`/`nltDamping`, `sine`, transient fixtures) | Accepted |
 | [0016](adr/0016-voltage-sources-by-superposition.md) | Voltage sources by unit-injection superposition; `voltage` in sources | Accepted |
 | [0017](adr/0017-legacy-reinspection-findings.md) | Legacy re-inspection findings (July 2026) | Recorded |
 | [0018](adr/0018-author-interview-decisions-2026-07.md) | Author-interview decisions (2026-07-05) | Accepted |
@@ -45,6 +45,7 @@ ARCHITECTURE → theory.md; contributors add CONVENTIONS and ROADMAP.
 | [0021](adr/0021-transient-antialias-filter.md) | Optional anti-aliasing filter for transient synthesis | Accepted |
 | [0022](adr/0022-rust-implementation.md) | Rust implementation (`rust/`): design decisions and conformance status | Accepted |
 | [0023](adr/0023-legacy-case-import.md) | Legacy case import: `catenary` element, `portela` waveform, legacy `common/` cases | Accepted |
+| [0024](adr/0024-phase10-numerics.md) | Phase 10 numerics: single-integral kernel, Γ(ω) images, segment-length target, threaded sweep (`numerics` block) | Accepted |
 
 Language-specific build documentation stays with each implementation
 (e.g. [../fortran/README.md](../fortran/README.md),

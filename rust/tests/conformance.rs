@@ -4,8 +4,9 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use tupa::results_writer::results_csv;
-use tupa::run_study_from_file;
+use tupa::results_writer::{results_csv, transient_csv};
+use tupa::transient::transient_response;
+use tupa::{load_study, run_study_from_file, validate_study_references};
 
 fn common() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -96,6 +97,105 @@ fn check_case(name: &str) {
     }
 }
 
+/// Transient fixtures (`time_s,quantity,id,value`, ROADMAP Phase 9): rows
+/// matched by position with identical text fields; values within
+/// `reltol·max(|expected|, 1e-3·peak)`, peak = largest |expected| of that
+/// (quantity, id) series (same rule as `fortran/test/test_common_cases.f90`).
+type TransientRows = (String, Vec<(String, String, f64)>);
+
+fn diff_transient_csv(fresh: &str, expected: &str, reltol: f64) -> Result<(), String> {
+    let split = |text: &str| -> Result<TransientRows, String> {
+        let mut lines = text.lines();
+        let head = lines.next().unwrap_or("").to_string();
+        let rows = lines
+            .map(|l| {
+                let p = l.rfind(',').ok_or(format!("malformed row: {l}"))?;
+                let key = l[..p].to_string();
+                let series = key[key.find(',').unwrap_or(0) + 1..].to_string();
+                let v = l[p + 1..]
+                    .trim()
+                    .parse::<f64>()
+                    .map_err(|e| format!("{l}: {e}"))?;
+                Ok((key, series, v))
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        Ok((head, rows))
+    };
+    let (fh, fr) = split(fresh)?;
+    let (eh, er) = split(expected)?;
+    if fh != eh {
+        return Err(format!("header mismatch: {fh:?} vs {eh:?}"));
+    }
+    if fr.len() != er.len() {
+        return Err(format!(
+            "row count differs: {} fresh vs {} expected",
+            fr.len(),
+            er.len()
+        ));
+    }
+    let mut peak = std::collections::HashMap::new();
+    for (_, s, v) in &er {
+        let p = peak.entry(s.clone()).or_insert(0.0_f64);
+        *p = p.max(v.abs());
+    }
+    for ((fk, _, fv), (ek, es, ev)) in fr.iter().zip(&er) {
+        if fk != ek {
+            return Err(format!("row key differs: {fk} vs {ek}"));
+        }
+        let scale = ev.abs().max(1.0e-3 * peak[es]);
+        if (fv - ev).abs() > reltol * scale {
+            return Err(format!("{ek}: fresh {fv} vs expected {ev}"));
+        }
+    }
+    Ok(())
+}
+
+fn check_transient_case(name: &str) {
+    check_transient_case_as(name, name);
+}
+
+/// `check_transient_case` against `<fixture>_expected.csv` (a case whose
+/// harmonic sweep owns `<name>_expected.csv`).
+fn check_transient_case_as(name: &str, fixture: &str) {
+    let json = common().join(format!("{name}.json"));
+    let expected =
+        fs::read_to_string(common().join(format!("{fixture}_expected.csv"))).expect("expected csv");
+    let mut case = load_study(&json).expect("load");
+    validate_study_references(&mut case).expect("validate");
+    let spec = case.transient.clone().expect("signal block");
+    let r = transient_response(&mut case.study, &spec).expect("transient");
+    let nodes: Vec<String> = spec.sources.iter().map(|s| s.node.clone()).collect();
+    let fresh = transient_csv(&nodes, &spec.observe_nodes, &spec.observe_electrodes, &r);
+    if let Err(msg) = diff_transient_csv(&fresh, &expected, 1.0e-6) {
+        panic!("{name}: fresh transient run differs from fixture: {msg}");
+    }
+}
+
+#[test]
+fn portela1997_transient_interpolated_matches_fixture() {
+    check_transient_case("portela1997_transient_interpolated");
+}
+
+#[test]
+fn portela1997_transient_hann_matches_fixture() {
+    check_transient_case("portela1997_transient_hann");
+}
+
+#[test]
+fn portela1997_transient_hann_time_matches_fixture() {
+    check_transient_case("portela1997_transient_hann_time");
+}
+
+#[test]
+fn portela1997_transient_multi_matches_fixture() {
+    check_transient_case("portela1997_transient_multi");
+}
+
+#[test]
+fn portela1997_transient_nlt_matches_fixture() {
+    check_transient_case("portela1997_transient_nlt");
+}
+
 #[test]
 fn portela1997_matches_fixture() {
     check_case("portela1997");
@@ -109,6 +209,43 @@ fn rod_matches_fixture() {
 #[test]
 fn grid_matches_fixture() {
     check_case("grid");
+}
+
+/// Ideal images (`numerics.imageModel: "ideal"`, ROADMAP Phase 10 item 2):
+/// the low-frequency-limit pin; the cases above run the Γ(ω) default.
+#[test]
+fn portela1997_ideal_matches_fixture() {
+    check_case("portela1997_ideal");
+}
+
+/// ROADMAP Phase 10 item 6: the 32x32 m grid (185 nodes, 200 electrodes),
+/// harmonic sweep with its `outputs` filter and scan-fed transient.
+#[test]
+fn portela_mesh_matches_fixture() {
+    let json = common().join("portelaMesh.json");
+    let mut case = load_study(&json).expect("load");
+    validate_study_references(&mut case).expect("validate");
+    let sources = case.sources.clone().expect("sources");
+    let freq = case.freq_hz.clone().expect("frequencies");
+    case.study.run_sweep(&freq, &sources).expect("sweep");
+    let o = &case.outputs;
+    let fresh = results_csv(
+        &case.study,
+        o.nodes.as_deref(),
+        o.electrodes.as_deref(),
+        o.quantities.as_deref(),
+    )
+    .expect("csv");
+    let expected =
+        fs::read_to_string(common().join("portelaMesh_expected.csv")).expect("expected csv");
+    if let Err(msg) = diff_csv(&fresh, &expected, 1.0e-6) {
+        panic!("portelaMesh: fresh run differs from fixture: {msg}");
+    }
+}
+
+#[test]
+fn portela_mesh_transient_matches_fixture() {
+    check_transient_case_as("portelaMesh", "portelaMesh_transient");
 }
 
 #[test]
@@ -125,7 +262,19 @@ fn every_expected_fixture_has_a_test() {
     names.sort();
     assert_eq!(
         names,
-        vec!["grid", "portela1997", "rod"],
+        vec![
+            "grid",
+            "portela1997",
+            "portela1997_ideal",
+            "portela1997_transient_hann",
+            "portela1997_transient_hann_time",
+            "portela1997_transient_interpolated",
+            "portela1997_transient_multi",
+            "portela1997_transient_nlt",
+            "portelaMesh",
+            "portelaMesh_transient",
+            "rod"
+        ],
         "new golden fixture in common/: add a check_case() test for it"
     );
 }

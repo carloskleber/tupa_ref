@@ -59,7 +59,8 @@ instructions (retired 2026-07-05).
 | JSON library escape hatch | json-fortran (ADR 0006) |
 | Frequency axis | Logarithmic spacing for harmonic sweeps; linear grid for transients (theory.md §8) |
 | FFT implementation | In-repo double-precision radix-2 (`mFft`), not SLATEC (single precision) or stdlib (no FFT module in the pinned version) — ADR 0014 |
-| Parallelism | OpenMP on the geometry-factor fill loop deferred: blocked on making `mImpedance`'s quadrature reentrant first (ARCHITECTURE.md §7, ROADMAP Phase 3 item 4); frequency-loop parallelism under evaluation (ROADMAP P6, Phase 10 item 4) |
+| Parallelism | OpenMP over the frequency loop (`runSweep`, thread-private meshes; ROADMAP Phase 10 item 4, ADR 0024 §4); the fill-loop OpenMP of Phase 3 item 4 is superseded (the LU is ≈ 100 % of a frequency's cost). Results are bit-identical for any thread count; `build.sh` enables `-fopenmp`, `--threads`/`OMP_NUM_THREADS` set the count, one BLAS thread per solve |
+| Default numerics | Single-integral geometry kernel and Γ(ω) images since 0.6.0 (ADR 0024); `numerics: { "kernel": "double", "imageModel": "ideal" }` reproduces the earlier results |
 | Output formats | CSV (primary) + JSON (structured) |
 | Element priority | `tLine`, `mesh` (done); next per ROADMAP Phases 12–13 (`tCircumference` first) |
 | Reference validation case | Buried straight conductor, 10 m, 0.5 m depth, σ = 0.01 S/m, εr ≈ 10 (theory.md §9) |

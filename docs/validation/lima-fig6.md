@@ -1,5 +1,12 @@
 # Lima et al. 2020 (IEEE TEMC), Fig. 6 — Case #9 distribution tower grounding
 
+> **Note (2026-10-01, ROADMAP Phase 10).** The tables and prose below were
+> measured with ideal images (`Γ = ±1`), the default until 0.5.0; since 0.6.0
+> the default is the frequency-dependent `Γ(ω)`, and the figure under
+> `../figures/` was regenerated with it. [phase10-image-model.md](phase10-image-model.md)
+> measures the difference for every comparison: mean errors move by less than
+> 2 points and the qualitative conclusions stand.
+
 **Reference**: Lima, A. C. S.; Moura, R. A. R.; Vieira, P. H. N.; Schroeder,
 M. A. O.; Correia de Barros, M. T. — "A Computational Improvement in
 Grounding Systems Transient Analysis", *IEEE Trans. Electromagn. Compat.*,

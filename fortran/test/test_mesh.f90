@@ -94,9 +94,10 @@ program test_mesh
   ! Self impedance (ADR 0009 interface): theory factors applied inside;
   ! image sign "-" in air, "+" in soil (theory.md §4.3, §5)
   ! ----------------------------------------------------------------
-  call test_init("calcZSelf image sign and factors (theory.md §4.3, §5)")
+  call test_init("calcZSelf image sign and factors (theory.md §4.3, §5), ideal images")
 
   call initMesh(mesh, 2, 1)
+  mesh%imageModel = IMAGE_IDEAL   ! the sign rules are the ideal limit (Phase 10 item 2)
   call calcParam(mesh, omega, epsAir, muAir, sigmaAir, epsSoil, muSoil, sigmaSoil)
 
   ! air: d=r0=0.01, di=1.0, l=2.0, g=2.0, gi=2.0, cosThetaI=+1
@@ -142,6 +143,7 @@ program test_mesh
   call test_init("calcZMutual value and symmetry")
 
   call initMesh(meshMutual, 2, 2)
+  meshMutual%imageModel = IMAGE_IDEAL
   call calcParam(meshMutual, omega, epsAir, muAir, sigmaAir, epsSoil, muSoil, sigmaSoil)
   ! both soil: d=3, di=4, la=2, lb=1, g=1.5, gi=1.2, cosTheta=0.8, cosThetaI=0.6
   call calcZMutual(meshMutual, 1, 2, 2, 2, 3.0d0, 4.0d0, 2.0d0, 1.0d0, &
@@ -167,6 +169,68 @@ program test_mesh
   call test_ok("mixed-media pair is zeroed", &
                abs(meshMutual%Ztrans(1,2)) == 0.0d0 .and. abs(meshMutual%Zlong(1,2)) == 0.0d0, &
                "air-soil segment pairs must have neglected (zero) coupling")
+
+  ! ----------------------------------------------------------------
+  ! Frequency-dependent image reflection coefficient (ROADMAP Phase 10
+  ! item 2, theory.md §5): Γ = (W_own − W_other)/(W_own + W_other)
+  ! ----------------------------------------------------------------
+  call test_init("Frequency-dependent image reflection coefficient (theory.md §5)")
+
+  block
+    type(tMesh) :: m
+    complex(8) :: Ws, Wa, gSoilExp, gAirExp, fp, fpi, zt, zl
+    real(8) :: w
+
+    ! 1 MHz, sigma = 0.01 S/m, eps_r = 10: sigma/(omega eps) ~ 18, so Γ is
+    ! visibly below 1 in magnitude and carries phase
+    call initMesh(m, 2, 2)
+    call calcParam(m, omega, epsAir, muAir, sigmaAir, epsSoil, muSoil, sigmaSoil)
+    Ws = cmplx(sigmaSoil, omega * epsSoil, kind=8)
+    Wa = cmplx(sigmaAir,  omega * epsAir,  kind=8)
+    gSoilExp = (Ws - Wa) / (Ws + Wa)
+    gAirExp  = (Wa - Ws) / (Wa + Ws)
+    call test_ok("default image model is frequency-dependent", &
+                 getDefaultImageModel() == IMAGE_FREQ_DEPENDENT, "default must be Γ(ω)")
+    call test_ok("Γ_soil = (Ws - Wa)/(Ws + Wa)", abs(m%gammaSoil - gSoilExp) < 1.0d-14, &
+                 "soil image coefficient does not match the Fresnel quasi-static form")
+    call test_ok("Γ_air = -Γ_soil (own/other swapped)", abs(m%gammaAir - gAirExp) < 1.0d-14, &
+                 "air image coefficient does not match the Fresnel quasi-static form")
+    call test_ok("|Γ_soil| < 1 with phase at 1 MHz in 0.01 S/m soil", abs(m%gammaSoil) < 1.0d0 .and. aimag(m%gammaSoil) /= 0.0d0, &
+                 "Γ must lose magnitude and gain phase where displacement current competes with conduction")
+    call test_ok("Re(Γ_soil) > 0 (still a same-sign image in soil)", real(m%gammaSoil) > 0.0d0, &
+                 "soil image keeps its positive sign")
+
+    ! Image parcels of both Z_t and Z_l carry Γ (the Matlab reference's choice)
+    call calcZMutual(m, 1, 2, 2, 2, 3.0d0, 4.0d0, 2.0d0, 1.0d0, 1.5d0, 1.2d0, 0.8d0, 0.6d0)
+    fp  = exp(-cmplx(3.0d0, 0.0d0, kind=8) * m%propSoil)
+    fpi = exp(-cmplx(4.0d0, 0.0d0, kind=8) * m%propSoil)
+    zt = m%cESoil * (fp * 1.5d0 + gSoilExp * fpi * 1.2d0) / 2.0d0
+    zl = m%cMSoil * (0.8d0 * fp * 1.5d0 + gSoilExp * 0.6d0 * fpi * 1.2d0)
+    call test_ok("Ztrans mutual (soil) carries Γ on the image parcel", &
+                 abs(m%Ztrans(1,2) - zt) < 1.0d-12 * abs(zt), "image parcel of Z_t not scaled by Γ")
+    call test_ok("Zlong mutual (soil) carries Γ on the image parcel", &
+                 abs(m%Zlong(1,2) - zl) < 1.0d-12 * abs(zl), "image parcel of Z_l not scaled by Γ")
+
+    ! Low-frequency limit: Γ -> +1 (soil) / -1 (air), i.e. the ideal table
+    w = 2.0d0 * PI * 10.0d0
+    call calcParam(m, w, epsAir, muAir, sigmaAir, epsSoil, muSoil, sigmaSoil)
+    call test_ok("10 Hz: Γ_soil = +1 to 1e-6 (ideal limit)", abs(m%gammaSoil - 1.0d0) < 1.0d-6, &
+                 "low-frequency limit must be the ideal image")
+    call test_ok("10 Hz: Γ_air = -1 to 1e-6 (ideal limit)", abs(m%gammaAir + 1.0d0) < 1.0d-6, &
+                 "low-frequency limit must be the ideal image")
+
+    ! High-resistivity soil, 100 MHz: Γ_t ~ (eps_r - 1)/(eps_r + 1) = 0.82 (theory.md §5, Poljak case)
+    call calcParam(m, 2.0d0 * PI * 1.0d8, epsAir, muAir, 0.0d0, 10.0d0 * EPSILON0, muSoil, 1.0d0 / 5400.0d0)
+    call test_ok("5400 ohm.m, eps_r = 10, 100 MHz: |Γ_soil| ~ 0.82", abs(abs(m%gammaSoil) - 9.0d0 / 11.0d0) < 5.0d-3, &
+                 "Γ of the Poljak-Doric soil at 100 MHz should approach (eps_r - 1)/(eps_r + 1)")
+
+    ! Selecting ideal images pins ±1 whatever the frequency
+    m%imageModel = IMAGE_IDEAL
+    call calcParam(m, omega, epsAir, muAir, sigmaAir, epsSoil, muSoil, sigmaSoil)
+    call test_ok("ideal model pins Γ_soil = +1, Γ_air = -1", &
+                 m%gammaSoil == cmplx(1.0d0, 0.0d0, kind=8) .and. m%gammaAir == cmplx(-1.0d0, 0.0d0, kind=8), &
+                 "IMAGE_IDEAL must give the ±1 table at any frequency")
+  end block
 
   ! ----------------------------------------------------------------
   ! Topology matrices A, B, C, D (theory.md §6)

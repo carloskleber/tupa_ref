@@ -50,6 +50,8 @@ pub fn basename_no_ext(path: &str) -> String {
 pub struct RunOptions {
     /// Geometry/quadrature options
     pub geometry: geometry::GeometryOptions,
+    /// Image model of studies that do not state one (CLI `--image-model`)
+    pub image_model: mesh::ImageModel,
     /// Print the assembled nodes/electrodes and stop before any physics
     pub dump_structure: bool,
     /// Directory the result files are written to (default: current dir)
@@ -66,6 +68,7 @@ pub fn run_from_file(filename: &str, opts: &RunOptions) -> Result<()> {
     }
     let mut case = load_study(filename)?;
     case.study.options = opts.geometry;
+    case.study.default_image_model = opts.image_model;
     validate_study_references(&mut case)?;
 
     if opts.dump_structure {
@@ -119,15 +122,16 @@ pub fn run_from_file(filename: &str, opts: &RunOptions) -> Result<()> {
         if !run_sweep {
             case.study.report();
         }
+        let source_nodes: Vec<String> = spec.sources.iter().map(|s| s.node.clone()).collect();
         let csv = results_writer::transient_csv(
-            &spec.source_node,
+            &source_nodes,
             &spec.observe_nodes,
             &spec.observe_electrodes,
             &result,
         );
         let json = results_writer::transient_json(
             &case.study.title,
-            &spec.source_node,
+            &source_nodes,
             &spec.observe_nodes,
             &spec.observe_electrodes,
             &result,

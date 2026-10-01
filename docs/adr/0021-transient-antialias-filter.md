@@ -63,6 +63,12 @@ Add the filter as an **opt-in** feature:
   interchangeable, as ADR 0002 requires.
 - The filter stays separate from `tailTaper`: they address different
   problems (band-edge content vs. record truncation) and are used together.
+- *Update 2026-09-30:* the ADR 0015 amendment of that date (ROADMAP
+  Phase 9) adds `signal.window`; its spectral Hann window is this filter's
+  s → 0 limit, and the two multiply when both are given. The field keeps
+  its name; theory.md §8 calls the mechanism the band-edge filter, since it
+  acts on truncation (Gibbs) ringing rather than on aliasing.
+  The Rust implementation reads the field too (`TransientOptions.antialias_start`).
 
 ## Consequences
 

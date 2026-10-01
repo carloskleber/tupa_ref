@@ -23,7 +23,7 @@ applied and referenced. Other documents cite this record as "ROADMAP §9"
 | Proposals P1/P2/P4 | Confirmed as written (mHEM 1-D kernel; Γ(ω) images; NLT) — ROADMAP §7. |
 | Sources | Current-injection equivalents (ADR 0010; mechanism later concretised by ADR 0016). |
 | Fill interface | Theory factors inside `calcZSelf`/`calcZMutual` (ADR 0009); `current1/current2` documented as end currents `i₁`/`i₂`. |
-| Quadrature tolerances | Dissertation-era values (`errrel = min(la,lb)·10⁻⁶`, `maxint = 500`) kept for now, open to revision — revisit with the P1 mHEM kernel. |
+| Quadrature tolerances | Dissertation-era values (`errrel = min(la,lb)·10⁻⁶`, `maxint = 500`) kept for now, open to revision — revisit with the P1 mHEM kernel. *Revisited 2026-10-01 (ADR 0024 §1): the 2-D path keeps them; the single-integral kernel takes `epsrel` (default 1e-6) unscaled, `maxint = 500`.* |
 | Stable vs fluid modules | Stable: `mMesh` conventions, `mGeometry`, `mImpedance`. Fluid: `tResult`, `mJsonParser`, `tStudy%run`. |
 | Public contract | JSON schema + `common/` cases only; all Fortran module APIs are internal and changeable. |
 | Compilers | Latest gfortran; keep ifx-compatible. |

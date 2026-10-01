@@ -53,13 +53,20 @@ anchors of [docs/theory.md](docs/theory.md) §9 within stated tolerances —
 DC grounding resistance (Sunde), the Portela 1997 harmonic-impedance case,
 internal-consistency checks, and cross-code agreement with the open-source
 TAGS/PRTL-mHEM solvers. Current status: the end-to-end frequency-sweep and
-time-domain pipeline are wired and green (ROADMAP Phases 0–7; Phase 8, the Rust
-port, implemented — harmonic conformance met on the golden fixtures); six comparisons against published papers' own figures — Silva et
+time-domain pipeline are wired and green (ROADMAP Phases 0–7, 9 and 10 —
+Phase 9 adds scan-fed transients, windows, multiple injections and the
+Numerical Laplace Transform; Phase 10 makes the single-integral mHEM kernel
+and frequency-dependent image coefficients the defaults, threads the
+frequency sweep and adds a segment-length target; Phase 8, the Rust port,
+implemented — every golden fixture matched at 1e-6); six comparisons against
+published papers' own figures — Silva et
 al. 2025, Grcev et al. 2018, Lima et al. 2020 and Poljak & Doric 2006 —
 mostly agree within ±10-20% (closer for some cases, see
-[docs/validation/](docs/validation/README.md)). The formal anchors needing
-tabulated data or a cross-code run (TAGS/PRTL-mHEM, added as submodules but
-not yet run) are still open — see [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+[docs/validation/](docs/validation/README.md)), and the cross-code check
+against TAGS agrees to 0.3 % or better below 1 MHz
+([docs/validation/tags-xval.md](docs/validation/tags-xval.md)). The formal
+anchors needing tabulated data (Sunde, Portela 1997, Grcev & Heimbach 1997)
+are still open — see [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
 ## Documentation
 
@@ -85,8 +92,8 @@ The first implementation is **modern Fortran** (2008+, built with FPM) —
 partly because the original numerical core was already Fortran, cleaned up
 and modernised ([ADR 0001](docs/adr/0001-modern-fortran-reference-implementation.md)).
 A native Julia port — contributed by acslima as a prototype and since
-realigned module by module with the Fortran code — lives in
-[julia/](julia/README.md). A Rust implementation — no LAPACK/SLATEC needed, just `cargo` — lives in
+realigned module by module with the Fortran code (not yet with Phases 9–10)
+— lives in [julia/](julia/README.md). A Rust implementation — no LAPACK/SLATEC needed, just `cargo` — lives in
 [rust/](rust/README.md) (ROADMAP Phase 8, [ADR 0022](docs/adr/0022-rust-implementation.md));
 Python is reserved for the GUI. All map the same object model
 (Study → Structure → Element/Material → Node/Electrode → Mesh → Result,
@@ -99,6 +106,12 @@ bash build.sh                          # fetch+build SLATEC, optimised build
 fpm run -- ../common/portela1997.json  # run the solver on a JSON case
 fpm test                               # tests (see docs/ROADMAP.md §5 for the fast/slow split)
 ```
+
+`build.sh` enables OpenMP: the frequency sweep runs on all cores (results are
+bit-identical for any thread count; `OMP_NUM_THREADS` or `--threads <n>`
+choose the count). Per-study numerics — geometry kernel, image model and a
+segment-length target — are set by the optional `numerics` block of the case
+file ([common/README.md](common/README.md), [ADR 0024](docs/adr/0024-phase10-numerics.md)).
 
 See [fortran/README.md](fortran/README.md) for the full setup (Windows/Linux)
 and for the bundled Fortran demo programs (`fpm run --example example1`).

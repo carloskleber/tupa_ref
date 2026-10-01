@@ -1,5 +1,15 @@
 # TUPÃ (Fortran and Julia) versus the mHEM prototype — Grcev et al. 2018 Fig. 12, ℓ = 10 m
 
+> **Note (2026-10-01, ROADMAP Phase 10).** The numbers below predate Phase 10:
+> both TUPÃ solvers used ideal images and the nested 2-D kernel. Fortran now
+> defaults to `Γ(ω)` images and the single-integral kernel; the Julia port
+> still computes the old numerics (and could not be re-run, so the
+> Fortran-vs-Julia rows and `julia-grcev-l10-results.csv` are the 2026-09-30
+> ones). Re-running only the Fortran-vs-mHEM comparison with the new default
+> gives mean differences of 0.09 / 0.13 / 1.39 % (ρ = 30 / 300 / 3000 Ω·m,
+> 100 Hz–10 MHz) against 0.07 / 0.17 / 1.74 % below — no change in
+> conclusion ([phase10-image-model.md](phase10-image-model.md)).
+
 Cross-code and external-reference comparison for the 10 m horizontal
 electrode. Three independent solutions of the same problem are compared with
 each other and with the digitized full-wave curve of Grcev et al. 2018

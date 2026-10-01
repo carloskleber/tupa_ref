@@ -152,8 +152,8 @@ exposes as potential/field/step-and-touch post-processing (ROADMAP §7 P7):
   along a profile [42].
 
 The observation-point geometry factor reuses the §4.2 machinery (closed
-form for the collinear/parallel cases, quadrature otherwise), so the P1
-mHEM kernel benefits this output as well.
+form for the collinear/parallel cases, quadrature otherwise), so the
+single-integral mHEM kernel (§4.2) benefits this output as well.
 
 ---
 
@@ -234,7 +234,9 @@ overvoltage peaks within 5 % of a fine-mesh reference, with speedups above
 the fine structure of the current distribution. Segment length is therefore
 an accuracy/cost knob bounded below by the thin-wire condition and above by
 $\lambda/10$; the project default stays $\lambda/10$, with coarsening per
-[19] as a documented option for large studies. The error of coarsening has
+[19] as a documented option for large studies (`numerics.maxSegmentLength`, a per-study
+target: an element gets max(`segments`, ⌈length/target⌉) segments, so elements
+that omit `segments` follow the target alone, coarse or fine — ADR 0024 §3). The error of coarsening has
 a known sign: Silva's segmentation study for the pulse basis [49, §5.3]
 (10 $r_0$ segments as the converged reference) finds that coarser
 discretisations systematically *underestimate* $|Z(\omega)|$ and GPR — a
@@ -243,9 +245,10 @@ candidate cause of the mostly negative mid-band knee error in
 
 ### 4.2 Evaluating the geometry factor
 
-- **Single-integral (mHEM) form** — the planned default (ROADMAP §7 P1;
-  not yet implemented: today the 2-D quadrature below is the production
-  path, with the parallel closed form as fast path). The inner integral over a
+- **Single-integral (mHEM) form** — the default quadrature since ROADMAP
+  Phase 10 item 1 ([ADR 0024](adr/0024-phase10-numerics.md) §1;
+  `mImpedance::geometryFactor1D`), with the parallel closed form as fast
+  path. The inner integral over a
   straight segment $b$ has a closed form: for a field point $p$ on segment
   $a$, with $r_1, r_2$ the distances from $p$ to the two ends of $b$,
 
@@ -257,10 +260,19 @@ candidate cause of the mostly negative mid-band knee error in
 
   — a 1-D adaptive quadrature of a smooth integrand [11]. Cheaper and
   better-conditioned than the double quadrature, especially for close
-  segments.
+  segments: 8× faster on 120 random non-parallel segments (14 400 pairs),
+  agreeing with the 2-D path to 7.9e-8. The implementation takes the
+  tolerance `epsrel` directly (`epsabs = 0`; the 2-D path scales it by the
+  shorter segment), writes $r_1 + r_2 - l_b$ as
+  $\rho^2\left[(r_1 + s)^{-1} + (r_2 + l_b - s)^{-1}\right]$ for a field point
+  alongside $b$ (axial coordinate $s$, distance $\rho$ to the axis) to avoid
+  cancellation, and clamps the logarithm's argument where a touching
+  end point makes the integrand $+\infty$ on a single point (an integrable
+  singularity; a T junction is resolved to 2e-7 by the bisection).
 - **General position, 2-D**: adaptive 2-D quadrature (nested Gauss–Kronrod
   7/15) of $1/R_{ab}$ over both segments. The integrand is smooth unless
-  segments touch. Kept as the test oracle for the single-integral form.
+  segments touch. Kept as the test oracle for the single-integral form and
+  selectable (`numerics.kernel: "double"`, CLI `--kernel double`).
 - **Parallel segments** and **orthogonal segments**: closed-form expressions
   exist (logarithms and arctangents of the corner distances); see [3, annex]
   for the derivation. Portela's *Campos e Ondas* problem collection [32]
@@ -433,9 +445,10 @@ and $\theta_i$ is the angle with the
 image direction (the image of a segment reverses the sign of the z-component of
 its direction vector).
 
-In the current Fortran implementation the reflection coefficients are taken
-at their ideal limits (also available as a runtime switch in the legacy
-Matlab reference), which gives the sign rules:
+The reflection coefficients default to the frequency-dependent $\Gamma(\omega)$
+below (ROADMAP Phase 10 item 2, [ADR 0024](adr/0024-phase10-numerics.md) §2).
+Their ideal limits (also a runtime switch in the legacy Matlab reference,
+`SOLO_IDEAL`; `numerics.imageModel: "ideal"` here) give the sign rules:
 
 | Configuration            | Transversal image | Longitudinal image |
 | --- | --- | --- |
@@ -456,7 +469,11 @@ with immittance $W_s = \sigma_s + j\omega\varepsilon_s$, both TAGS and PRTL-mHEM
 $$\Gamma_t(\omega) = \frac{W_s - j\omega\varepsilon_0}{W_s + j\omega\varepsilon_0}, \qquad \Gamma_\ell = 1$$
 
 applied to the image terms of $Z_t$ **and** $Z_\ell$ (PRTL-mHEM applies
-$\Gamma_t$ to both; TAGS keeps them independent parameters). The **original
+$\Gamma_t$ to both; TAGS keeps them independent parameters). TUPÃ
+follows the Matlab and PRTL-mHEM choice: in terms of the stored
+$c_E = 1/(4\pi W)$ it is $(c_E^{\text{other}} - c_E^{\text{own}})/(c_E^{\text{other}} + c_E^{\text{own}})$
+for a segment in either medium (tending to $+1$ in soil and $-1$ in air), so
+the Laplace-domain NLT path ($s = c + j\omega$) uses it unchanged. The **original
 Matlab TUPÃ already implements exactly this coefficient** as its default
 (non-ideal-soil) mode: assuming equal permeabilities it computes
 $\Gamma = (k_1^2 - k_2^2)/(k_1^2 + k_2^2)$ between the media — algebraically
@@ -468,8 +485,14 @@ C++ port dropped this and kept only the ideal limits. The ideal sign
 rules in the table are the $|W_s| \gg \omega\varepsilon_0$ limit of these
 coefficients; they degrade for high-resistivity soils toward the MHz range,
 where $\Gamma_t$ acquires magnitude < 1 and phase. Implementing $\Gamma(\omega)$
-in the Fortran code is a planned refinement (ROADMAP §7 P2) that
-*restores* reference behaviour rather than adding to it; the cross-media
+(ROADMAP §7 P2, done 2026-10-01) *restored* reference behaviour rather
+than adding to it. Its effect grows as $f^2$: for a 10 m conductor 0.5 m
+deep in 0.01 S/m, $\varepsilon_r = 10$ soil the input voltage differs from
+the ideal-image one by 2.5e-8 at 10 Hz, 2.3e-4 at 100 kHz and 1.8e-3 at
+1 MHz; against published curves it moves the mean error by under 2 points
+([validation/phase10-image-model.md](validation/phase10-image-model.md)),
+and it matches TAGS' $\Gamma_t(\omega)$ to 0.04 % below 1 MHz
+([validation/tags-xval.md](validation/tags-xval.md)). The cross-media
 coupling (air segment ↔ buried segment) is second-order and is neglected, as
 in both legacy codes (the Matlab returns zero for its "transmission"
 condition pairs). Should ROADMAP Phase 14 item 1 ("mutual impedance between
@@ -499,8 +522,9 @@ highest frequency of interest [56] (§10.1). A single 2 m vertical rod in
 *not* evidence for the ideal-image limit in general: at 100 MHz in that
 soil $\sigma/\omega\varepsilon \approx 0.003$, so
 $\Gamma_t \approx (\varepsilon_r - 1)/(\varepsilon_r + 1) \approx 0.82$
-rather than the $+1$ used today — which makes it the natural regression
-case for P2, where $\Gamma(\omega)$ and the ideal limit differ most. Kuhar,
+rather than the $+1$ of the ideal limit — which makes it the natural
+regression case for $\Gamma(\omega)$, where it and the ideal limit differ most
+(mean error below 1 MHz 4.25 % → 4.01 %, validation/phase10-image-model.md). Kuhar,
 Arnautovski-Toševa & Grčev [20] push this ceiling by replacing the
 quasi-static images with **complex images** (the finitely conducting earth
 replaced by a perfect conductor at a complex depth), recovering agreement
@@ -750,7 +774,8 @@ make the spectrum decay only as $1/\omega^2$ — unlike the smooth,
 zero-initial-slope Heidler function — so truncation at the Nyquist bound
 rings more visibly (see the windowing item below).
 
-**Optional band-edge filter (ADR 0021).** Cutting the one-sided spectrum off
+**Optional band-edge filter (ADR 0021; JSON field `antialiasStart`, a
+historical misnomer — see below).** Cutting the one-sided spectrum off
 abruptly at the Nyquist bound leaves ringing in $v(t)$ whenever the
 response still has content there. An optional Tukey (raised-cosine) filter
 can multiply each product $H(\omega)\,I(\omega)$ before the inverse
@@ -778,69 +803,97 @@ switches to solving every bin; (ii) a direct inverse Fourier integral
 evaluated by adaptive quadrature over a spline interpolation of the
 computed spectrum.
 
-**Planned (ROADMAP Phase 9 item 1): scan-fed transient.** The Fortran driver
-gains form (i) as `signal.transferFunction: "full"` (default — today's
-per-bin solve) `| "interpolated"`; the scan grid is the case's own
-`frequencies` axis, which must span $[f_{zero}, f_{Nyq}]$ — the loader
-rejects an axis it would have to extrapolate, unlike the legacy. The
-`"full"` path remains the oracle the interpolated path is validated
-against (the `silva2025_*_transient` cases).
+**Implemented (ROADMAP Phase 9 item 1): scan-fed transient.** Form (i)
+is `signal.transferFunction: "interpolated"` (default `"full"`, the
+per-bin solve): the case's own `frequencies` axis is solved and $H(f)$ is
+interpolated onto the $N/2+1$ bins by pchip on $\mathrm{Re}\,H$ and
+$\mathrm{Im}\,H$ separately (a port of Matlab `pchip`: Fritsch–Carlson
+monotone slopes with the Fritsch–Butland weighted harmonic mean and
+one-sided shape-preserving end slopes). The axis must span
+$[f_{zero}, f_{Nyq}]$ — the loader rejects an axis it would have to
+extrapolate, unlike the legacy. On the `silva2025_*_transient` cases with
+the paper's 128-point scan the result stays within $1.7\times10^{-5}$ of
+peak of the per-bin solve at the injection node and $2.7\times10^{-5}$ at
+the far end of the 60 m electrode, at 12–15× less run time
+([validation/phase9-transient-options.md](validation/phase9-transient-options.md)).
 
-**Planned (ROADMAP Phase 9 item 2): windowing.** A `signal.window` option
-(Hanning first) selectable in two placements: a spectral data window
-applied to the one-sided $H \cdot X$ product before the inverse transform
-(Gibbs suppression — the same filter the NLT refinement below applies), or
-a time-domain window on the sampled excitation record. Default is no
-window; the erfc taper on the record's final 20 % (legacy `sinalt0Pad`
-convention, `tailTaper`) keeps its separate record-truncation role.
+**Implemented (ROADMAP Phase 9 item 2): windowing.** `signal.window`
+selects the falling half of a Hann window, $w(x) = \tfrac12[1 + \cos \pi x]$,
+$x\in[0,1]$, in one of two placements: `"spectral"` (default) multiplies
+the one-sided $H\cdot X$ product ($x = f/f_{Nyq}$, together with the
+band-edge filter) — the Hanning data window of the NLT literature [17],
+and exactly the $s \to 0$ limit of the Tukey band-edge filter; `"time"`
+multiplies the sampled excitation record ($x = t/t_{last}$, after the
+erfc tail taper). Default is no window; the erfc taper on the record's
+final 20 % (legacy `sinalt0Pad` convention, `tailTaper`) keeps its separate
+record-truncation role.
 
-**Numerical Laplace Transform (NLT) refinement.** TAGS, PRTL and PRTL-mHEM
+**Implemented (ROADMAP Phase 9 item 4): multiple injections.**
+`signal.sources` lists current injections, each with its own waveform
+(including a switched-on sine, `imax`·sin(2π f t + φ) for $t\ge0$). By
+linearity the response is $\sum_k H_k(s)\,X_k(s)$, $H_k$ the transfer
+function of a unit current at source $k$ (one sweep per source), summed
+per observe point before a single inverse transform.
+
+**Numerical Laplace Transform (NLT) — implemented (ROADMAP Phase 9 item
+5, `signal.transform: "nlt"`).** TAGS, PRTL and PRTL-mHEM
 solve at complex frequencies $s = c + j\omega$ instead of $j\omega$, with damping
 constant $c \approx \ln(N^2)/T$ (N samples, window $T$) and a data window
 (Hanning, Blackman, …) applied before the inverse transform (Gómez & Uribe
 [17]). The damping suppresses aliasing of the late-time response and Gibbs
-oscillations; the plain FFT drive is the $c = 0$ special case. Since every
-frequency-domain routine already takes a complex constant, supporting NLT
-only changes the sweep driver, not the physics kernels. Note the two sweep
+oscillations; the plain FFT drive is the $c = 0$ special case. In TUPÃ the
+excitation is damped by $e^{-ct}$ before the forward FFT, the system solved
+at $s_k = c + j\omega_k$ ($s_0 = c$ is regular, so no `freqZeroHz`
+substitute is needed), and the inverse FFT undamped by $e^{ct}$; default
+$c = \ln(N^2)/T$ with $T = N\Delta t$ (as TAGS), override `nltDamping`.
+The physics kernels take the analytic continuation $j\omega \to s$ on the
+principal branch: $W(s) = \sigma + s\varepsilon$ (linear),
+$\sigma_0 + k_r (s/\omega_0)^{\alpha_0}/\sin(\pi\alpha_0/2)$ (Lima–Portela,
+since $\cot(\pi\alpha_0/2) + j = e^{j\pi\alpha_0/2}/\sin(\pi\alpha_0/2)$),
+$\sigma_0 + \sigma_0 h (s/\omega_0)^{\xi}/\cos(\pi\xi/2) + s\varepsilon_0\varepsilon_\infty$
+(Alipio–Visacro), and the internal impedance with $\rho = r_0\sqrt{s\mu\sigma}$;
+all reduce to the harmonic formulas on $s = j\omega$ and satisfy
+$W(\bar s) = \overline{W(s)}$, so the conjugate-symmetric reconstruction
+holds. Two practical limits were measured
+([validation/phase9-transient-options.md](validation/phase9-transient-options.md)):
+the undamping factor reaches $e^{cT} = N^2$ at the record end, so any
+residual truncation error grows along the record and plain NLT output is
+reliable only over its early part (first half to ~80 %, case dependent);
+and a spectral window acts on the *damped* spectrum, so it confines the
+late-record growth to the last few samples but smooths fronts spanning
+only a few samples differently than under the FFT. Where the record is
+wrap-around-limited, NLT is 6–10× closer to a long-record reference over
+the first half. Note the two sweep
 modes serve different purposes and use different axes: *harmonic response*
 (log-spaced, real $\omega$) and *transient* (linearly spaced $s_k$, as the
-IFFT/NLT grid requires). With the planned scan-fed transient the two
+IFFT/NLT grid requires). With the scan-fed transient (Phase 9 item 1) the two
 roles split: the *solve* axis may be the log-spaced harmonic scan, while
 the *synthesis* axis stays the linear FFT/NLT grid.
 
-**Open questions on the planned transient items (review 2026-09-30).**
-To be settled before, or in, the ADR 0015 amendment:
+**Open questions on the transient items (review 2026-09-30).** Questions
+1–3 were settled in the ADR 0015 amendment of 2026-09-30:
 
-1. *Band-edge filter vs. `signal.window`.* ADR 0021 (on the
-   `merge-acslima` branch, not yet on main) adds an opt-in Tukey taper,
-   `signal.antialiasStart` $= s$, on the one-sided $H \cdot X$ product —
-   the same placement as window option (a) above. With $s \to 0$ the Tukey
-   taper is exactly the Hann window $\tfrac12[1 + \cos(\pi f/f_{max})]$
-   that option (a) plans first and that the NLT uses [17], but ADR 0021
-   admits only $s \in (0, 1]$. One spectral-window family (Hann = Tukey
-   with $s = 0$) behind one schema field would avoid two fields for one
-   mechanism. Naming: the taper suppresses band-edge *truncation* (Gibbs)
-   ringing; time-domain *aliasing* (wrap-around from frequency sampling)
-   is governed by the record length and, under NLT, by the damping $c$ —
-   "anti-alias" is a misnomer.
-2. *Interpolating delayed transfer functions.* Componentwise pchip on
-   $\mathrm{Re}\,H$, $\mathrm{Im}\,H$ is safe for smooth driving-point
-   quantities ($Z_{in}$, GPR at the injection node — all the
-   `silva2025_*_transient` validation cases), but a transfer function to a
-   remote node or segment carries a delay factor $\sim e^{-j\omega\tau}$:
-   on a log-spaced scan the step $\Delta f$ grows with $f$, the phase wraps
-   between samples once $\Delta f\,\tau_{max} \gtrsim 1/2$, and the
-   interpolant dips in magnitude. Options: a sampling criterion
-   $\Delta f\,\tau_{max} \ll 1$ enforced by the loader ($\tau_{max}$ from
-   the largest source-to-observer distance and the soil phase velocity at
-   $f_{Nyq}$); interpolation of $|H|$ and unwrapped phase; or
-   de-embedding a known delay before interpolating. Needs a remote-node
-   test case either way.
-3. *NLT with an interpolated transfer function.* NLT needs $H$ at
-   $s_k = c + j\omega_k$; pchip over a real-$\omega$ scan cannot supply
-   it (it is not an analytic continuation). Either the scan itself is
-   solved at $c + j\omega$ with the same $c$, or the loader rejects
-   `transform: "nlt"` together with `transferFunction: "interpolated"`.
+1. *Band-edge filter vs. `signal.window`* — **settled: both kept**, as
+   separate fields that multiply. The Tukey filter (ADR 0021,
+   `antialiasStart` $= s$) and the spectral Hann window act at the same
+   place, and Hann is the $s \to 0$ limit of Tukey, but a named window
+   generalises to other shapes and to the time placement. The ADR 0021
+   field keeps its name for compatibility; the taper suppresses band-edge
+   *truncation* (Gibbs) ringing, while time-domain *aliasing* (wrap-around
+   from frequency sampling) is governed by the record length and, under
+   NLT, by the damping $c$ — "anti-alias" is a misnomer.
+2. *Interpolating delayed transfer functions* — **settled: componentwise
+   Re/Im pchip, as the legacy, without a sampling criterion.** On the 60 m
+   `silva2025` electrode the far-end voltage and a mid-conductor current
+   interpolated from the 128-point log scan stay within $2.7\times10^{-5}$
+   of peak of the per-bin solve, the same order as the driving point; the
+   phase wrap ($\Delta f\,\tau_{max} \gtrsim 1/2$) does not show at that
+   scale. Longer structures may need a denser scan; the `"full"` path
+   remains the check.
+3. *NLT with an interpolated transfer function* — **settled: rejected at
+   load time** (`transform: "nlt"` with `transferFunction:
+   "interpolated"`), since a pchip fit over real frequencies is not the
+   analytic continuation $H(c + j\omega)$.
 4. *Portela waveform domain.* **Settled by the source:** Portela's course
    text [67] (Vol. II §8.1) assigns $\alpha < 0$ to subsequent negative
    strokes, so a convex front is a documented physical case and should be
@@ -909,8 +962,10 @@ Every implementation must reproduce, within stated tolerance:
    conventions (a valid convention set paired with its solver, but different
    from §2), and its "immittance" system uses unknowns $(\mathbf{u}, I_\ell, I_t)$
    in a symmetric block layout rather than §6's $(\mathbf{u}, \mathbf{i}_1, \mathbf{i}_2)$.
-   Still desirable as an independent oracle (ROADMAP §7 P3), but no longer
-   release-blocking.
+   Run in ROADMAP Phase 10 item 5 (P3; [validation/tags-xval.md](validation/tags-xval.md)):
+   below 1 MHz the codes agree to 0.3 % or better once the $|\cos\theta|$
+   convention is accounted for (a closed loop oriented around itself
+   differs by 4 % at 100 kHz otherwise).
 7. **Published-curve comparisons** ([validation/](validation/README.md)) —
    the executable oracle accepted for the release bar (ADR 0018 postscript,
    2026-08-02; first public release v0.5.0). Digitized figures, harmonic
@@ -952,9 +1007,9 @@ came out of this comparison.
 | Soil dispersion | n/a (σ, ε constants) | `tPortelaSoil` [1,31] and `tVisacroAlipioSoil` [14] (mean set) implemented; `tLongmireSmithSoil` [15,16] planned (§7) | Alipio–Visacro [14] and Smith–Longmire [16] built in | Visacro–Alipio [13] | Delegated to the imported grounding data |
 | Conductor internal impedance | None (PEC wires) | Solid Bessel (§4.3); tubular planned | None (neglected) | Solid + tubular Bessel | Tubular Bessel |
 | Linear solve | Dense matrix inversion | Dense LU (`ZGESV`), full $Z_{\text{eq}}$; reduced $Z_g$ as consistency check (§6) | Dense LU; immittance or admittance path | Dense inversion of $Y_g$ | Dense (Mathematica `Inverse`) |
-| Time domain | Out of scope (harmonic) | FFT↔IFFT (§8); NLT planned | NLT with damping + window filters [17] | NLT (damped $s_k$ grid) + separate harmonic mode | NLT (`nILT`) |
+| Time domain | Out of scope (harmonic) | FFT↔IFFT (§8); NLT with damping + Hann window (§8, opt-in) | NLT with damping + window filters [17] | NLT (damped $s_k$ grid) + separate harmonic mode | NLT (`nILT`) |
 | Frequency axis | Single frequency | Log-spaced sweep (harmonic); linear grid for transients (§8) | Linear (example-defined, incl. log for harmonic studies) | Log (harmonic) / linear (transient) | Linear (NLT grid) |
-| Parallelism | n/a | None yet: fill-loop OpenMP deferred until `mImpedance` is reentrant (ROADMAP Phase 3 item 4); frequency-loop parallelism under evaluation (ROADMAP §7 P6) | OpenMP over the frequency loop, single-threaded BLAS | None (NumPy internal) | None |
+| Parallelism | n/a | OpenMP over the frequency loop on thread-private meshes, bit-identical for any thread count (ROADMAP Phase 10 item 4; the fill-loop OpenMP of Phase 3 item 4 is superseded — the LU is ≈ 100 % of a frequency's cost) | OpenMP over the frequency loop, single-threaded BLAS | None (NumPy internal) | None |
 | Validation anchors | Analytic canonical cases | §9: Sunde DC; published curves of Grcev [23], Lima [11], Poljak [35], Silva [36] (release oracle); Portela [2] and Grcev [18] pending data or cross-code check | Grcev [18], Visacro & Soares, Alipio, Sunjerga examples | Published line/grounding cases | Four 138 kV test cases [12] |
 
 Premises shared by TUPÃ, TAGS and PRTL-mHEM (and inherited from [1,5] —

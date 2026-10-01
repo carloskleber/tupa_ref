@@ -287,6 +287,43 @@ program test_material
     end do
   end block
 
+  ! ROADMAP Phase 9 item 5: W(s) (Numerical Laplace Transform) must be the
+  ! analytic continuation of W(omega): W(j*omega) == W(omega), and
+  ! conjugate-symmetric, W(conjg(s)) == conjg(W(s)).
+  call test_init("admittanceLaplace(j*omega) == admittance(omega), all soil models")
+  block
+    class(tMaterial), allocatable :: m(:)
+    real(8) :: om, errMax, symMax
+    complex(8) :: sC
+    integer :: im, ik
+    character(len=16) :: names(3)
+    names = [character(len=16) :: "linear", "portela", "alipio-visacro"]
+    do im = 1, 3
+      select case (im)
+      case (1)
+        allocate(m(1), source=newMaterialLinear("s", 10.0d0, 1.0d0, 1.0d-3))
+      case (2)
+        allocate(m(1), source=newMaterialPortela("s", 1.0d0, 1.0d-3, 0.706d0, 1.95d-3))
+      case (3)
+        allocate(m(1), source=newMaterialVisacroAlipio("s", 1.0d0, 1.0d-3))
+      end select
+      errMax = 0.0d0
+      symMax = 0.0d0
+      do ik = 0, 8
+        om = 2.0d0 * PI * 10.0d0 ** ik
+        errMax = max(errMax, abs(m(1)%admittanceLaplace(cmplx(0.0d0, om, kind=8)) - m(1)%admittance(om)) &
+                             / abs(m(1)%admittance(om)))
+        sC = cmplx(3.0d4, om, kind=8)
+        symMax = max(symMax, abs(m(1)%admittanceLaplace(conjg(sC)) - conjg(m(1)%admittanceLaplace(sC))) &
+                             / abs(m(1)%admittanceLaplace(sC)))
+      end do
+      call test_ok(trim(names(im)) // ": W(j*omega) matches W(omega) to 1e-12 (1 Hz .. 100 MHz)", &
+                   errMax < 1.0d-12, "")
+      call test_ok(trim(names(im)) // ": W(conjg(s)) = conjg(W(s))", symMax < 1.0d-14, "")
+      deallocate(m)
+    end do
+  end block
+
   call test_summary()
 
 contains
