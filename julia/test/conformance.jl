@@ -52,7 +52,37 @@ end
     @test diff_csv(fresh, read(joinpath(COMMON, "portelaMesh_expected.csv"), String), 1e-6) === nothing
 end
 
+# Transient fixtures carry (time, [signal,] quantity, id, value); the independent-signals
+# fixture of ADR 0026 is run here (the other Phase 9 transient fixtures are lag). Same rule as
+# the Fortran/Rust harnesses: |fresh - expected| <= reltol * max(|expected|, 1e-3 * series peak).
+function diff_transient_csv(fresh::AbstractString, expected::AbstractString, reltol::Float64)
+    fl, el = split(chomp(fresh), '\n'), split(chomp(expected), '\n')
+    fl[1] == el[1] || return "header mismatch: $(fl[1]) vs $(el[1])"
+    length(fl) == length(el) || return "row count differs: $(length(fl) - 1) fresh vs $(length(el) - 1) expected"
+    series(line) = (f = split(line, ','); join(f[2:end-1], ','))
+    peak = Dict{String,Float64}()
+    for line in el[2:end]
+        k = series(line)
+        peak[k] = max(get(peak, k, 0.0), abs(parse(Float64, split(line, ',')[end])))
+    end
+    for (a, b) in zip(fl[2:end], el[2:end])
+        ka, kb = rsplit(a, ',', limit = 2), rsplit(b, ',', limit = 2)
+        ka[1] == kb[1] || return "row key differs: $(ka[1]) vs $(kb[1])"
+        fv, ev = parse(Float64, ka[2]), parse(Float64, kb[2])
+        abs(fv - ev) > reltol * max(abs(ev), 1e-3 * peak[series(b)]) &&
+            return "$(kb[1]): fresh $fv vs expected $ev"
+    end
+    return nothing
+end
+
+@testset "golden fixture portela1997_transient_signals (ADR 0026)" begin
+    c = validate_study_references!(load_study(joinpath(COMMON, "portela1997_transient_signals.json")))
+    rs = transient_signals(c.study, c.transient)
+    fresh = transient_signals_csv(c.transient, rs)
+    @test diff_transient_csv(fresh, read(joinpath(COMMON, "portela1997_transient_signals_expected.csv"), String), 1e-6) === nothing
+end
+
 @testset "every golden fixture has a test" begin
     names = sort([replace(f, "_expected.csv" => "") for f in readdir(COMMON) if endswith(f, "_expected.csv")])
-    @test names == sort(["grid", "portela1997", "portela1997_ideal", "rod", PHASE9_LAG..., PHASE10B_LAG_FIXTURES...])
+    @test names == sort(["grid", "portela1997", "portela1997_ideal", "rod", PHASE9_LAG..., PHASE10B_LAG_FIXTURES..., "portela1997_transient_signals"])
 end

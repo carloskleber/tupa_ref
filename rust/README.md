@@ -112,6 +112,13 @@ item 9) still needs Fortran outputs for the non-golden cases.
 Each later contract change (schema, `common/` case, default numerics)
 carries a Rust item; lags are recorded in the conformance table above.
 
+- **ADR 0026** (independent transient signals) — **implemented, no lag**:
+  `Study::run_sweep_units` (multi-RHS unit terminals, observed rows only),
+  `transient::transient_signals` over `TransientSpec::signal_names`,
+  `results_writer::transient_signals_csv/json`, `signal.signals` in `json.rs`.
+  Fixture `portela1997_transient_signals` matches the Fortran one to 2.4e-13 of
+  the series peak. `transient_response` refuses a spec that lists independent
+  signals. It no longer leaves its sweep in the study.
 - **ROADMAP Phase 10b** ([ADR 0025](../docs/adr/0025-lightning-channel-and-two-node-sources.md)) —
   **implemented, no lag**: `element/channel.rs` (`Channel`, graded and
   uniform chains, `Piecewise` profiles), `channel_calibration.rs` (the

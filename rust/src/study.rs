@@ -2,7 +2,7 @@
 //! (computed once), per-frequency impedance fill, solve (current and ideal
 //! voltage sources, ADR 0010/0016), frequency sweep and convenience queries.
 
-use crate::ctes::{MU0, PI, ZERO};
+use crate::ctes::{MU0, ONE, PI, ZERO};
 use crate::electrode::Electrode;
 use crate::error::{Result, TupaError};
 use crate::geometry::{GeometryKernel, GeometryMatrices, GeometryOptions, build_geometry_matrices};
@@ -107,6 +107,18 @@ pub struct RunOutput {
     pub current2: Vec<Complex64>,
     /// Effective injected current per source (A)
     pub source_currents: Vec<Complex64>,
+}
+
+/// Transfer functions of unit terminals (`Study::run_sweep_units`), indexed
+/// `[terminal][observed row][frequency]`.
+#[derive(Debug, Clone)]
+pub struct UnitSweep {
+    /// Node voltages
+    pub node: Vec<Vec<Vec<Complex64>>>,
+    /// Longitudinal electrode currents
+    pub i1: Vec<Vec<Vec<Complex64>>>,
+    /// Transverse electrode currents
+    pub i2: Vec<Vec<Vec<Complex64>>>,
 }
 
 impl Study {
@@ -420,6 +432,68 @@ impl Study {
             .collect();
         self.sweep_source_currents_freq = src_freq;
         Ok(())
+    }
+
+    /// Transfer functions of several independent unit terminals at once
+    /// (transient driver, ADR 0026). Terminal `m` is a unit current (A), or a
+    /// unit voltage (V) when `terms[m].is_voltage`, at `terms[m].node`
+    /// (across the pair when it has a return node, ADR 0025); the `value`
+    /// field is ignored. Per frequency the system is filled and factorised
+    /// once and every terminal is back-substituted together
+    /// ([`Mesh::inject_signals`]), so each extra terminal costs a triangular
+    /// solve, not a sweep. A unit voltage terminal is the unit-current
+    /// solution scaled by 1/(voltage across its terminals), the one-source
+    /// case of ADR 0016.
+    ///
+    /// Only the requested rows are kept. The study's own sweep storage is
+    /// not touched. A nonzero `damping` solves at `s = damping + 2πj·f`.
+    pub fn run_sweep_units(
+        &mut self,
+        freq_hz: &[f64],
+        terms: &[Source],
+        node_rows: &[usize],
+        electrode_rows: &[usize],
+        damping: f64,
+    ) -> Result<UnitSweep> {
+        self.prepare()?;
+        let (pos, ret) = self.resolve_sources("runSweepUnits", terms)?;
+        let (nodes, patterns) = injection_patterns(&pos, &ret);
+        let nf = freq_hz.len();
+        let mut out = UnitSweep {
+            node: vec![vec![Vec::with_capacity(nf); node_rows.len()]; terms.len()],
+            i1: vec![vec![Vec::with_capacity(nf); electrode_rows.len()]; terms.len()],
+            i2: vec![vec![Vec::with_capacity(nf); electrode_rows.len()]; terms.len()],
+        };
+        for &f in freq_hz {
+            if verbosity_level() == VERB_VERBOSE {
+                println!(" f = {} Hz", format_engineering(f));
+            }
+            self.fill(2.0 * PI * f, damping)?;
+            let mesh = &self.prepared.as_ref().expect("prepared").mesh;
+            let units = mesh.inject_signals(&nodes, &patterns).map_err(|e| {
+                TupaError::new(format!(
+                    "tStudy%runSweepUnits: unit-injection solve failed ({e})"
+                ))
+            })?;
+            for (m, unit) in units.iter().enumerate() {
+                let mut scale = ONE;
+                if terms[m].is_voltage {
+                    let mut gap = unit.voltage[pos[m]];
+                    if let Some(r) = ret[m] {
+                        gap -= unit.voltage[r];
+                    }
+                    scale = ONE / gap;
+                }
+                for (i, &r) in node_rows.iter().enumerate() {
+                    out.node[m][i].push(scale * unit.voltage[r]);
+                }
+                for (i, &r) in electrode_rows.iter().enumerate() {
+                    out.i1[m][i].push(scale * unit.current1[r]);
+                    out.i2[m][i].push(scale * unit.current2[r]);
+                }
+            }
+        }
+        Ok(out)
     }
 
     /// Input impedance `V(node)/I_source(node)` per swept frequency; the node

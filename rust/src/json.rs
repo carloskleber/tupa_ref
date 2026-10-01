@@ -201,6 +201,8 @@ struct WaveformSpec {
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 struct SignalSourceSpec {
+    /// `signal.signals[].name` (ADR 0026); unused by `sources[]`
+    name: Option<String>,
     node: String,
     #[serde(rename = "returnNode")]
     return_node: String,
@@ -223,6 +225,8 @@ struct SignalSpec {
     #[serde(flatten)]
     wave: WaveformSpec,
     sources: Option<Vec<SignalSourceSpec>>,
+    /// Independent signals sharing one transfer function (ADR 0026)
+    signals: Option<Vec<SignalSourceSpec>>,
     window: Option<WindowSpec>,
     transform: Option<String>,
     #[serde(rename = "nltDamping")]
@@ -665,36 +669,106 @@ fn build_channel(e: &ElementSpec, max_segment_length: f64) -> Result<Channel> {
     Ok(ch)
 }
 
+/// A `signal.signals[].name` is written unescaped into the results files: it
+/// must be nonblank, at most 64 characters and free of commas, quotes and
+/// backslashes.
+fn check_signal_name(name: &str, previous: &[String]) -> Result<()> {
+    if name.trim().is_empty()
+        || name.chars().count() > 64
+        || name
+            .chars()
+            .any(|c| matches!(c, ',' | '"' | '\\' | '\n' | '\r'))
+    {
+        return Err(TupaError::new(format!(
+            "mTupa: signal.signals[].name '{name}' must be 1-64 characters, free of commas, \
+             quotes and backslashes"
+        )));
+    }
+    if previous.iter().any(|p| p == name) {
+        return Err(TupaError::new(format!(
+            "mTupa: duplicate signal.signals[].name '{name}'"
+        )));
+    }
+    Ok(())
+}
+
 fn build_signal(s: SignalSpec, freq_hz: Option<&[f64]>) -> Result<TransientSpec> {
-    let sources = match &s.sources {
-        Some(list) => {
-            if !s.source_node.is_empty() || !s.wave.waveform.is_empty() {
-                return Err(TupaError::new(
-                    "mTupa: signal.sources cannot be combined with signal.sourceNode/waveform",
-                ));
-            }
-            if list.is_empty() {
-                return Err(TupaError::new(
-                    "mTupa: signal.sources must hold at least one source",
-                ));
-            }
-            list.iter()
-                .map(|src| {
-                    Ok(TransientSource {
-                        node: src.node.clone(),
-                        signal: build_waveform(&src.wave)?,
-                        return_node: Some(src.return_node.clone()).filter(|r| !r.is_empty()),
-                        is_voltage: parse_quantity(src.quantity.as_deref())?,
-                    })
-                })
-                .collect::<Result<Vec<_>>>()?
+    let mut signal_names: Vec<String> = Vec::new();
+    let sources = if let Some(list) = &s.signals {
+        if s.sources.is_some() || !s.wave.waveform.is_empty() {
+            return Err(TupaError::new(
+                "mTupa: signal.signals cannot be combined with signal.sources/waveform",
+            ));
         }
-        None => vec![TransientSource {
-            node: s.source_node.clone(),
-            signal: build_waveform(&s.wave)?,
-            return_node: Some(s.return_node.clone()).filter(|r| !r.is_empty()),
-            is_voltage: parse_quantity(s.quantity.as_deref())?,
-        }],
+        if list.is_empty() {
+            return Err(TupaError::new(
+                "mTupa: signal.signals must hold at least one signal",
+            ));
+        }
+        let mut out = Vec::with_capacity(list.len());
+        for (i, e) in list.iter().enumerate() {
+            // Terminal defaults come from the block, entries override
+            let node = if !e.node.is_empty() {
+                e.node.clone()
+            } else if !s.source_node.is_empty() {
+                s.source_node.clone()
+            } else {
+                return Err(TupaError::new(format!(
+                    "mTupa: signal.signals[{}] has no node and signal.sourceNode is absent",
+                    i + 1
+                )));
+            };
+            let ret = if !e.return_node.is_empty() {
+                &e.return_node
+            } else {
+                &s.return_node
+            };
+            let name = e.name.clone().unwrap_or_else(|| format!("signal{}", i + 1));
+            check_signal_name(&name, &signal_names)?;
+            signal_names.push(name);
+            out.push(TransientSource {
+                node,
+                signal: build_waveform(&e.wave)?,
+                return_node: Some(ret.clone()).filter(|r| !r.is_empty()),
+                is_voltage: parse_quantity(e.quantity.as_deref().or(s.quantity.as_deref()))?,
+            });
+        }
+        // One signal keeps the ADR 0015 output shape
+        if signal_names.len() < 2 {
+            signal_names.clear();
+        }
+        out
+    } else {
+        match &s.sources {
+            Some(list) => {
+                if !s.source_node.is_empty() || !s.wave.waveform.is_empty() {
+                    return Err(TupaError::new(
+                        "mTupa: signal.sources cannot be combined with signal.sourceNode/waveform",
+                    ));
+                }
+                if list.is_empty() {
+                    return Err(TupaError::new(
+                        "mTupa: signal.sources must hold at least one source",
+                    ));
+                }
+                list.iter()
+                    .map(|src| {
+                        Ok(TransientSource {
+                            node: src.node.clone(),
+                            signal: build_waveform(&src.wave)?,
+                            return_node: Some(src.return_node.clone()).filter(|r| !r.is_empty()),
+                            is_voltage: parse_quantity(src.quantity.as_deref())?,
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()?
+            }
+            None => vec![TransientSource {
+                node: s.source_node.clone(),
+                signal: build_waveform(&s.wave)?,
+                return_node: Some(s.return_node.clone()).filter(|r| !r.is_empty()),
+                is_voltage: parse_quantity(s.quantity.as_deref())?,
+            }],
+        }
     };
 
     let mut options = TransientOptions::default();
@@ -787,6 +861,7 @@ fn build_signal(s: SignalSpec, freq_hz: Option<&[f64]>) -> Result<TransientSpec>
 
     Ok(TransientSpec {
         sources,
+        signal_names,
         observe_nodes: s.observe_nodes,
         observe_electrodes: s.observe_electrodes.unwrap_or_default(),
         nyquist_hz: s.nyquist_hz,
@@ -830,7 +905,9 @@ pub fn validate_study_references(case: &mut LoadedCase) -> Result<()> {
         }
     }
     if let Some(t) = &case.transient {
-        let field = if t.sources.len() > 1 {
+        let field = if !t.signal_names.is_empty() {
+            "signal.signals[].node"
+        } else if t.sources.len() > 1 {
             "signal.sources[].node"
         } else {
             "signal.sourceNode"

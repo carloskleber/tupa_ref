@@ -5,12 +5,15 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import replace
 from pathlib import Path
 
 from .model import (
     ElectrodeCurrent,
+    Excitation,
     FrequencySweep,
     CatenaryElement,
+    HeidlerTerm,
     LineElement,
     Material,
     MeshElement,
@@ -20,12 +23,14 @@ from .model import (
     PortelaSurge,
     Results,
     Signal,
+    SignalWindow,
     Soil,
     Source,
     Study,
     TransientElectrodeCurrent,
     TransientNodeVoltage,
     TransientResults,
+    TransientSignalResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -37,6 +42,69 @@ class StudyLoadError(ValueError):
 
 class ResultsLoadError(ValueError):
     pass
+
+
+def _load_excitation(obj: dict, default_node: str = "", default_terminals: dict | None = None) -> Excitation:
+    """One waveform description: the `signal` block itself, a
+    `signal.sources[]` entry or a `signal.signals[]` entry. `default_terminals`
+    holds the block-level `returnNode`/`quantity` an entry may override."""
+    waveform = obj["waveform"]
+    terminals = {**(default_terminals or {}), **{k: obj[k] for k in ("returnNode", "quantity") if k in obj}}
+    return Excitation(
+        waveform=waveform,
+        node=obj.get("node", obj.get("sourceNode", default_node)),
+        imax=obj.get("imax"),
+        name=obj.get("name"),
+        front=obj.get("front"),
+        jones=obj.get("jones", False),
+        portela=PortelaSurge(
+            alpha=obj["alpha"],
+            t_front=obj["tFront"],
+            t_top_end=obj["tTopEnd"],
+            t_tail_end=obj["tTailEnd"],
+        )
+        if waveform == "portela"
+        else None,
+        terms=[HeidlerTerm(t["i0"], t["n"], t["tau1"], t["tau2"]) for t in obj.get("terms", [])],
+        frequency_hz=obj.get("frequencyHz"),
+        phase_deg=obj.get("phaseDeg", 0.0),
+        return_node=terminals.get("returnNode") or None,
+        quantity=terminals.get("quantity", "current"),
+    )
+
+
+def _load_signal(sig: dict) -> Signal:
+    """The `signal` block (ADR 0015 and its amendments, ADR 0025, ADR 0026)."""
+    block_node = sig.get("sourceNode", "")
+    block_terminals = {k: sig[k] for k in ("returnNode", "quantity") if k in sig}
+    if "signals" in sig:
+        form = "signals"
+        excitations = [_load_excitation(e, block_node, block_terminals) for e in sig["signals"]]
+        # unnamed entries get the same default name the solvers give them
+        excitations = [
+            e if e.name is not None else replace(e, name=f"signal{k}") for k, e in enumerate(excitations, 1)
+        ]
+    elif "sources" in sig:
+        form = "sources"
+        excitations = [_load_excitation(e) for e in sig["sources"]]
+    else:
+        form = "single"
+        excitations = [_load_excitation(sig, block_node)]
+    window = sig.get("window")
+    return Signal(
+        excitations=excitations,
+        form=form,
+        observe_nodes=list(sig["observeNodes"]),
+        nyquist_hz=sig["nyquistHz"],
+        fft_points=sig["fftPoints"],
+        observe_electrodes=list(sig.get("observeElectrodes", [])),
+        freq_zero_hz=sig.get("freqZeroHz", 1.0e-6),
+        antialias_start=sig.get("antialiasStart"),
+        window=SignalWindow(type=window["type"], placement=window.get("placement", "spectral")) if window else None,
+        transform=sig.get("transform", "fft"),
+        nlt_damping=sig.get("nltDamping"),
+        transfer_function=sig.get("transferFunction", "full"),
+    )
 
 
 def load_study(path: str | Path) -> Study:
@@ -131,29 +199,7 @@ def load_study(path: str | Path) -> Study:
             quantities=list(o.get("quantities", [])),
         )
 
-    signal = None
-    if "signal" in raw:
-        sig = raw["signal"]
-        signal = Signal(
-            waveform=sig["waveform"],
-            imax=sig["imax"],
-            source_node=sig["sourceNode"],
-            observe_nodes=list(sig["observeNodes"]),
-            nyquist_hz=sig["nyquistHz"],
-            fft_points=sig["fftPoints"],
-            front=sig.get("front"),
-            jones=sig.get("jones", False),
-            observe_electrodes=list(sig.get("observeElectrodes", [])),
-            freq_zero_hz=sig.get("freqZeroHz", 1.0e-6),
-            portela=PortelaSurge(
-                alpha=sig["alpha"],
-                t_front=sig["tFront"],
-                t_top_end=sig["tTopEnd"],
-                t_tail_end=sig["tTailEnd"],
-            )
-            if sig["waveform"] == "portela"
-            else None,
-        )
+    signal = _load_signal(raw["signal"]) if "signal" in raw else None
 
     return Study(
         title=raw.get("title", path.stem),
@@ -218,26 +264,35 @@ def load_transient_results(path: str | Path) -> TransientResults:
 
     try:
         time = [float(v) for v in raw["time"]]
-        injected_current = [float(v) for v in raw["injectedCurrent"]]
-        nodes = [TransientNodeVoltage(id=n["id"], voltage=[float(v) for v in n["voltage"]]) for n in raw.get("nodes", [])]
-        electrodes = [
+        if "signals" in raw:
+            # A list of independent signals (ADR 0026): the response members live inside each entry
+            signals = [_load_transient_signal(e) for e in raw["signals"]]
+            if not signals:
+                raise ResultsLoadError(f"{path}: 'signals' is empty")
+        else:
+            signals = [_load_transient_signal({**raw, "sourceNode": raw.get("sourceNode", "")}, named=False)]
+    except KeyError as exc:
+        raise ResultsLoadError(f"{path}: missing required field {exc}") from exc
+
+    return TransientResults(title=raw.get("title", path.stem), time=time, signals=signals)
+
+
+def _load_transient_signal(raw: dict, named: bool = True) -> TransientSignalResult:
+    """The response members of a transient results file (ADR 0015): the file
+    itself for a single signal, one `signals[]` entry for ADR 0026."""
+    return TransientSignalResult(
+        name=raw["name"] if named else None,
+        source_node=raw.get("sourceNode", ""),
+        injected_current=[float(v) for v in raw["injectedCurrent"]],
+        nodes=[TransientNodeVoltage(id=n["id"], voltage=[float(v) for v in n["voltage"]]) for n in raw.get("nodes", [])],
+        electrodes=[
             TransientElectrodeCurrent(
                 id=e["id"],
                 i1=[float(v) for v in e["i1"]],
                 i2=[float(v) for v in e["i2"]],
             )
             for e in raw.get("electrodes", [])
-        ]
-    except KeyError as exc:
-        raise ResultsLoadError(f"{path}: missing required field {exc}") from exc
-
-    return TransientResults(
-        title=raw.get("title", path.stem),
-        source_node=raw.get("sourceNode", ""),
-        time=time,
-        injected_current=injected_current,
-        nodes=nodes,
-        electrodes=electrodes,
+        ],
     )
 
 

@@ -4,8 +4,8 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use tupa::results_writer::{results_csv, transient_csv};
-use tupa::transient::transient_response;
+use tupa::results_writer::{results_csv, transient_csv, transient_signals_csv};
+use tupa::transient::{transient_response, transient_signals};
 use tupa::{load_study, validate_study_references};
 
 fn common() -> PathBuf {
@@ -181,9 +181,21 @@ fn check_transient_case_as(name: &str, fixture: &str) {
     let mut case = load_study(&json).expect("load");
     validate_study_references(&mut case).expect("validate");
     let spec = case.transient.clone().expect("signal block");
-    let r = transient_response(&mut case.study, &spec).expect("transient");
     let nodes: Vec<String> = spec.sources.iter().map(|s| s.node.clone()).collect();
-    let fresh = transient_csv(&nodes, &spec.observe_nodes, &spec.observe_electrodes, &r);
+    let fresh = if spec.signal_names.len() > 1 {
+        // A list of independent signals (ADR 0026): `signal` column
+        let r = transient_signals(&mut case.study, &spec).expect("transient");
+        transient_signals_csv(
+            &spec.signal_names,
+            &nodes,
+            &spec.observe_nodes,
+            &spec.observe_electrodes,
+            &r,
+        )
+    } else {
+        let r = transient_response(&mut case.study, &spec).expect("transient");
+        transient_csv(&nodes, &spec.observe_nodes, &spec.observe_electrodes, &r)
+    };
     if let Err(msg) = diff_transient_csv(&fresh, &expected, 1.0e-6) {
         panic!("{name}: fresh transient run differs from fixture: {msg}");
     }
@@ -207,6 +219,11 @@ fn portela1997_transient_hann_time_matches_fixture() {
 #[test]
 fn portela1997_transient_multi_matches_fixture() {
     check_transient_case("portela1997_transient_multi");
+}
+
+#[test]
+fn portela1997_transient_signals_matches_fixture() {
+    check_transient_case("portela1997_transient_signals");
 }
 
 #[test]
@@ -321,6 +338,7 @@ fn every_expected_fixture_has_a_test() {
             "portela1997_transient_interpolated",
             "portela1997_transient_multi",
             "portela1997_transient_nlt",
+            "portela1997_transient_signals",
             "portelaMesh",
             "portelaMesh_transient",
             "rod"

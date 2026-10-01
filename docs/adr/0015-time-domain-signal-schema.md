@@ -3,7 +3,8 @@
 - **Status**: Accepted (schema addition, open to revision before more than
   one writer/reader depends on it)
 - **Date**: 2026-07-16
-- **Amended by**: [ADR 0025](0025-lightning-channel-and-two-node-sources.md) (`returnNode` and `quantity` on `signal` sources, 2026-10-01)
+- **Amended by**: [ADR 0025](0025-lightning-channel-and-two-node-sources.md) (`returnNode` and `quantity` on `signal` sources, 2026-10-01),
+  [ADR 0026](0026-independent-transient-signals.md) (`signal.signals`: independent signals sharing one transfer function, and their results variant, 2026-10-01)
 
 ## Context
 

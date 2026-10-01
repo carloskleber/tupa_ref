@@ -172,6 +172,13 @@ the report; there is nothing to sweep, and no output files are written.
 filter what gets written, same as `runStudyFromFile` (see
 [common/README.md](../common/README.md)).
 
+A `signal.signals` list (ADR 0026) writes the multi-signal variant of the
+transient files (`signals` array in the JSON, a `signal` column in the CSV);
+`mTransient%transientResponseSignals` is the driver (`independent = .true.`),
+`transientResponseSources` its superposition wrapper. The transfer functions of
+every distinct terminal come from one factorisation per frequency
+(`tStudy%runSweepUnits`), so several signals on one node cost one solve.
+
 **`Electrodes: None` in a report**: `study%report()` only shows real
 `..._e1`/`..._n1` electrode/node IDs *after* the structure has been
 discretised (`assembleStructure`, run either directly for a

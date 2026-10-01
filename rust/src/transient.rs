@@ -9,7 +9,10 @@
 //! pchip-interpolated onto the bins (item 1), half-Hann window in the
 //! spectral or time placement (item 2), several simultaneous injections
 //! superposed as `Σ_k H_k·X_k` (item 4), and the Numerical Laplace
-//! Transform (item 5).
+//! Transform (item 5). ADR 0026 adds [`transient_signals`], a list of
+//! independent signals with one response set each; the transfer functions of
+//! all distinct terminals come from one factorisation per frequency
+//! ([`Study::run_sweep_units`]).
 
 use crate::ctes::PI;
 use crate::error::{Result, TupaError};
@@ -276,8 +279,14 @@ impl TransientSource {
 /// Transient request (mirrors the JSON `signal` block, ADR 0015).
 #[derive(Debug, Clone)]
 pub struct TransientSpec {
-    /// Current injections (one for the single-source form)
+    /// Excitations (one for the single-source form). Superposed in
+    /// [`transient_response`]; independent signals in [`transient_signals`].
     pub sources: Vec<TransientSource>,
+    /// Names of the independent signals (`signal.signals[].name`, ADR 0026),
+    /// one per entry of `sources`; empty for the single-waveform and
+    /// `sources` (superposition) forms, and for a one-entry list (which
+    /// keeps the ADR 0015 output shape).
+    pub signal_names: Vec<String>,
     /// Nodes whose voltage is returned
     pub observe_nodes: Vec<String>,
     /// Electrodes whose `i1(t)`, `i2(t)` are returned (empty = none)
@@ -290,6 +299,30 @@ pub struct TransientSpec {
     pub freq_zero_hz: f64,
     /// Phase 9 options (and the ADR 0021 filter)
     pub options: TransientOptions,
+}
+
+/// Observed responses to one excitation `[observed][sample]`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResponseSet {
+    /// Observed node voltages (V)
+    pub node_responses: Vec<Vec<f64>>,
+    /// `i1(t)` of observed electrodes (A)
+    pub i1_responses: Vec<Vec<f64>>,
+    /// `i2(t)` of observed electrodes (A)
+    pub i2_responses: Vec<Vec<f64>>,
+}
+
+/// Time-domain results of a list of independent signals (ADR 0026): the
+/// excitation of signal `k` is `injected_currents[k]`, its response is
+/// `sets[k]`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SignalsResult {
+    /// Time axis (s)
+    pub t: Vec<f64>,
+    /// Injected excitation per signal after the tail taper and any time window
+    pub injected_currents: Vec<Vec<f64>>,
+    /// One response set per signal
+    pub sets: Vec<ResponseSet>,
 }
 
 /// Time-domain results.
@@ -334,11 +367,50 @@ fn scan_spans(scan: &[f64], freq_zero_hz: f64, nyquist_hz: f64) -> bool {
         && scan[scan.len() - 1] >= nyquist_hz * (1.0 - 1e-9)
 }
 
-/// Run the transient pipeline (`transientResponseSources`): one unit-current
-/// sweep per source, `P = Σ_k H_k·X_k` per observe point, then filter,
+/// Run the transient pipeline (`transientResponseSources`): the sources
+/// superpose, `P = Σ_k H_k·X_k` per observe point, then filter,
 /// conjugate-symmetric rebuild and inverse FFT (undamped by `e^{ct}` under
-/// NLT).
+/// NLT). See [`transient_signals`] for a list of independent signals.
 pub fn transient_response(study: &mut Study, spec: &TransientSpec) -> Result<TransientResult> {
+    if spec.signal_names.len() > 1 {
+        return Err(TupaError::new(
+            "transientResponse: the spec lists independent signals; use transient_signals",
+        ));
+    }
+    let (t, injected_currents, mut sets) = transient_core(study, spec, false)?;
+    let set = sets.remove(0);
+    Ok(TransientResult {
+        t,
+        injected_currents,
+        node_responses: set.node_responses,
+        i1_responses: set.i1_responses,
+        i2_responses: set.i2_responses,
+    })
+}
+
+/// Run the transient pipeline for a list of independent signals (ADR 0026,
+/// the legacy `sinal` list): signal `k` alone drives its terminal and gets
+/// its own response set. The transfer functions come from one factorisation
+/// per frequency for all *distinct* terminals ([`Study::run_sweep_units`]),
+/// and signals sharing a terminal share them outright, so N signals on one
+/// node cost one solve, not N.
+pub fn transient_signals(study: &mut Study, spec: &TransientSpec) -> Result<SignalsResult> {
+    let (t, injected_currents, sets) = transient_core(study, spec, true)?;
+    Ok(SignalsResult {
+        t,
+        injected_currents,
+        sets,
+    })
+}
+
+/// Time axis, injected excitation per source, response set per output signal.
+type CoreOutput = (Vec<f64>, Vec<Vec<f64>>, Vec<ResponseSet>);
+
+fn transient_core(
+    study: &mut Study,
+    spec: &TransientSpec,
+    independent: bool,
+) -> Result<CoreOutput> {
     let n = spec.fft_points;
     let o = &spec.options;
     if spec.sources.is_empty() {
@@ -451,57 +523,70 @@ pub fn transient_response(study: &mut Study, spec: &TransientSpec) -> Result<Tra
         })
         .collect::<Result<_>>()?;
 
-    let zero = Complex64::new(0.0, 0.0);
-    let mut p_node = vec![vec![zero; n_bins]; node_idx.len()];
-    let mut p_i1 = vec![vec![zero; n_bins]; elec_idx.len()];
-    let mut p_i2 = vec![vec![zero; n_bins]; elec_idx.len()];
+    let n_out = if independent { spec.sources.len() } else { 1 };
+    let out_of = |is: usize| if independent { is } else { 0 };
 
-    let to_bins = |row: Vec<Complex64>| -> Result<Vec<Complex64>> {
-        if interpolated {
-            pchip_interpolate(&solve_freq, &row, &bin_freq)
-        } else {
-            Ok(row)
-        }
-    };
-    let accumulate = |p: &mut [Complex64], h: &[Complex64], x: &[Complex64], first: bool| {
-        for k in 0..n_bins {
-            if first {
-                p[k] = h[k] * x[k];
-            } else {
-                p[k] += h[k] * x[k];
-            }
-        }
-    };
-
-    for (is, src) in spec.sources.iter().enumerate() {
-        study.run_sweep_damped(
-            &solve_freq,
-            &[Source {
+    // Distinct terminals (node, return node, quantity): one transfer function each
+    let mut terms: Vec<Source> = Vec::new();
+    let mut term_of = Vec::with_capacity(spec.sources.len());
+    for src in &spec.sources {
+        let found = terms.iter().position(|m| {
+            m.node == src.node && m.return_node == src.return_node && m.is_voltage == src.is_voltage
+        });
+        term_of.push(found.unwrap_or_else(|| {
+            terms.push(Source {
                 node: src.node.clone(),
                 value: Complex64::new(1.0, 0.0),
                 is_voltage: src.is_voltage,
                 return_node: src.return_node.clone(),
-            }],
-            c,
-        )?;
-        let nf = solve_freq.len();
-        for (io, &idx) in node_idx.iter().enumerate() {
-            let h = to_bins((0..nf).map(|k| study.voltage_results.get(idx, k)).collect())?;
-            accumulate(&mut p_node[io], &h, &excitations[is], is == 0);
+            });
+            terms.len() - 1
+        }));
+    }
+
+    // Unit-terminal transfer functions on the solve axis; only observed rows kept
+    let units = study.run_sweep_units(&solve_freq, &terms, &node_idx, &elec_idx, c)?;
+
+    let zero = Complex64::new(0.0, 0.0);
+    let mut p_node = vec![vec![vec![zero; n_bins]; node_idx.len()]; n_out];
+    let mut p_i1 = vec![vec![vec![zero; n_bins]; elec_idx.len()]; n_out];
+    let mut p_i2 = vec![vec![vec![zero; n_bins]; elec_idx.len()]; n_out];
+
+    let to_bins = |row: &[Complex64]| -> Result<Vec<Complex64>> {
+        if interpolated {
+            pchip_interpolate(&solve_freq, row, &bin_freq)
+        } else {
+            Ok(row.to_vec())
         }
-        for (io, &idx) in elec_idx.iter().enumerate() {
-            let h = to_bins(
-                (0..nf)
-                    .map(|k| study.long_current_results.get(idx, k))
-                    .collect(),
-            )?;
-            accumulate(&mut p_i1[io], &h, &excitations[is], is == 0);
-            let h = to_bins(
-                (0..nf)
-                    .map(|k| study.trans_current_results.get(idx, k))
-                    .collect(),
-            )?;
-            accumulate(&mut p_i2[io], &h, &excitations[is], is == 0);
+    };
+    let accumulate = |p: &mut [Complex64], h: &[Complex64], x: &[Complex64]| {
+        for k in 0..n_bins {
+            p[k] += h[k] * x[k];
+        }
+    };
+
+    for m in 0..terms.len() {
+        for (io, row) in units.node[m].iter().enumerate() {
+            let h = to_bins(row)?;
+            for (is, &tm) in term_of.iter().enumerate() {
+                if tm == m {
+                    accumulate(&mut p_node[out_of(is)][io], &h, &excitations[is]);
+                }
+            }
+        }
+        for (io, (row1, row2)) in units.i1[m].iter().zip(&units.i2[m]).enumerate() {
+            let h = to_bins(row1)?;
+            for (is, &tm) in term_of.iter().enumerate() {
+                if tm == m {
+                    accumulate(&mut p_i1[out_of(is)][io], &h, &excitations[is]);
+                }
+            }
+            let h = to_bins(row2)?;
+            for (is, &tm) in term_of.iter().enumerate() {
+                if tm == m {
+                    accumulate(&mut p_i2[out_of(is)][io], &h, &excitations[is]);
+                }
+            }
         }
     }
 
@@ -516,13 +601,15 @@ pub fn transient_response(study: &mut Study, spec: &TransientSpec) -> Result<Tra
         Ok(y)
     };
 
-    Ok(TransientResult {
-        t: t.clone(),
-        injected_currents,
-        node_responses: p_node.iter().map(|p| synth(p)).collect::<Result<_>>()?,
-        i1_responses: p_i1.iter().map(|p| synth(p)).collect::<Result<_>>()?,
-        i2_responses: p_i2.iter().map(|p| synth(p)).collect::<Result<_>>()?,
-    })
+    let mut sets = Vec::with_capacity(n_out);
+    for g in 0..n_out {
+        sets.push(ResponseSet {
+            node_responses: p_node[g].iter().map(|p| synth(p)).collect::<Result<_>>()?,
+            i1_responses: p_i1[g].iter().map(|p| synth(p)).collect::<Result<_>>()?,
+            i2_responses: p_i2[g].iter().map(|p| synth(p)).collect::<Result<_>>()?,
+        });
+    }
+    Ok((t, injected_currents, sets))
 }
 
 #[cfg(test)]

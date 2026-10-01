@@ -119,25 +119,50 @@ pub fn run_from_file(filename: &str, opts: &RunOptions) -> Result<()> {
 
     if run_transient {
         let spec = case.transient.clone().expect("transient");
-        let result = transient::transient_response(&mut case.study, &spec)?;
+        let source_nodes: Vec<String> = spec.sources.iter().map(|s| s.node.clone()).collect();
+        let (csv, json) = if spec.signal_names.len() > 1 {
+            // A list of independent signals sharing one transfer function (ADR 0026)
+            let result = transient::transient_signals(&mut case.study, &spec)?;
+            (
+                results_writer::transient_signals_csv(
+                    &spec.signal_names,
+                    &source_nodes,
+                    &spec.observe_nodes,
+                    &spec.observe_electrodes,
+                    &result,
+                ),
+                results_writer::transient_signals_json(
+                    &case.study.title,
+                    &spec.signal_names,
+                    &source_nodes,
+                    &spec.observe_nodes,
+                    &spec.observe_electrodes,
+                    &result,
+                    &results_writer::channels_json(&case.study),
+                ),
+            )
+        } else {
+            let result = transient::transient_response(&mut case.study, &spec)?;
+            (
+                results_writer::transient_csv(
+                    &source_nodes,
+                    &spec.observe_nodes,
+                    &spec.observe_electrodes,
+                    &result,
+                ),
+                results_writer::transient_json(
+                    &case.study.title,
+                    &source_nodes,
+                    &spec.observe_nodes,
+                    &spec.observe_electrodes,
+                    &result,
+                    &results_writer::channels_json(&case.study),
+                ),
+            )
+        };
         if !run_sweep {
             case.study.report();
         }
-        let source_nodes: Vec<String> = spec.sources.iter().map(|s| s.node.clone()).collect();
-        let csv = results_writer::transient_csv(
-            &source_nodes,
-            &spec.observe_nodes,
-            &spec.observe_electrodes,
-            &result,
-        );
-        let json = results_writer::transient_json(
-            &case.study.title,
-            &source_nodes,
-            &spec.observe_nodes,
-            &spec.observe_electrodes,
-            &result,
-            &results_writer::channels_json(&case.study),
-        );
         let (csv_file, json_file) = (
             out_path("_transient_results.csv"),
             out_path("_transient_results.json"),

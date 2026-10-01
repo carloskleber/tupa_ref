@@ -84,6 +84,37 @@ end
     @test_throws TupaError transient_response(study, spec(1.0; n = 1000))
 end
 
+@testset "independent signals share one transfer function (ADR 0026)" begin
+    study = portela_study(10)
+    sigs = [double_exp_signal(1e3, "f250_2500"), double_exp_signal(2e3, "f1_2_50"), portela_signal(5e2, 2.0, 2e-6, 2e-5, 1e-4)]
+    spec = TransientSpec(signal = sigs[1], signals = sigs, signal_names = ["a", "b", "c"],
+                         source_node = "Node_1", observe_nodes = ["Node_1", "Node_2"],
+                         observe_electrodes = ["Line_1_e1"], nyquist_hz = 1e4, fft_points = 1024)
+    rs = transient_signals(study, spec)
+    @test length(rs) == 3
+    for (k, sig) in enumerate(sigs)
+        single = transient_response(study, TransientSpec(signal = sig, source_node = "Node_1",
+                     observe_nodes = ["Node_1", "Node_2"], observe_electrodes = ["Line_1_e1"],
+                     nyquist_hz = 1e4, fft_points = 1024))
+        @test maximum(abs, rs[k].node_responses - single.node_responses) <= 1e-12 * maximum(abs, single.node_responses)
+        @test rs[k].injected_current == single.injected_current
+    end
+    @test_throws TupaError transient_signals(study, TransientSpec(signal = sigs[1], source_node = "Node_1",
+                                             nyquist_hz = 1e4, fft_points = 1024))
+    # per-entry nodes are solved: one sweep per distinct node; terminal fields are refused, not ignored
+    far = TransientSpec(signal = sigs[1], signals = sigs[1:2], signal_names = ["a", "b"],
+                        signal_nodes = ["Node_1", "Node_2"], source_node = "Node_1",
+                        observe_nodes = ["Node_1", "Node_2"], nyquist_hz = 1e4, fft_points = 1024)
+    rf = transient_signals(study, far)
+    at2 = transient_response(study, TransientSpec(signal = sigs[2], source_node = "Node_2",
+              observe_nodes = ["Node_1", "Node_2"], nyquist_hz = 1e4, fft_points = 1024))
+    @test maximum(abs, rf[2].node_responses - at2.node_responses) <= 1e-12 * maximum(abs, at2.node_responses)
+    text = read(joinpath(COMMON, "portela1997_transient_signals.json"), String)
+    @test_throws TupaError load_study_string(replace(text, "\"name\": \"front_8us\"" => "\"name\": \"front_1p2us\""))
+    err = try load_study_string(replace(text, "\"signals\": [" => "\"signals\": [{\"name\": \"x\", \"quantity\": \"voltage\", \"waveform\": \"portela\", \"alpha\": 2, \"tFront\": 1e-6, \"tTopEnd\": 2e-5, \"tTailEnd\": 1e-4},")); nothing catch e e end
+    @test err isa TupaError && occursin("ADR 0026", err.msg)
+end
+
 function mesh_structure(rows_x, rows_y, segments, id; z = -1.0)
     st = Structure(Linear("soil", 10.0, 1.0, 0.01))
     add_material!(st, Linear("copper", 1.0, 1.0, 5.96e7))

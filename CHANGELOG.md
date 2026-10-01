@@ -7,8 +7,36 @@ numerics, which move result files.
 
 ## Unreleased
 
+### Added
+
+- **Independent transient signals** (`signal.signals`,
+  [ADR 0026](docs/adr/0026-independent-transient-signals.md)): the legacy
+  `sinal` list. Several waveforms, optionally each at its own node, are applied
+  one at a time over the same observed nodes and electrodes, with one response
+  set per signal; the transfer function is solved once, so the extra signals
+  are close to free (the legacy line case `linha5a`: 24 s for three fronts
+  instead of 3 × 25 s). Multi-signal results JSON hold `time` and a `signals`
+  array (the top-level response members are absent, so a single-signal reader
+  fails visibly), the CSV a `signal` column; single-signal files are unchanged.
+  Fortran, Rust and Julia (shared or per-entry nodes). Case and fixture
+  `portela1997_transient_signals`.
+- `tStudy%runSweepUnits` / `Study::run_sweep_units`: transfer functions of
+  several unit terminals from one factorisation per frequency, keeping only the
+  observed rows.
+- GUI: the signal model covers every `signal` form (single, `sources`,
+  `signals`) and option, so every `common/` case loads (the loader used to raise
+  `KeyError` on the `sources` form, Heidler `terms` and the sine); the
+  Transient tab overlays the checked signals of a multi-signal results file.
+- `tools/legacy_import.py` keeps every `sinal` entry; the seven `linha*` cases
+  are regenerated with their three fronts (1, 2 and 10 µs).
+
 ### Changed
 
+- The transient driver solves each distinct (node, return node, quantity)
+  terminal once, so `signal.sources` entries sharing a node no longer repeat
+  the sweep, and a large structure no longer keeps its whole sweep per source.
+  `transientResponse*` no longer leaves a sweep in the study
+  (`voltageResults`, `inputImpedance`); results are unchanged.
 - Julia port: ROADMAP Phase 10 numerics (single-integral kernel, `Γ(ω)` images,
   `numerics` block, `maxSegmentLength`; `--kernel`, `--image-model`). The
   regenerated harmonic fixtures and `portela1997_ideal` now run there at 1e-6.

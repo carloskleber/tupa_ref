@@ -5,7 +5,7 @@
 use crate::element::Element;
 use crate::error::{Result, TupaError};
 use crate::study::Study;
-use crate::transient::TransientResult;
+use crate::transient::{SignalsResult, TransientResult};
 use num_complex::Complex64;
 use std::fmt::Write as _;
 
@@ -397,6 +397,126 @@ pub fn transient_json(
         out.push_str("  ]\n");
     }
     out.push_str("}\n");
+    out
+}
+
+/// Transient results of a list of independent signals as CSV (ADR 0026): the
+/// [`transient_csv`] layout with a `signal` column after `time_s`,
+/// `time_s,signal,quantity,id,value`. Per signal: one `injectedCurrent` row
+/// (id = that signal's source node), then the `voltage` and `i1`/`i2` rows.
+pub fn transient_signals_csv(
+    signal_names: &[String],
+    source_nodes: &[String],
+    observe_nodes: &[String],
+    observe_electrodes: &[String],
+    r: &SignalsResult,
+) -> String {
+    let mut out = String::from("time_s,signal,quantity,id,value\n");
+    for k in 0..r.t.len() {
+        let t = fmt_real(r.t[k]);
+        for (j, name) in signal_names.iter().enumerate() {
+            let _ = writeln!(
+                out,
+                "{t},{name},injectedCurrent,{},{}",
+                source_nodes[j],
+                fmt_real(r.injected_currents[j][k])
+            );
+            let set = &r.sets[j];
+            for (i, id) in observe_nodes.iter().enumerate() {
+                let _ = writeln!(
+                    out,
+                    "{t},{name},voltage,{id},{}",
+                    fmt_real(set.node_responses[i][k])
+                );
+            }
+            for (i, id) in observe_electrodes.iter().enumerate() {
+                let _ = writeln!(
+                    out,
+                    "{t},{name},i1,{id},{}",
+                    fmt_real(set.i1_responses[i][k])
+                );
+                let _ = writeln!(
+                    out,
+                    "{t},{name},i2,{id},{}",
+                    fmt_real(set.i2_responses[i][k])
+                );
+            }
+        }
+    }
+    out
+}
+
+/// Transient results of a list of independent signals as JSON (ADR 0026):
+/// `{title, [channels,] time, signals[{name, sourceNode, injectedCurrent,
+/// nodes, electrodes}]}`. The response members live only inside `signals`, so
+/// a reader of the single-signal shape (ADR 0015) finds no top-level `nodes`
+/// and fails instead of silently showing the first signal alone.
+pub fn transient_signals_json(
+    title: &str,
+    signal_names: &[String],
+    source_nodes: &[String],
+    observe_nodes: &[String],
+    observe_electrodes: &[String],
+    r: &SignalsResult,
+    channels: &str,
+) -> String {
+    let mut out = String::new();
+    out.push_str("{\n");
+    let _ = writeln!(out, "  \"title\": \"{}\",", json_escape(title));
+    out.push_str(channels);
+    let _ = writeln!(out, "  \"time\": [{}],", join_real(&r.t));
+    out.push_str("  \"signals\": [\n");
+    for (j, name) in signal_names.iter().enumerate() {
+        let set = &r.sets[j];
+        out.push_str("    {\n");
+        let _ = writeln!(out, "      \"name\": \"{}\",", json_escape(name));
+        let _ = writeln!(
+            out,
+            "      \"sourceNode\": \"{}\",",
+            json_escape(&source_nodes[j])
+        );
+        let _ = writeln!(
+            out,
+            "      \"injectedCurrent\": [{}],",
+            join_real(&r.injected_currents[j])
+        );
+        out.push_str("      \"nodes\": [\n");
+        for (i, id) in observe_nodes.iter().enumerate() {
+            let _ = write!(
+                out,
+                "        {{ \"id\": \"{}\", \"voltage\": [{}] }}",
+                json_escape(id),
+                join_real(&set.node_responses[i])
+            );
+            out.push_str(if i + 1 < observe_nodes.len() {
+                ",\n"
+            } else {
+                "\n"
+            });
+        }
+        out.push_str("      ],\n      \"electrodes\": [\n");
+        for (i, id) in observe_electrodes.iter().enumerate() {
+            let _ = write!(
+                out,
+                "        {{ \"id\": \"{}\", \"i1\": [{}], \"i2\": [{}] }}",
+                json_escape(id),
+                join_real(&set.i1_responses[i]),
+                join_real(&set.i2_responses[i])
+            );
+            out.push_str(if i + 1 < observe_electrodes.len() {
+                ",\n"
+            } else {
+                "\n"
+            });
+        }
+        out.push_str("      ]\n");
+        out.push_str(if j + 1 < signal_names.len() {
+            "    },\n"
+        } else {
+            "    }\n"
+        });
+    }
+    out.push_str("  ]\n}\n");
     out
 }
 

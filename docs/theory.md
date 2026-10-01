@@ -1041,6 +1041,17 @@ linearity the response is $\sum_k H_k(s)\,X_k(s)$, $H_k$ the transfer
 function of a unit current at source $k$ (one sweep per source), summed
 per observe point before a single inverse transform.
 
+**Implemented ([ADR 0026](adr/0026-independent-transient-signals.md)):
+independent signals.** `signal.signals` lists excitations that are *not*
+summed — the legacy `sinal` list (`lesinais.m`/`grafsaida.m`): the same
+$H(s)$ is multiplied by each spectrum $X_k(s)$ in turn and every product is
+inverse-transformed on its own, one response set per signal. Because $H_k$
+depends only on the terminal (node, return node, quantity) and not on the
+waveform, the transfer function is solved once per distinct terminal and
+all terminals share one factorisation per frequency — the right-hand sides
+are the unit patterns, as in ADR 0016 — so a list of $N$ waveforms on one
+node costs one solve, not $N$. The same economy applies to `sources`.
+
 **Numerical Laplace Transform (NLT) — implemented (ROADMAP Phase 9 item
 5, `signal.transform: "nlt"`).** TAGS, PRTL and PRTL-mHEM
 solve at complex frequencies $s = c + j\omega$ instead of $j\omega$, with damping

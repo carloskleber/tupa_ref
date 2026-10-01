@@ -190,6 +190,7 @@ pub fn calibrate_channel(ch: &mut Channel) -> Result<()> {
             });
         }
         let spec = TransientSpec {
+            signal_names: Vec::new(),
             sources: vec![TransientSource::current(
                 "cal-base",
                 new_portela_signal(1.0, 0.0, RISE_TIME, 1.0e3, 2.0e3)?,

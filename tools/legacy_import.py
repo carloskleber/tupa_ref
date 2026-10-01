@@ -19,8 +19,10 @@ carried over. The mapping follows the Matlab reader (`leentrada.m`,
   `lmin` is re-segmented to ceil(length/lmin). Material letters map to the
   Matlab `Estrutura` material table.
 * `.caso`: `solo`/`solo_freq` -> `soil` (legacy `kr`, at 1 rad/s, converted to
-  the ADR 0007 form at 2π·1 MHz); the first `sinal` waveform -> `signal`
-  (`portela`, or `rampa` as `portela` with alpha 0) at the legacy Nyquist
+  the ADR 0007 form at 2π·1 MHz); the `sinal` waveforms -> `signal`
+  (`portela`, or `rampa` as `portela` with alpha 0; several become the
+  independent `signals` list of ADR 0026, all at the first one's node as in the
+  Matlab solver) at the legacy Nyquist
   frequency, FFT size and `freq_zero`; `func_tran` `u`/`deltau` nodes ->
   `observeNodes`, `il`/`it` elements -> `observeElectrodes` (first segment).
   A 1 A harmonic sweep at the injection node is added: `freq_log fmax n` keeps
@@ -178,6 +180,12 @@ def parse_signal(kind, line):
     raise ValueError(f"legacy signal '{kind}' has no JSON counterpart yet")
 
 
+def signal_name(fields, k):
+    """A readable, unique-ish name for the k-th legacy signal (ADR 0026)."""
+    kind = "front" if fields["waveform"] == "portela" and fields["alpha"] != 0.0 else "ramp"
+    return f"{kind}_{fields['tFront'] * 1e6:g}us".replace(".", "p")
+
+
 def parse_caso(path):
     lines = [ln.rstrip() for ln in path.read_text(errors="replace").splitlines()]
     c = dict(flags=set(), signals=[], nodes=[], elements=[], skipped=[], fft=1024, freq_zero=None)
@@ -253,9 +261,22 @@ def convert(folder, name, title):
         warn(f"{s} not carried over (no JSON counterpart)")
 
     src_label, signal = c["signals"][0]
-    for label, other in c["signals"][1:]:
-        warn(f"additional signal not carried over: node {label} {other}")
     source = st.node_id(src_label)
+    if len(c["signals"]) > 1:
+        # Independent signals (`lesinais.m` list); the Matlab solver injects at
+        # the first signal's node for all of them (`solver.m`, nsinais = 1)
+        for label, other in c["signals"][1:]:
+            if label != src_label:
+                warn(f"signal at node {label} {other}: injected at node {src_label} like the others "
+                     "(the Matlab solver uses the first signal's node for every signal)")
+        entries, used = [], set()
+        for k, (_, fields) in enumerate(c["signals"], 1):
+            sig_name = signal_name(fields, k)
+            if sig_name in used:
+                sig_name = f"{sig_name}_{k}"
+            used.add(sig_name)
+            entries.append({"name": sig_name, **fields})
+        signal = {"signals": entries}
 
     observe_nodes = [st.node_id(n) for n in c["nodes"]]
     ids = {e["id"] for e in st.elements}
@@ -273,7 +294,8 @@ def convert(folder, name, title):
         freqs = {"min": float(f"{fmax * 1e-4:.6g}"), "max": fmax, "pointsPerDecade": 20}
         warn(f"{kind} {fmax:g} {npts} mapped to a log sweep, 20 points/decade")
 
-    signal.update(sourceNode=source, observeNodes=observe_nodes or [source])
+    signal = {"sourceNode": source, **signal}
+    signal.update(observeNodes=observe_nodes or [source])
     if observe_electrodes:
         signal["observeElectrodes"] = observe_electrodes
     signal.update(nyquistHz=fmax, fftPoints=c["fft"])
@@ -302,6 +324,12 @@ def convert(folder, name, title):
     return case
 
 
+def signals_list(entries):
+    """`signal.signals` with one entry per line."""
+    lines = [f"      {json.dumps(e, ensure_ascii=False)}" for e in entries]
+    return "[\n" + ",\n".join(lines) + "\n    ]"
+
+
 def dumps(case):
     """JSON in the common/ house style: one node/element/material per line."""
     out = ["{"]
@@ -315,7 +343,8 @@ def dumps(case):
             out += [f"    {s}{',' if k < len(items) - 1 else ''}" for k, s in enumerate(items)]
             out.append(f"  ]{comma}")
         elif key in ("signal", "outputs"):
-            fields = [f'    "{k}": {json.dumps(v, ensure_ascii=False)}' for k, v in value.items()]
+            fields = [f'    "{k}": {signals_list(v) if k == "signals" else json.dumps(v, ensure_ascii=False)}'
+                      for k, v in value.items()]
             out.append(f'  "{key}": {{')
             out.append(",\n".join(fields))
             out.append(f"  }}{comma}")

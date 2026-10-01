@@ -56,9 +56,10 @@ module tupa
   use mJsonParser
   use mSignal, only: tSignal, tSignalSlot, newHeidlerSignal, newHeidlerSignalTerms, newDoubleExpSignal, &
                      newPortelaSignal, newSineSignal
-  use mTransient, only: transientResponseSources, tTransientOptions
+  use mTransient, only: transientResponseSources, transientResponseSignals, tTransientOptions
   use mResultsWriter, only: writeResultsCsv, writeResultsJson, &
-                             writeTransientResultsCsv, writeTransientResultsJson
+                             writeTransientResultsCsv, writeTransientResultsJson, &
+                             writeTransientSignalsCsv, writeTransientSignalsJson
   use mError, only: raiseError
   use mVerbosity
   implicit none
@@ -151,7 +152,7 @@ contains
                         outputNodeIds, outputElectrodeIds, outputQuantities, &
                         signal, signalSourceNode, signalObserveNodeIds, signalObserveElectrodeIds, &
                         signalNyquistHz, signalFftPoints, signalFreqZeroHz, signalAntialiasStart, &
-                        signalSources, signalSourceNodeIds, signalOptions, sourceReturnNodeIds)
+                        signalSources, signalSourceNodeIds, signalOptions, sourceReturnNodeIds, signalNames)
     !! Parse a JSON study file and populate all fields of a tStudy object.
     !!
     !! Performs the following steps:
@@ -221,6 +222,11 @@ contains
     character(len=256), allocatable, intent(out), optional :: signalSourceNodeIds(:)
     !! Injection node per `signalSources` entry ("sources[].node", or
     !! "sourceNode"); `signalSourceNode` holds the first
+    character(len=64), allocatable, intent(out), optional :: signalNames(:)
+    !! "signal.signals[].name" (ADR 0026): allocated only when the case lists
+    !! independent signals; `signalSources`/`signalSourceNodeIds` then hold one
+    !! entry per signal and each drives its own response set. Unallocated for
+    !! the single-waveform and `sources` (superposition) forms.
     type(tTransientOptions), intent(out), optional :: signalOptions
     !! Phase 9 transient options, including `antialiasStart` and, for
     !! "transferFunction": "interpolated", the scan axis
@@ -565,12 +571,68 @@ contains
       block
         type(tSignalSlot), allocatable :: slots(:)
         character(len=256), allocatable :: srcNodes(:)
+        character(len=64), allocatable :: names(:)
         type(tJsonValue), pointer :: srcArr, srcObj, winObj
         type(tTransientOptions) :: opts
-        integer :: nSrc, iSrc
+        integer :: nSrc, iSrc, iPrev
         character(len=256) :: str
 
-        if (json_has(signal_obj, "sources")) then
+        if (json_has(signal_obj, "signals")) then
+          ! A list of independent signals, one response set each (ADR 0026)
+          if (json_has(signal_obj, "sources") .or. json_has(signal_obj, "waveform")) then
+            call raiseError("mTupa: signal.signals cannot be combined with signal.sources/waveform")
+            return
+          end if
+          srcArr => json_child(signal_obj, "signals")
+          nSrc = json_size(srcArr)
+          if (nSrc < 1) then
+            call raiseError("mTupa: signal.signals must hold at least one signal")
+            return
+          end if
+          allocate(slots(nSrc), srcNodes(nSrc), names(nSrc))
+          do iSrc = 1, nSrc
+            srcObj => json_item(srcArr, iSrc)
+            if (json_has(srcObj, "node")) then
+              srcNodes(iSrc) = json_str(srcObj, "node")
+            else if (json_has(signal_obj, "sourceNode")) then
+              srcNodes(iSrc) = json_str(signal_obj, "sourceNode")
+            else
+              write(str, '(I0)') iSrc
+              call raiseError("mTupa: signal.signals[" // trim(str) // "] has no node and signal.sourceNode is absent")
+              return
+            end if
+            call parseSignalWaveform(srcObj, slots(iSrc)%sig)
+            if (.not. allocated(slots(iSrc)%sig)) return
+            ! Terminal defaults come from the block, entries override
+            if (json_has(signal_obj, "returnNode") .or. json_has(signal_obj, "quantity")) then
+              call parseSlotTerminals(signal_obj, slots(iSrc))
+              if (.not. allocated(slots(iSrc)%sig)) return
+            end if
+            call parseSlotTerminals(srcObj, slots(iSrc))
+            if (.not. allocated(slots(iSrc)%sig)) return
+            if (json_has(srcObj, "name")) then
+              str = json_str(srcObj, "name")
+              if (len_trim(str) > len(names(iSrc))) then
+                call raiseError("mTupa: signal.signals[].name '" // trim(str) // "' is longer than 64 characters")
+                return
+              end if
+              names(iSrc) = trim(str)
+            else
+              write(names(iSrc), '("signal",I0)') iSrc
+            end if
+            if (len_trim(names(iSrc)) == 0 .or. scan(names(iSrc), ',"\' // char(10) // char(13)) > 0) then
+              call raiseError("mTupa: signal.signals[].name '" // trim(names(iSrc)) // &
+                              "' must be nonblank and free of commas, quotes and backslashes")
+              return
+            end if
+            do iPrev = 1, iSrc - 1
+              if (trim(names(iPrev)) == trim(names(iSrc))) then
+                call raiseError("mTupa: duplicate signal.signals[].name '" // trim(names(iSrc)) // "'")
+                return
+              end if
+            end do
+          end do
+        else if (json_has(signal_obj, "sources")) then
           ! Several simultaneous injections (ROADMAP Phase 9 item 4)
           if (json_has(signal_obj, "sourceNode") .or. json_has(signal_obj, "waveform")) then
             call raiseError("mTupa: signal.sources cannot be combined with signal.sourceNode/waveform")
@@ -719,6 +781,7 @@ contains
         end if
 
         if (present(signalSources)) call move_alloc(slots, signalSources)
+        if (present(signalNames) .and. allocated(names)) call move_alloc(names, signalNames)
         if (present(signalOptions)) signalOptions = opts
       end block
     end if
@@ -748,7 +811,7 @@ contains
     type(tSignalSlot), intent(inout) :: slot
     character(len=256) :: str
 
-    slot%returnNode = json_str(obj, "returnNode")
+    if (json_has(obj, "returnNode")) slot%returnNode = json_str(obj, "returnNode")
     if (json_has(obj, "quantity")) then
       str = json_str(obj, "quantity")
       select case (trim(str))
@@ -1020,8 +1083,10 @@ contains
     character(len=256), allocatable :: signalSourceNodeIds(:)
     type(tTransientOptions) :: signalOptions
     character(len=256), allocatable :: signalReturnNodeIds(:)
+    character(len=64), allocatable :: signalNames(:)
     integer :: i
     real(8), allocatable :: t(:), injectedCurrents(:,:), nodeResponses(:,:), i1Responses(:,:), i2Responses(:,:)
+    real(8), allocatable :: nodeResp3(:,:,:), i1Resp3(:,:,:), i2Resp3(:,:,:)
     logical :: ranSweep, ranTransient
     character(len=512) :: base, csvFile, jsonFile
     integer(8) :: clockStart, clockEnd, clockRate
@@ -1042,7 +1107,8 @@ contains
                    signalNyquistHz=signalNyquistHz, signalFftPoints=signalFftPoints, &
                    signalFreqZeroHz=signalFreqZeroHz, signalAntialiasStart=signalAntialiasStart, &
                    signalSources=signalSources, signalSourceNodeIds=signalSourceNodeIds, &
-                   signalOptions=signalOptions, sourceReturnNodeIds=sourceReturnNodeIds)
+                   signalOptions=signalOptions, sourceReturnNodeIds=sourceReturnNodeIds, &
+                   signalNames=signalNames)
 
     if (allocated(signalSources)) then
       allocate(signalReturnNodeIds(size(signalSources)))
@@ -1076,7 +1142,35 @@ contains
       call verbose(VERB_NORMAL, "Wrote " // trim(csvFile) // " and " // trim(jsonFile))
     end if
 
-    if (ranTransient) then
+    if (ranTransient .and. allocated(signalNames)) then
+      if (size(signalNames) < 2) deallocate(signalNames)   ! one signal: the ADR 0015 shape
+    end if
+
+    if (ranTransient .and. allocated(signalNames)) then
+      ! A list of independent signals sharing one transfer function (ADR 0026)
+      if (allocated(signalObserveElectrodeIds)) then
+        call transientResponseSignals(study, signalSources, signalSourceNodeIds, signalObserveNodeIds, &
+          signalNyquistHz, signalFftPoints, signalFreqZeroHz, t, injectedCurrents, nodeResp3, &
+          observeElectrodeIds=signalObserveElectrodeIds, i1Responses=i1Resp3, i2Responses=i2Resp3, &
+          options=signalOptions, independent=.true.)
+      else
+        call transientResponseSignals(study, signalSources, signalSourceNodeIds, signalObserveNodeIds, &
+          signalNyquistHz, signalFftPoints, signalFreqZeroHz, t, injectedCurrents, nodeResp3, &
+          options=signalOptions, independent=.true.)
+      end if
+      if (.not. ranSweep) call study%report()
+
+      csvFile  = trim(base) // "_transient_results.csv"
+      jsonFile = trim(base) // "_transient_results.json"
+      call writeTransientSignalsCsv(signalNames, signalSourceNodeIds, t, injectedCurrents, &
+        signalObserveNodeIds, nodeResp3, trim(csvFile), &
+        observeElectrodeIds=signalObserveElectrodeIds, i1Responses=i1Resp3, i2Responses=i2Resp3)
+      call writeTransientSignalsJson(study%title, signalNames, signalSourceNodeIds, t, injectedCurrents, &
+        signalObserveNodeIds, nodeResp3, trim(jsonFile), &
+        observeElectrodeIds=signalObserveElectrodeIds, i1Responses=i1Resp3, i2Responses=i2Resp3, &
+        study=study)
+      call verbose(VERB_NORMAL, "Wrote " // trim(csvFile) // " and " // trim(jsonFile))
+    else if (ranTransient) then
       if (allocated(signalObserveElectrodeIds)) then
         call transientResponseSources(study, signalSources, signalSourceNodeIds, signalObserveNodeIds, &
           signalNyquistHz, signalFftPoints, signalFreqZeroHz, t, injectedCurrents, nodeResponses, &

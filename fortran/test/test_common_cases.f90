@@ -109,6 +109,7 @@ program test_common_cases
   call compareTransientCase("portela1997_transient_hann")
   call compareTransientCase("portela1997_transient_hann_time")
   call compareTransientCase("portela1997_transient_multi")
+  call compareTransientCase("portela1997_transient_signals")
   call compareTransientCase("portela1997_transient_nlt")
 
   ! ROADMAP Phase 10 item 6: the 32x32 m grid (185 nodes, 200 electrodes) end
@@ -242,10 +243,10 @@ contains
     !! near a zero crossing from turning round-off into failures.
     character(len=*), intent(in) :: freshFile, expectedFile
     real(8), intent(in) :: reltol
-    character(len=64), allocatable :: fKey(:), eKey(:), eSeries(:)
+    character(len=128), allocatable :: fKey(:), eKey(:), eSeries(:)
     real(8), allocatable :: fVal(:), eVal(:)
     character(len=256) :: fHead, eHead
-    character(len=64) :: series
+    character(len=128) :: series
     real(8) :: peak
     integer :: i, j
 
@@ -281,7 +282,7 @@ contains
     !! `vals(i)` = value.
     character(len=*), intent(in) :: fileName
     character(len=256), intent(out) :: header
-    character(len=64), allocatable, intent(out) :: keys(:)
+    character(len=128), allocatable, intent(out) :: keys(:)
     real(8), allocatable, intent(out) :: vals(:)
     character(len=256) :: line
     integer :: u, ios, n, i, p

@@ -107,6 +107,9 @@ module mStudy
     !! Execute the full simulation pipeline (discretisation, solving, extraction)
     procedure :: runSweep
     !! Execute `run` across a frequency sweep, storing results (ROADMAP Phase 3)
+    procedure :: runSweepUnits
+    !! Transfer functions of several unit terminals from one factorisation
+    !! per frequency (transient driver, ADR 0026)
     procedure :: inputImpedance
     !! Driving-point impedance Zin(ω) at a sweep source node
     procedure :: maxVoltageMagnitude
@@ -449,13 +452,37 @@ contains
     logical, intent(in) :: laplace
     complex(8), allocatable, intent(out) :: lastSrc(:)
     integer(4), intent(out) :: info
-    integer(4) :: nseg, i, j
-    complex(8) :: zint, sLap
-    real(8) :: muAir, muSoil
     integer(4), allocatable :: injNodes(:)
     complex(8), allocatable :: patterns(:,:)
 
     info = 0
+    call fillAtFrequency(this, mesh, omega, damping, laplace)
+
+    call injectionPatterns(sourcePos, retPos, injNodes, patterns)
+    if (anyVoltage) then
+      call solveWithVoltageSources(mesh, sourcePos, retPos, injNodes, patterns, sourceValues, sourceIsVoltage, &
+                                   lastSrc, info)
+    else
+      info = injectSignal(mesh, size(injNodes), injNodes, matmul(patterns, sourceValues))
+      lastSrc = sourceValues
+    end if
+  end subroutine solveAtFrequency
+
+  subroutine fillAtFrequency(this, mesh, omega, damping, laplace)
+    !! The frequency-dependent half of `solveAtFrequency`: medium constants,
+    !! the `calcZSelf`/`calcZMutual` fill (ADR 0009) and `calcFreq2`, leaving
+    !! `mesh%Zeq` assembled and ready to be factorised. Shared by the
+    !! single-injection sweep and the multi-pattern transfer-function sweep
+    !! (`runSweepUnits`); the study is read-only, every write goes to `mesh`.
+    class(tStudy), intent(in) :: this
+    type(tMesh), intent(inout) :: mesh
+    real(8), intent(in) :: omega
+    real(8), intent(in), optional :: damping
+    logical, intent(in) :: laplace
+    integer(4) :: nseg, i, j
+    complex(8) :: zint, sLap
+    real(8) :: muAir, muSoil
+
     if (laplace) sLap = cmplx(damping, omega, kind=8)
 
     muAir  = this%structure%air%mur * MU0
@@ -497,16 +524,7 @@ contains
     end do
 
     call calcFreq2(mesh)
-
-    call injectionPatterns(sourcePos, retPos, injNodes, patterns)
-    if (anyVoltage) then
-      call solveWithVoltageSources(mesh, sourcePos, retPos, injNodes, patterns, sourceValues, sourceIsVoltage, &
-                                   lastSrc, info)
-    else
-      info = injectSignal(mesh, size(injNodes), injNodes, matmul(patterns, sourceValues))
-      lastSrc = sourceValues
-    end if
-  end subroutine solveAtFrequency
+  end subroutine fillAtFrequency
 
   subroutine solveWithVoltageSources(mesh, sourcePos, retPos, injNodes, patterns, sourceValues, isVoltage, &
                                      lastSrc, info)
@@ -760,6 +778,96 @@ contains
       deallocate(this%sweepReturnIds)
     end if
   end subroutine runSweep
+
+  subroutine runSweepUnits(this, freqHz, termNodeIds, termReturnIds, termIsVoltage, nodeRows, electrodeRows, &
+                           hNode, hI1, hI2, damping)
+    !! Transfer functions of several independent unit terminals at once
+    !! (transient driver, ADR 0026). Terminal m is a unit current (A) or unit
+    !! voltage (V) at node `termNodeIds(m)` — across the pair when
+    !! `termReturnIds(m)` is nonblank (ADR 0025). Per frequency the system is
+    !! filled and factorised once and all terminals are back-substituted
+    !! together (`injectSignals`, NRHS = number of terminals), so each extra
+    !! terminal costs one triangular solve instead of a whole sweep. A unit
+    !! voltage terminal is the unit-current solution scaled by 1/(voltage
+    !! across its terminals), the one-source case of ADR 0016.
+    !!
+    !! Only the requested rows are kept: `hNode(i, k, m)` is the voltage at
+    !! node `nodeRows(i)`, `hI1`/`hI2(i, k, m)` the end currents of electrode
+    !! `electrodeRows(i)`, at `freqHz(k)` for terminal m. The study's own
+    !! sweep storage (`voltageResults` etc.) is not touched. A nonzero
+    !! `damping` c solves at s = c + 2πj·f as in `runSweep`.
+    class(tStudy), intent(inout) :: this
+    real(8), intent(in) :: freqHz(:)
+    character(len=*), intent(in) :: termNodeIds(:), termReturnIds(:)
+    logical, intent(in) :: termIsVoltage(:)
+    integer(4), intent(in) :: nodeRows(:), electrodeRows(:)
+    !! 1-based node / electrode indices to keep
+    complex(8), allocatable, intent(out) :: hNode(:,:,:), hI1(:,:,:), hI2(:,:,:)
+    real(8), intent(in), optional :: damping
+    real(8), allocatable :: omegaAxis(:)
+    integer(4), allocatable :: sourcePos(:), retPos(:), injNodes(:)
+    complex(8), allocatable :: patterns(:,:), unitValues(:)
+    integer(4) :: nf, nT, k, solveInfo
+    logical :: anyVoltage, laplace
+
+    if (.not. this%prepared) call prepareStudy(this)
+
+    nf = size(freqHz)
+    nT = size(termNodeIds)
+    allocate(hNode(size(nodeRows), nf, nT), hI1(size(electrodeRows), nf, nT), hI2(size(electrodeRows), nf, nT))
+    allocate(unitValues(nT))
+    unitValues = cmplx(1.0d0, 0.0d0, kind=8)
+
+    call resolveSources(this, "runSweepUnits", termNodeIds, unitValues, termIsVoltage, termReturnIds, &
+                        sourcePos, retPos, anyVoltage)
+    if (.not. allocated(sourcePos)) return
+    laplace = .false.
+    if (present(damping)) laplace = damping /= 0.0d0
+    call checkConductorMaterials(this)
+
+    omegaAxis = 2.0d0 * PI * freqHz
+    call injectionPatterns(sourcePos, retPos, injNodes, patterns)
+
+    ! Same threading scheme as `runSweep`: independent frequencies, one
+    ! thread-private mesh each, disjoint writes, bit-identical for any thread count.
+    solveInfo = 0
+    call warmUpMachineConstants()
+    !$omp parallel default(shared)
+    block
+      type(tMesh) :: meshLocal
+      complex(8), allocatable :: vU(:,:), i1U(:,:), i2U(:,:)
+      complex(8) :: scale
+      integer(4) :: m, info
+
+      meshLocal = this%mesh
+      !$omp do schedule(dynamic)
+      do k = 1, nf
+        if (verbosityLevel() .eq. VERB_VERBOSE) write(*, '("f = ",EN0.1E2," Hz")') freqHz(k)
+        call fillAtFrequency(this, meshLocal, omegaAxis(k), damping, laplace)
+        info = injectSignals(meshLocal, size(injNodes), injNodes, patterns, vU, i1U, i2U)
+        if (info /= 0) then
+          !$omp critical (tupaSolveInfo)
+          solveInfo = info
+          !$omp end critical (tupaSolveInfo)
+          cycle
+        end if
+        do m = 1, nT
+          scale = cmplx(1.0d0, 0.0d0, kind=8)
+          if (termIsVoltage(m)) then
+            scale = vU(sourcePos(m), m)
+            if (retPos(m) /= 0) scale = scale - vU(retPos(m), m)
+            scale = cmplx(1.0d0, 0.0d0, kind=8) / scale
+          end if
+          hNode(:, k, m) = scale * vU(nodeRows, m)
+          hI1(:, k, m)   = scale * i1U(electrodeRows, m)
+          hI2(:, k, m)   = scale * i2U(electrodeRows, m)
+        end do
+      end do
+      !$omp end do
+    end block
+    !$omp end parallel
+    if (solveInfo /= 0) call raiseError("tStudy%runSweepUnits: linear solve failed (ZGESV INFO /= 0)")
+  end subroutine runSweepUnits
 
   function inputImpedance(this, nodeId) result(zin)
     !! Driving-point impedance Zin(ω) = V(nodeId)/I(nodeId) across the

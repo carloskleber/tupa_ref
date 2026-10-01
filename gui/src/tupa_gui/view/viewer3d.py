@@ -597,10 +597,10 @@ class GeometryViewer(QWidget):
         extent: float,
     ) -> None:
         """A downward arrow touching each current-injection node (ADR 0010 sources, plus a
-        transient study's signal source node), so the driven node(s) stand out from the rest."""
+        transient study's signal source node(s)), so the driven node(s) stand out from the rest."""
         injection_nodes = {source.node for source in study.sources}
         if study.signal is not None:
-            injection_nodes.add(study.signal.source_node)
+            injection_nodes.update(ex.node for ex in study.signal.excitations)
 
         up = QVector3D(0.0, 1.0, 0.0)
         arrow_length = max(extent * 0.18, node_radius * 6.0)

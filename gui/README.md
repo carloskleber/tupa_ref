@@ -32,6 +32,14 @@ uv run tupa-gui ../common/buried_conductor_short.json --results path/to/results.
 
 Both files can also be opened from the File menu.
 
+A study's `signal` block is shown whole in the tree — the single waveform, the
+simultaneous `sources` and the independent `signals` of
+[ADR 0026](../docs/adr/0026-independent-transient-signals.md), with the window,
+transform and transfer-function options. A transient results file holding
+several independent signals gets one checkbox per signal on the Transient tab;
+the checked signals are overlaid on the selected quantity. The `channel` element
+(ADR 0025) is not drawn yet: the loader skips it with a warning.
+
 ## Layout
 
 - `src/tupa_gui/data/` — dataclasses mirroring the object model (including

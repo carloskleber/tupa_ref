@@ -1,0 +1,40 @@
+{
+  "title": "Portela 1997 validation conductor - three independent signals sharing one transfer function (ADR 0026)",
+  "soil": {
+    "conductivity": 0.01,
+    "permittivity": 10.0,
+    "permeability": 1.0
+  },
+  "nodes": [
+    { "id": "Node_1", "position": [0.0, 0.0, -0.5] },
+    { "id": "Node_2", "position": [10.0, 0.0, -0.5] }
+  ],
+  "materials": [
+    { "id": "copper", "epsilonr": 1.0, "mur": 1.0, "sigma": 5.96e7 }
+  ],
+  "elements": [
+    {
+      "type": "line",
+      "id": "Line_1",
+      "from": "Node_1",
+      "to": "Node_2",
+      "radius": 0.007,
+      "segments": 10,
+      "material": "copper"
+    }
+  ],
+
+  "signal": {
+    "sourceNode": "Node_1",
+    "signals": [
+      { "name": "front_1p2us", "waveform": "doubleExp", "imax": 30000.0, "front": "f1_2_50" },
+      { "name": "front_8us", "waveform": "doubleExp", "imax": 12000.0, "front": "f1_2_200" },
+      { "name": "far_end_hit", "node": "Node_2", "waveform": "portela", "imax": 1000.0, "alpha": 2.0,
+        "tFront": 2e-6, "tTopEnd": 2e-5, "tTailEnd": 1e-4 }
+    ],
+    "observeNodes": ["Node_1", "Node_2"],
+    "observeElectrodes": ["Line_1_e4", "Line_1_e7"],
+    "nyquistHz": 1.0e6,
+    "fftPoints": 1024
+  }
+}

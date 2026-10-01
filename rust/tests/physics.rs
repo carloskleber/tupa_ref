@@ -13,7 +13,7 @@ use tupa::structure::Structure;
 use tupa::study::{Source, Study, log_frequency_axis};
 use tupa::transient::{
     TransferFunction, Transform, TransientOptions, TransientSource, TransientSpec, Window,
-    WindowPlacement, hann_half_window, transient_response,
+    WindowPlacement, hann_half_window, transient_response, transient_signals,
 };
 use tupa::{load_study, validate_study_references};
 
@@ -178,6 +178,7 @@ fn mixed_voltage_and_current_sources_superpose() {
 fn transient_tracks_low_frequency_impedance_and_antialias_option() {
     let mut study = portela_study(10);
     let spec = |aa: f64| TransientSpec {
+        signal_names: Vec::new(),
         sources: vec![TransientSource {
             node: "Node_1".into(),
             signal: new_double_exp_signal(1.0e3, "f250_2500", false).unwrap(),
@@ -201,6 +202,15 @@ fn transient_tracks_low_frequency_impedance_and_antialias_option() {
     assert!(base.t[0].abs() < 1e-12 && base.t.windows(2).all(|w| w[1] > w[0]));
     assert_eq!(base.i1_responses.len(), 1);
 
+    // `transient_response` no longer leaves its sweep in the study (ADR 0026):
+    // solve the driving-point impedance on the same axis explicitly.
+    let axis = tupa::transient::one_sided_frequency_axis(1.0e4, 1024, 1.0e-6);
+    study
+        .run_sweep(
+            &axis,
+            &[Source::new("Node_1", Complex64::new(1.0, 0.0), false)],
+        )
+        .unwrap();
     let zin = study.input_impedance("Node_1").unwrap();
     assert!(zin.iter().all(|z| z.re >= -1e-9 * z.norm().max(1.0)));
     let z_low = zin[1].norm();
@@ -235,6 +245,7 @@ fn transient_tracks_low_frequency_impedance_and_antialias_option() {
 /// blocks of `fortran/test/test_transient.f90`.
 fn slow_surge_spec(n: usize, observe: &[&str]) -> TransientSpec {
     TransientSpec {
+        signal_names: Vec::new(),
         sources: vec![TransientSource {
             node: "Node_1".into(),
             signal: new_double_exp_signal(1.0e3, "f250_2500", false).unwrap(),
@@ -345,6 +356,46 @@ fn phase9_multiple_injections_superpose() {
         .map(|(x, y)| x.iter().zip(y).map(|(p, q)| p + q).collect())
         .collect();
     assert!(max_abs_diff(&both.node_responses, &sum) < 1e-10 * max_abs(&both.node_responses));
+
+    // ADR 0026: the same two excitations as independent signals, one response set each
+    spec.sources = vec![
+        TransientSource {
+            node: "Node_1".into(),
+            signal: new_double_exp_signal(500.0, "f250_2500", false).unwrap(),
+            return_node: None,
+            is_voltage: false,
+        },
+        TransientSource {
+            node: "Node_2".into(),
+            signal: new_sine_signal(200.0, 2.0e3, 30.0).unwrap(),
+            return_node: None,
+            is_voltage: false,
+        },
+    ];
+    spec.signal_names = vec!["a".into(), "b".into()];
+    let both = transient_signals(&mut study, &spec).unwrap();
+    assert_eq!(both.sets.len(), 2);
+    assert!(
+        max_abs_diff(&both.sets[0].node_responses, &a.node_responses)
+            < 1e-12 * max_abs(&a.node_responses)
+    );
+    assert!(
+        max_abs_diff(&both.sets[1].node_responses, &b.node_responses)
+            < 1e-12 * max_abs(&b.node_responses)
+    );
+    // Signals sharing one node share a terminal: still the single-source responses
+    spec.sources[1].node = "Node_1".into();
+    let shared = transient_signals(&mut study, &spec).unwrap();
+    spec.sources.remove(0);
+    spec.signal_names.clear();
+    let single = transient_response(&mut study, &spec).unwrap();
+    assert!(
+        max_abs_diff(&shared.sets[1].node_responses, &single.node_responses)
+            < 1e-12 * max_abs(&single.node_responses)
+    );
+    // The superposition entry point refuses a list of independent signals
+    spec.signal_names = vec!["a".into(), "b".into()];
+    assert!(transient_response(&mut study, &spec).is_err());
 }
 
 #[test]
@@ -768,6 +819,7 @@ fn unloaded_channel_follows_chens_current() {
     let mut study = Study::new("chen", st);
     study.image_model = Some(ImageModel::Ideal);
     let spec = TransientSpec {
+        signal_names: Vec::new(),
         sources: vec![TransientSource {
             node: "ch-base".into(),
             signal: new_portela_signal(5.0e6, 0.0, 1.0e-6, 1.0e3, 2.0e3).unwrap(),

@@ -1,0 +1,30 @@
+{
+  "title": "Portela 1997 validation conductor - three independent signals sharing one transfer function (ADR 0026)",
+  "time": [0.0, 5.0e-07, 1.0e-06, 1.5e-06],
+  "signals": [
+    {
+      "name": "front_1p2us",
+      "sourceNode": "Node_1",
+      "injectedCurrent": [0.0, 1.0e+03, 2.0e+03, 1.5e+03],
+      "nodes": [
+        { "id": "Node_1", "voltage": [0.0, 1.0e+05, 2.0e+05, 1.5e+05] },
+        { "id": "Node_2", "voltage": [0.0, 1.0e+04, 2.0e+04, 1.5e+04] }
+      ],
+      "electrodes": [
+        { "id": "Line_1_e4", "i1": [0.0, 1.0, 2.0, 1.5], "i2": [0.0, 0.1, 0.2, 0.15] }
+      ]
+    },
+    {
+      "name": "far_end_hit",
+      "sourceNode": "Node_2",
+      "injectedCurrent": [0.0, 5.0e+02, 6.0e+02, 4.0e+02],
+      "nodes": [
+        { "id": "Node_1", "voltage": [0.0, -1.0e+03, -2.0e+03, -1.5e+03] },
+        { "id": "Node_2", "voltage": [0.0, 5.0e+04, 6.0e+04, 4.0e+04] }
+      ],
+      "electrodes": [
+        { "id": "Line_1_e4", "i1": [0.0, -1.0, -2.0, -1.5], "i2": [0.0, 0.5, 0.6, 0.4] }
+      ]
+    }
+  ]
+}

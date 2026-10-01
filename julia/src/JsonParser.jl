@@ -242,17 +242,20 @@ const PHASE9_SIGNAL_FIELDS = ("sources", "window", "transform", "nltDamping", "t
 # ... and the two-node-source fields of ROADMAP Phase 10b (ADR 0025)
 const PHASE10B_SIGNAL_FIELDS = ("returnNode", "quantity")
 
-function load_signal(s)
-    for key in PHASE9_SIGNAL_FIELDS
-        field(s, key) === nothing ||
-            raise_error("mTupa: signal.$key (ROADMAP Phase 9) is not implemented in the Julia port yet " *
-                        "(follow-along lag, see julia/README.md)")
-    end
-    for key in PHASE10B_SIGNAL_FIELDS
-        field(s, key) === nothing ||
-            raise_error("mTupa: signal.$key (ROADMAP Phase 10b) is not implemented in the Julia port yet " *
-                        "(follow-along lag, see julia/README.md)")
-    end
+"""
+A `signal.signals[].name` is written unescaped into the results files: nonblank,
+at most 64 characters, free of commas, quotes and backslashes (ADR 0026).
+"""
+function check_signal_name(name::AbstractString, previous::Vector{String})
+    (isempty(strip(name)) || length(name) > 64 || any(c -> c in (',', '"', '\\', '\n', '\r'), name)) &&
+        raise_error("mTupa: signal.signals[].name '$name' must be 1-64 characters, free of commas, " *
+                    "quotes and backslashes")
+    name in previous && raise_error("mTupa: duplicate signal.signals[].name '$name'")
+    return nothing
+end
+
+"Waveform described by `s`: the `signal` block or one `signal.signals[]` entry."
+function build_waveform(s)
     imax = field(s, "imax") === nothing ? nothing : json_real(s, "imax")
     wf = json_str(s, "waveform")
     signal = if wf == "heidler"
@@ -272,10 +275,62 @@ function load_signal(s)
     else
         raise_error("mTupa: unknown signal.waveform '$wf' (expected heidler, doubleExp or portela)")
     end
+    return signal
+end
+
+function load_signal(s)
+    for key in PHASE9_SIGNAL_FIELDS
+        field(s, key) === nothing ||
+            raise_error("mTupa: signal.$key (ROADMAP Phase 9) is not implemented in the Julia port yet " *
+                        "(follow-along lag, see julia/README.md)")
+    end
+    for key in PHASE10B_SIGNAL_FIELDS
+        field(s, key) === nothing ||
+            raise_error("mTupa: signal.$key (ROADMAP Phase 10b) is not implemented in the Julia port yet " *
+                        "(follow-along lag, see julia/README.md)")
+    end
+    signals_json = json_array(s, "signals")
+    signal_names = String[]
+    signal_nodes = String[]
+    signals = Signal[]
+    source_node = json_str(s, "sourceNode")
+    if signals_json === nothing
+        signal = build_waveform(s)
+    else
+        # A list of independent signals sharing one transfer function (ADR 0026)
+        field(s, "waveform") === nothing ||
+            raise_error("mTupa: signal.signals cannot be combined with signal.sources/waveform")
+        isempty(signals_json) && raise_error("mTupa: signal.signals must hold at least one signal")
+        isempty(source_node) && (source_node = json_str(first(signals_json), "node"))
+        isempty(source_node) &&
+            raise_error("mTupa: signal.signals[1] has no node and signal.sourceNode is absent")
+        for (k, e) in enumerate(signals_json)
+            for key in ("returnNode", "quantity")
+                field(e, key) === nothing ||
+                    raise_error("mTupa: signal.signals[].$key (ADR 0026) is not implemented in the Julia port " *
+                                "yet (follow-along lag, see julia/README.md)")
+            end
+            node = field(e, "node") === nothing ? source_node : json_str(e, "node")
+            push!(signal_nodes, node)
+            name = field(e, "name") === nothing ? "signal$k" : json_str(e, "name")
+            check_signal_name(name, signal_names)
+            push!(signal_names, name)
+            push!(signals, build_waveform(e))
+        end
+        signal = signals[1]
+        source_node = signal_nodes[1]
+        # One signal keeps the ADR 0015 output shape
+        if length(signals) < 2
+            signals = Signal[]
+            signal_names = String[]
+            signal_nodes = String[]
+        end
+    end
     antialias_start = json_real(s, "antialiasStart", 1.0)
     (antialias_start <= 0.0 || antialias_start > 1.0) &&
         raise_error("mTupa: signal.antialiasStart must be in (0, 1]")
-    return TransientSpec(signal = signal, source_node = json_str(s, "sourceNode"),
+    return TransientSpec(signal = signal, source_node = source_node,
+                         signals = signals, signal_names = signal_names, signal_nodes = signal_nodes,
                          observe_nodes = something(json_strings(s, "observeNodes"), String[]),
                          observe_electrodes = something(json_strings(s, "observeElectrodes"), String[]),
                          nyquist_hz = json_real(s, "nyquistHz"),
@@ -318,6 +373,7 @@ function validate_study_references!(case::LoadedCase)
     if case.transient !== nothing
         t = case.transient
         require_node(study, t.source_node, "signal.sourceNode")
+        foreach(id -> require_node(study, id, "signal.signals[].node"), t.signal_nodes)
         foreach(id -> require_node(study, id, "signal.observeNodes"), t.observe_nodes)
         foreach(id -> require_electrode(study, id, "signal.observeElectrodes"), t.observe_electrodes)
     end

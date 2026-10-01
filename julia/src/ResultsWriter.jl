@@ -145,7 +145,73 @@ function transient_csv(spec::TransientSpec, r::TransientResult)
     return String(take!(io))
 end
 
+signal_node(spec::TransientSpec, j::Integer) = isempty(spec.signal_nodes) ? spec.source_node : spec.signal_nodes[j]
+
+"""
+Transient results of a list of independent signals as tidy CSV (ADR 0026): the
+`transient_csv` layout with a `signal` column after `time_s`.
+"""
+function transient_signals_csv(spec::TransientSpec, rs::AbstractVector{TransientResult})
+    io = IOBuffer()
+    println(io, "time_s,signal,quantity,id,value")
+    for k in eachindex(first(rs).t)
+        t = fmt_real(first(rs).t[k])
+        for (j, r) in enumerate(rs)
+            head = string(t, ',', spec.signal_names[j], ',')
+            println(io, head, "injectedCurrent,", signal_node(spec, j), ',', fmt_real(r.injected_current[k]))
+            for (i, id) in enumerate(spec.observe_nodes)
+                println(io, head, "voltage,", id, ',', fmt_real(r.node_responses[i, k]))
+            end
+            for (i, id) in enumerate(spec.observe_electrodes)
+                println(io, head, "i1,", id, ',', fmt_real(r.i1_responses[i, k]))
+                println(io, head, "i2,", id, ',', fmt_real(r.i2_responses[i, k]))
+            end
+        end
+    end
+    return String(take!(io))
+end
+
 join_real(v) = join((fmt_real(x) for x in v), ", ")
+
+"""
+Transient results of a list of independent signals as JSON (ADR 0026): the
+response members live only inside `signals`, so a reader of the single-signal
+shape finds no top-level `nodes` and fails instead of showing one signal alone.
+"""
+function transient_signals_json(title::AbstractString, spec::TransientSpec, rs::AbstractVector{TransientResult})
+    io = IOBuffer()
+    println(io, "{")
+    println(io, "  \"title\": \"", json_escape(title), "\",")
+    println(io, "  \"time\": [", join_real(first(rs).t), "],")
+    println(io, "  \"signals\": [")
+    for (j, r) in enumerate(rs)
+        println(io, "    {")
+        println(io, "      \"name\": \"", json_escape(spec.signal_names[j]), "\",")
+        println(io, "      \"sourceNode\": \"", json_escape(signal_node(spec, j)), "\",")
+        println(io, "      \"injectedCurrent\": [", join_real(r.injected_current), "],")
+        println(io, "      \"nodes\": [")
+        nn = length(spec.observe_nodes)
+        for (i, id) in enumerate(spec.observe_nodes)
+            print(io, "        { \"id\": \"", json_escape(id), "\", \"voltage\": [",
+                  join_real(view(r.node_responses, i, :)), "] }")
+            println(io, i < nn ? "," : "")
+        end
+        println(io, "      ],")
+        println(io, "      \"electrodes\": [")
+        ne = length(spec.observe_electrodes)
+        for (i, id) in enumerate(spec.observe_electrodes)
+            print(io, "        { \"id\": \"", json_escape(id), "\", \"i1\": [",
+                  join_real(view(r.i1_responses, i, :)), "], \"i2\": [",
+                  join_real(view(r.i2_responses, i, :)), "] }")
+            println(io, i < ne ? "," : "")
+        end
+        println(io, "      ]")
+        println(io, j < length(rs) ? "    }," : "    }")
+    end
+    println(io, "  ]")
+    println(io, "}")
+    return String(take!(io))
+end
 
 "Transient results as JSON (ADR 0015, `writeTransientJson`)."
 function transient_json(title::AbstractString, spec::TransientSpec, r::TransientResult)

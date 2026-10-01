@@ -17,6 +17,7 @@ module mResultsWriter
 
   public :: writeResultsCsv, writeResultsJson
   public :: writeTransientResultsCsv, writeTransientResultsJson
+  public :: writeTransientSignalsCsv, writeTransientSignalsJson
 
 contains
 
@@ -469,5 +470,146 @@ contains
 
     close(unit)
   end subroutine writeTransientResultsJson
+
+  ! =====================================================================
+  ! Transient results of a list of independent signals (ADR 0026)
+  ! =====================================================================
+
+  subroutine writeTransientSignalsCsv(signalNames, sourceNodeIds, t, injectedCurrents, observeNodeIds, &
+                                       nodeResponses, filename, observeElectrodeIds, i1Responses, i2Responses)
+    !! Tidy CSV of a list of independent signals: the single-signal layout
+    !! with a `signal` column after `time_s`, `time_s,signal,quantity,id,value`,
+    !! so (time, signal, quantity, id) is a unique key. Per signal: one
+    !! `injectedCurrent` row (id = that signal's source node), then the
+    !! `voltage` rows and, if requested, the `i1`/`i2` rows.
+    character(len=*), intent(in) :: signalNames(:), sourceNodeIds(:)
+    real(8), intent(in) :: t(:)
+    real(8), intent(in) :: injectedCurrents(:,:)
+    !! Shape (size(signalNames), size(t))
+    character(len=*), intent(in) :: observeNodeIds(:)
+    real(8), intent(in) :: nodeResponses(:,:,:)
+    !! Shape (size(observeNodeIds), size(t), size(signalNames))
+    character(len=*), intent(in) :: filename
+    character(len=*), intent(in), optional :: observeElectrodeIds(:)
+    real(8), intent(in), optional :: i1Responses(:,:,:), i2Responses(:,:,:)
+    !! Shape (size(observeElectrodeIds), size(t), size(signalNames)) each
+    integer :: unit, k, i, j
+    character(len=:), allocatable :: head
+
+    open(newunit=unit, file=filename, status="replace", action="write")
+    write(unit, '(A)') "time_s,signal,quantity,id,value"
+    do k = 1, size(t)
+      do j = 1, size(signalNames)
+        head = trim(fmtReal(t(k))) // "," // trim(signalNames(j)) // ","
+        write(unit, '(A)') head // "injectedCurrent," // trim(sourceNodeIds(j)) // "," // &
+          trim(fmtReal(injectedCurrents(j, k)))
+        do i = 1, size(observeNodeIds)
+          write(unit, '(A)') head // "voltage," // trim(observeNodeIds(i)) // "," // &
+            trim(fmtReal(nodeResponses(i, k, j)))
+        end do
+        if (present(observeElectrodeIds)) then
+          do i = 1, size(observeElectrodeIds)
+            if (present(i1Responses)) write(unit, '(A)') head // "i1," // trim(observeElectrodeIds(i)) // "," // &
+              trim(fmtReal(i1Responses(i, k, j)))
+            if (present(i2Responses)) write(unit, '(A)') head // "i2," // trim(observeElectrodeIds(i)) // "," // &
+              trim(fmtReal(i2Responses(i, k, j)))
+          end do
+        end if
+      end do
+    end do
+    close(unit)
+  end subroutine writeTransientSignalsCsv
+
+  subroutine writeTransientSignalsJson(title, signalNames, sourceNodeIds, t, injectedCurrents, observeNodeIds, &
+                                        nodeResponses, filename, observeElectrodeIds, i1Responses, i2Responses, &
+                                        study)
+    !! JSON of a list of independent signals (ADR 0026):
+    !! `{title, [channels,] time, signals[{name, sourceNode, injectedCurrent,
+    !! nodes[{id,voltage}], electrodes[{id,i1,i2}]}]}`. The response members
+    !! live only inside `signals`: a reader written for the single-signal
+    !! shape (ADR 0015) finds no top-level `nodes` and fails instead of
+    !! silently showing the first signal alone.
+    character(len=*), intent(in) :: title
+    character(len=*), intent(in) :: signalNames(:), sourceNodeIds(:)
+    real(8), intent(in) :: t(:)
+    real(8), intent(in) :: injectedCurrents(:,:)
+    character(len=*), intent(in) :: observeNodeIds(:)
+    real(8), intent(in) :: nodeResponses(:,:,:)
+    character(len=*), intent(in) :: filename
+    character(len=*), intent(in), optional :: observeElectrodeIds(:)
+    real(8), intent(in), optional :: i1Responses(:,:,:), i2Responses(:,:,:)
+    type(tStudy), intent(in), optional :: study
+    !! Source of the optional `"channels"` block (ADR 0025)
+    integer :: unit, j, i
+
+    open(newunit=unit, file=filename, status="replace", action="write")
+    write(unit, '(A)') "{"
+    write(unit, '(A)') '  "title": "' // trim(title) // '",'
+    if (present(study)) call writeChannelsJson(unit, study)
+    write(unit, '(A)', advance="no") '  "time": ['
+    call writeRealList(unit, t)
+    write(unit, '(A)') "],"
+    write(unit, '(A)') '  "signals": ['
+    do j = 1, size(signalNames)
+      write(unit, '(A)') '    {'
+      write(unit, '(A)') '      "name": "' // trim(signalNames(j)) // '",'
+      write(unit, '(A)') '      "sourceNode": "' // trim(sourceNodeIds(j)) // '",'
+      write(unit, '(A)', advance="no") '      "injectedCurrent": ['
+      call writeRealList(unit, injectedCurrents(j, :))
+      write(unit, '(A)') "],"
+      write(unit, '(A)') '      "nodes": ['
+      do i = 1, size(observeNodeIds)
+        write(unit, '(A)', advance="no") '        { "id": "' // trim(observeNodeIds(i)) // '", "voltage": ['
+        call writeRealList(unit, nodeResponses(i, :, j))
+        write(unit, '(A)', advance="no") "] }"
+        if (i < size(observeNodeIds)) write(unit, '(A)', advance="no") ","
+        write(unit, '(A)') ""
+      end do
+      write(unit, '(A)', advance="no") '      ]'
+      if (present(observeElectrodeIds)) then
+        write(unit, '(A)') ","
+        write(unit, '(A)') '      "electrodes": ['
+        do i = 1, size(observeElectrodeIds)
+          write(unit, '(A)', advance="no") '        { "id": "' // trim(observeElectrodeIds(i)) // '"'
+          if (present(i1Responses)) then
+            write(unit, '(A)', advance="no") ', "i1": ['
+            call writeRealList(unit, i1Responses(i, :, j))
+            write(unit, '(A)', advance="no") "]"
+          end if
+          if (present(i2Responses)) then
+            write(unit, '(A)', advance="no") ', "i2": ['
+            call writeRealList(unit, i2Responses(i, :, j))
+            write(unit, '(A)', advance="no") "]"
+          end if
+          write(unit, '(A)', advance="no") " }"
+          if (i < size(observeElectrodeIds)) write(unit, '(A)', advance="no") ","
+          write(unit, '(A)') ""
+        end do
+        write(unit, '(A)') '      ]'
+      else
+        write(unit, '(A)') ""
+      end if
+      if (j < size(signalNames)) then
+        write(unit, '(A)') '    },'
+      else
+        write(unit, '(A)') '    }'
+      end if
+    end do
+    write(unit, '(A)') "  ]"
+    write(unit, '(A)') "}"
+    close(unit)
+  end subroutine writeTransientSignalsJson
+
+  subroutine writeRealList(unit, x)
+    !! Comma-separated reals on the current line (no brackets, no newline).
+    integer, intent(in) :: unit
+    real(8), intent(in) :: x(:)
+    integer :: k
+
+    do k = 1, size(x)
+      write(unit, '(A)', advance="no") trim(fmtReal(x(k)))
+      if (k < size(x)) write(unit, '(A)', advance="no") ", "
+    end do
+  end subroutine writeRealList
 
 end module mResultsWriter

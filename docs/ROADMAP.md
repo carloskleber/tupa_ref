@@ -417,15 +417,18 @@ Layout and status: [julia/README.md](../julia/README.md).
    `test_sweep`, `test_transient`, `test_mesh_element`,
    `test_validation`); 166 checks, ~3 s.
 4. **Cross-check on every runnable case** — **S**. **Status: done
-   2026-09-30** — all 28 runnable `common/` outputs (22 sweeps, 6
-   transients) within 1e-6 of fresh Rust and Fortran runs, most identical
-   to the printed digit; the only exceptions are two round-off rows of
-   `portelaMesh` (~1e-12 A free-end currents at 10 MHz, 1.9e-6 vs Fortran),
-   which Rust fails the same way (1.2e-6). Assembly dumps byte-identical
-   to Rust. Table in `julia/README.md`. Finding for Phase 8 item 1: the
-   1e-6 row floor is an absolute 1e-12 tolerance on near-zero currents —
-   a `portelaMesh` fixture would need a larger floor or those rows
-   filtered.
+   2026-09-30, re-measured 2026-10-01 with the Phase 10 defaults** — every
+   runnable `common/` output (47: 32 sweeps and 15 transients; `portelaMesh` excepted
+   because its Phase 9 `signal` is refused) against fresh Fortran and Rust
+   runs: harmonic within 1e-6 on all but `linha3` (1e-3: sensitive to the
+   quadrature tolerance at low frequency, Julia differs from itself by
+   5e-4 between `--epsrel 1e-6` and `1e-9`, and Fortran from Rust by
+   5e-3), `linha4`/`torre2` (zero-by-symmetry current rows at the 1e-6 floor)
+   and `linha5`/`linha5a` (1e-4); transients within 7e-6 of the peak of the
+   quantity. Assembly dumps byte-identical to Rust. Table in
+   `julia/README.md`. Finding for Phase 8 item 1: the 1e-6 row floor is an
+   absolute 1e-12 tolerance on near-zero currents — a widened fixture would
+   need a larger floor or those rows filtered.
 5. **Validation writeup refresh** — **S**. **Status: open.** The Julia
    figures in [validation/tupa-vs-mhem.md](validation/tupa-vs-mhem.md) and
    `validation/julia-grcev-l10-results.csv` were measured with the
@@ -458,7 +461,7 @@ Layout and status: [julia/README.md](../julia/README.md).
    skipped. **Ported 2026-10-01** with Julia 1.13 (`geometry_factor_1d`,
    `image_coefficients`, `load_numerics`; the threaded sweep not ported):
    `portela1997`, `rod`, `grid`, `portela1997_ideal` and the harmonic half
-   of `portelaMesh` run in `Pkg.test()` (239 checks) at 1e-6; the Phase 9
+   of `portelaMesh` run in `Pkg.test()` (252 checks, with the concurrent ADR 0026 work in the tree) at 1e-6; the Phase 9
    transient fixtures and `portelaMesh_transient` stay lag. Found on the
    way: the mesh segment target undershoots (ADR 0024 §8), open in all
    three implementations (`julia/README.md`).
@@ -714,6 +717,23 @@ Out of scope here: fields from the channel (Phase 11 item 1 supplies the
 post-processing), induced-voltage work over lossy ground (post-MVP), and
 the HEM option of an enlarged transversal radius to lower the channel
 impedance (theory.md §4.5, optional extension).
+
+### Phase 10c — Independent transient signals — **done 2026-10-01**
+
+Raised by the author on 2026-10-01: the legacy case accepts a list of signals
+sharing one injection node and gives one response set per signal; TUPÃ held
+one waveform (`sources` superposes). [ADR 0026](adr/0026-independent-transient-signals.md).
+
+1. **`signal.signals`** — **M** — **done.** Input, a results variant (`signals`
+   array, CSV `signal` column), loaders and writers in Fortran and Rust, Julia
+   (shared and per-entry nodes), GUI model/loader/tree/overlay plot.
+2. **One factorisation for all terminals** — **S–M** — **done.**
+   `runSweepUnits`: distinct (node, return node, quantity) terminals share one
+   LU per frequency; also removes the repeated sweep of `sources` entries on a
+   shared node.
+3. **Importer and cases** — **S** — **done.** `tools/legacy_import.py` keeps
+   every `sinal`; `linha*` regenerated; `portela1997_transient_signals`
+   fixture (Fortran golden, Rust 2.4e-13, Julia 1e-6).
 
 ### Phase 11 — Grounding-safety outputs
 

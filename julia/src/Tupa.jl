@@ -56,12 +56,13 @@ export GeometryOptions, build_geometry_matrices, dqag_k15, internal_impedance
 # study, sweep, results
 export Study, Source, prepare!, solve_frequency!, run_sweep!, input_impedance,
        max_voltage_magnitude, log_frequency_axis, dump_structure
-export results_csv, results_json, transient_csv, transient_json, fmt_real
+export results_csv, results_json, transient_csv, transient_json, transient_signals_csv,
+       transient_signals_json, fmt_real
 # time domain
 export heidler_signal, heidler_signal_terms, double_exp_signal, portela_signal, waveform,
        tail_taper, fft_forward!, fft_inverse!, sample_time_axis,
        one_sided_frequency_axis, tukey_antialias_filter, TransientSpec,
-       transient_response, write_transient_plot
+       transient_response, transient_signals, write_transient_plot
 # JSON loader and driver
 export load_study, load_study_string, validate_study_references!,
        RunOptions, run_from_file, run_study_from_file
@@ -98,7 +99,8 @@ end
 Load a case, run the sweep and/or transient it asks for and write
 `<base>_results.{csv,json}` / `<base>_transient_results.{csv,json}` (same
 names and layout as the Fortran executable). Returns the loaded case and the
-transient result (`nothing` when the case has no `signal` block).
+transient result (`nothing` when the case has no `signal` block; for a list of
+independent signals, ADR 0026, the first signal's — the files hold them all).
 """
 function run_from_file(filename::AbstractString; options::RunOptions = RunOptions())
     start = time()
@@ -135,12 +137,21 @@ function run_from_file(filename::AbstractString; options::RunOptions = RunOption
 
     if do_transient
         spec = case.transient
-        transient = transient_response(case.study, spec)
-        do_sweep || report(case.study)
         csv_file = out_path("_transient_results.csv")
         json_file = out_path("_transient_results.json")
-        write(csv_file, transient_csv(spec, transient))
-        write(json_file, transient_json(case.study.title, spec, transient))
+        if !isempty(spec.signals)
+            # A list of independent signals sharing one transfer function (ADR 0026)
+            results = transient_signals(case.study, spec)
+            transient = first(results)
+            do_sweep || report(case.study)
+            write(csv_file, transient_signals_csv(spec, results))
+            write(json_file, transient_signals_json(case.study.title, spec, results))
+        else
+            transient = transient_response(case.study, spec)
+            do_sweep || report(case.study)
+            write(csv_file, transient_csv(spec, transient))
+            write(json_file, transient_json(case.study.title, spec, transient))
+        end
         verbose(VERB_NORMAL, "Wrote $csv_file and $json_file")
         if options.plot
             png = out_path("_transient_plot.png")

@@ -106,10 +106,11 @@ The converter follows the Matlab readers and writes `common/<name>.json`, keepin
 - **Soil.** `solo σ εr μr` becomes a linear soil. `solo_freq σ0 α kr μr`
   becomes `"type": "portela"`. The legacy `kr` is referenced to ω₀ = 1 rad/s
   and is converted to the ADR 0007 form as `kr' = kr·tan(πα/2)·(2π·10⁶)^α`.
-- **Signal.** The schema holds one waveform, so the importer keeps the first
-  `sinal` entry. The legacy line cases list three fronts (1, 2 and 10 µs).
-  The others are listed in `common/README.md`; running one means editing
-  `tFront`. `nyquistHz` is the legacy `freq_*` maximum, `fftPoints` is
+- **Signal.** A case with several `sinal` entries becomes a `signals` list
+  ([ADR 0026](0026-independent-transient-signals.md)), all at the first
+  entry's node as in the Matlab solver, so the legacy line cases keep their
+  three fronts (1, 2 and 10 µs; before 2026-10-01 the importer kept only the
+  first entry and running another meant editing `tFront`). `nyquistHz` is the legacy `freq_*` maximum, `fftPoints` is
   `num_pontos_fft`, and `freqZeroHz` is `freq_zero` when the case sets it.
 - **Observations.** `func_tran` `u`/`deltau` nodes become `observeNodes`.
   `il`/`it` elements become `observeElectrodes` on the element's first
@@ -120,7 +121,7 @@ The converter follows the Matlab readers and writes `common/<name>.json`, keepin
   [fmax·10⁻⁵, fmax]. `freq_lin` becomes 20 points per decade over
   [fmax·10⁻⁴, fmax], since the schema is log-only (ADR 0013).
 - **Not carried over**, each reported by the converter: `cem`, `v`, `zl`,
-  `zt` outputs; additional signals; the legacy's Γ(ω) images (`torre*` do
+  `zt` outputs; the legacy's Γ(ω) images (`torre*` do
   not set `solo_ideal` — TUPÃ had ideal images only until Phase 10 item 2,
   which restored them as the default on 2026-10-01 (ADR 0024));
   a non-vacuum air (`torre2`'s σ = 10⁻¹⁰ S/m, ADR 0019).

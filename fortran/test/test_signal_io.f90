@@ -177,6 +177,33 @@ program test_signal_io
     close(unit, status="delete")
   end block
 
+  ! ----------------------------------------------------------------
+  ! A list of independent signals (ADR 0026)
+  ! ----------------------------------------------------------------
+  call test_init("loadStudy: signal.signals list (ADR 0026)")
+  block
+    type(tStudy) :: study3
+    type(tSignalSlot), allocatable :: slots3(:)
+    character(len=256), allocatable :: nodes3(:)
+    character(len=64), allocatable :: names3(:)
+    type(tPortelaSignal) :: portelaRef
+    type(tDoubleExpSignal) :: doubleExpRef
+
+    call loadStudy("../common/portela1997_transient_signals.json", study3, signal=signal, &
+                   signalSources=slots3, signalSourceNodeIds=nodes3, signalNames=names3, &
+                   signalObserveNodeIds=signalObserveNodeIds)
+
+    call test_ok("three signals parsed", allocated(names3) .and. size(slots3) == 3 .and. size(nodes3) == 3, "")
+    call test_ok("names read, in order", &
+                 trim(names3(1)) == "front_1p2us" .and. trim(names3(3)) == "far_end_hit", "")
+    call test_ok("entries without a node take signal.sourceNode", &
+                 trim(nodes3(1)) == "Node_1" .and. trim(nodes3(2)) == "Node_1", "")
+    call test_ok("an entry's own node overrides it", trim(nodes3(3)) == "Node_2", "")
+    call test_ok("each entry keeps its own waveform type", &
+                 same_type_as(slots3(1)%sig, doubleExpRef) .and. same_type_as(slots3(3)%sig, portelaRef), "")
+    call test_ok("signal is the first entry", same_type_as(signal, doubleExpRef), "")
+  end block
+
   call test_summary()
 
 end program test_signal_io

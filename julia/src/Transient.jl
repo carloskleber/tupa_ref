@@ -37,8 +37,14 @@ end
 
 "Transient request (mirrors the JSON `signal` block, ADR 0015)."
 Base.@kwdef struct TransientSpec
-    "Excitation waveform"
+    "Excitation waveform (the first one of a list of independent signals)"
     signal::Signal
+    "Independent signals sharing the transfer function (ADR 0026); empty for a single waveform"
+    signals::Vector{Signal} = Signal[]
+    "Names of `signals`, in order"
+    signal_names::Vector{String} = String[]
+    "Injection node of each of `signals` (`source_node` unless an entry sets its own)"
+    signal_nodes::Vector{String} = String[]
     "Node where the current is injected"
     source_node::String
     "Nodes whose voltage is returned"
@@ -93,17 +99,47 @@ the one-sided frequency axis, then synthesis of every observed node voltage
 and electrode end current.
 """
 function transient_response(study::Study, spec::TransientSpec)
-    n = spec.fft_points
-    is_power_of_two(n) || raise_error("transientResponse: nSamples must be a power of two")
+    freq_hz = unit_sweep!(study, spec)
+    return synthesize_transient(study, spec, spec.signal, freq_hz)
+end
 
+"""
+    transient_signals(study, spec) -> Vector{TransientResult}
+
+A list of independent signals (ADR 0026, the legacy `sinal` list): signal `k`
+alone drives its node and gets its own response set, `result[k]`, in the order
+of `spec.signals`. Signals sharing a node share ONE unit sweep; the port solves
+one sweep per distinct node (the Fortran/Rust drivers solve all distinct
+terminals from one factorisation per frequency).
+"""
+function transient_signals(study::Study, spec::TransientSpec)
+    isempty(spec.signals) && raise_error("transientSignals: the spec lists no independent signals")
+    nodes = isempty(spec.signal_nodes) ? fill(spec.source_node, length(spec.signals)) : spec.signal_nodes
+    results = Vector{TransientResult}(undef, length(spec.signals))
+    for node in unique(nodes)
+        freq_hz = unit_sweep!(study, spec, node)
+        for k in findall(==(node), nodes)
+            results[k] = synthesize_transient(study, spec, spec.signals[k], freq_hz)
+        end
+    end
+    return results
+end
+
+unit_sweep!(study::Study, spec::TransientSpec, node::AbstractString = spec.source_node) = begin
+    is_power_of_two(spec.fft_points) || raise_error("transientResponse: nSamples must be a power of two")
+    freq_hz = one_sided_frequency_axis(spec.nyquist_hz, spec.fft_points, spec.freq_zero_hz)
+    run_sweep!(study, freq_hz, [Source(node, 1.0 + 0.0im, false)])
+    freq_hz
+end
+
+function synthesize_transient(study::Study, spec::TransientSpec, sig::Signal, freq_hz)
+    n = spec.fft_points
     t = sample_time_axis(spec.nyquist_hz, n)
-    injected = waveform(spec.signal, t) .* tail_taper(n)
+    injected = waveform(sig, t) .* tail_taper(n)
     excitation = fft_forward!(complex.(injected))
 
     n_bins = n ÷ 2 + 1
     antialias = tukey_antialias_filter(n_bins, spec.antialias_start)
-    freq_hz = one_sided_frequency_axis(spec.nyquist_hz, n, spec.freq_zero_hz)
-    run_sweep!(study, freq_hz, [Source(spec.source_node, 1.0 + 0.0im, false)])
 
     st = study.structure
     synth(results, idx) = spectrum_to_time_series(results, idx, excitation, antialias, n_bins, n)

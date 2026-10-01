@@ -38,6 +38,7 @@ program test_transient
   type(tTransientOptions) :: opts
   type(tSignalSlot) :: slots(2)
   real(dp), allocatable :: w(:), respFull(:,:), respInterp(:,:), injected2(:,:), respA(:,:), respB(:,:)
+  real(dp), allocatable :: resp3(:,:,:), i1Resp3(:,:,:)
   real(dp), allocatable :: respSum(:,:), respLong(:,:), respNlt(:,:), respFft(:,:), tLong(:), xk(:), yk(:)
   complex(dp), allocatable :: yq(:)
   real(dp) :: peak, errNlt, errFft
@@ -117,6 +118,10 @@ program test_transient
   ! ----------------------------------------------------------------
   call test_init("Transient GPR tracks the low-frequency input impedance")
 
+  ! `transientResponse` no longer leaves its sweep in the study (ADR 0026):
+  ! solve the driving-point impedance on the same frequency axis explicitly.
+  call study%runSweep(oneSidedFrequencyAxis(nyquistHz, nSamples, freqZeroHz), ["Node_1"], &
+                      [cmplx(1.0_dp, 0.0_dp, kind=dp)])
   zin = study%inputImpedance("Node_1")
   zinLowFreqMag = abs(zin(2))  ! first bin above the freqZero substitute
 
@@ -201,6 +206,28 @@ program test_transient
                                  nSamples, freqZeroHz, t, injected2, respB)
   call test_ok("different waveforms at different nodes = sum of single-source runs (linearity)", &
                maxval(abs(respSum - (respA + respB))) < 1.0d-10 * maxval(abs(respSum)), "")
+
+  call test_init("ADR 0026: independent signals share transfer functions")
+  ! slots(1) sine-free reference: waveform 1 at Node_1, waveform 2 at Node_2
+  call transientResponseSignals(study, slots, ["Node_1", "Node_2"], ["Node_1", "Node_2"], nyquistHz, &
+                                 nSamples, freqZeroHz, t, injected2, resp3, independent=.true.)
+  call test_ok("one response set per signal", size(resp3, 3) == 2 .and. size(injected2, 1) == 2, "")
+  call test_ok("signal 1 equals its single-source run", &
+               maxval(abs(resp3(:, :, 1) - respA)) < 1.0d-12 * maxval(abs(respA)), "")
+  call test_ok("signal 2 equals its single-source run (other node)", &
+               maxval(abs(resp3(:, :, 2) - respB)) < 1.0d-12 * maxval(abs(respB)), "")
+  call test_ok("independent responses add up to the superposed run (linearity)", &
+               maxval(abs(resp3(:, :, 1) + resp3(:, :, 2) - respSum)) < 1.0d-10 * maxval(abs(respSum)), "")
+  ! two different waveforms on ONE node: one terminal, one set of transfer functions
+  call transientResponseSignals(study, slots, ["Node_1", "Node_1"], ["Node_1", "Node_2"], nyquistHz, &
+                                 nSamples, freqZeroHz, t, injected2, resp3, ["Line_1_e1"], i1Resp3, &
+                                 independent=.true.)
+  call transientResponseSources(study, slots(2:2), ["Node_1"], ["Node_1", "Node_2"], nyquistHz, &
+                                 nSamples, freqZeroHz, t, injected2, respB)
+  call test_ok("signals sharing a node: signal 2 equals its single-source run", &
+               maxval(abs(resp3(:, :, 2) - respB)) < 1.0d-12 * maxval(abs(respB)), "")
+  call test_ok("electrode currents come back per signal", &
+               all(shape(i1Resp3) == [1, nSamples, 2]), "")
 
   call test_init("Phase 9 item 2: window placements")
   opts%window = "hann"

@@ -23,8 +23,11 @@ module mTransient
   !! - item 2, `window = "hann"` in `windowPlacement = "spectral"` (on the
   !!   one-sided H·X product) or `"time"` (on the sampled excitation);
   !! - item 4, several simultaneous current injections
-  !!   (`transientResponseSources`): one unit-current sweep per source,
-  !!   responses superposed in the frequency domain, Σ_k H_k·X_k;
+  !!   (`transientResponseSources`): responses superposed in the frequency
+  !!   domain, Σ_k H_k·X_k, and (ADR 0026, `transientResponseSignals`) a list
+  !!   of independent signals, one response set each; the transfer functions
+  !!   of all distinct terminals come from one factorisation per frequency
+  !!   (`tStudy%runSweepUnits`);
   !! - item 5, `transform = "nlt"`: Numerical Laplace Transform — the
   !!   excitation is damped by e^{-ct} before the FFT, the system solved at
   !!   s = c + jω, and the inverse FFT undamped by e^{ct} (Gómez & Uribe
@@ -36,7 +39,7 @@ module mTransient
   use mError, only: raiseError
   implicit none
   private
-  public :: transientResponse, transientResponseSources, tTransientOptions
+  public :: transientResponse, transientResponseSources, transientResponseSignals, tTransientOptions
   public :: sampleTimeAxis, oneSidedFrequencyAxis, tukeyAntialiasFilter, hannHalfWindow
   public :: pchipInterpolate, nltDefaultDamping
 
@@ -375,12 +378,11 @@ contains
     !! Multi-source transient run (ROADMAP Phase 9 item 4): current
     !! injection `signals(k)` at node `sourceNodeIds(k)`. By linearity the
     !! response is the superposition Σ_k H_k(s)·X_k(s), where H_k is the
-    !! transfer function of a unit current at source k (one `runSweep` per
-    !! source) and X_k the spectrum of the k-th sampled, tapered excitation;
-    !! the sum is formed per observe point before a single inverse FFT.
-    !! With one source this is exactly the Phase 6 pipeline. See
-    !! `tTransientOptions` for the interpolated transfer function, windows
-    !! and the Numerical Laplace Transform.
+    !! transfer function of a unit current at source k and X_k the spectrum
+    !! of the k-th sampled, tapered excitation; the sum is formed per observe
+    !! point before a single inverse FFT. With one source this is exactly
+    !! the Phase 6 pipeline. A wrapper over `transientResponseSignals` with
+    !! `independent = .false.`; see there for the cost model.
     class(tStudy), intent(inout) :: study
     type(tSignalSlot), intent(in) :: signals(:)
     !! One waveform per source
@@ -398,16 +400,72 @@ contains
     real(dp), allocatable, intent(out), optional :: i1Responses(:,:), i2Responses(:,:)
     type(tTransientOptions), intent(in), optional :: options
 
+    real(dp), allocatable :: nodeResp3(:,:,:), i1Resp3(:,:,:), i2Resp3(:,:,:)
+
+    call transientResponseSignals(study, signals, sourceNodeIds, observeNodeIds, nyquistHz, nSamples, &
+      freqZeroHz, t, injectedCurrents, nodeResp3, observeElectrodeIds, i1Resp3, i2Resp3, options, &
+      independent=.false.)
+    if (.not. allocated(nodeResp3)) return
+    nodeResponses = nodeResp3(:, :, 1)
+    if (present(i1Responses) .and. allocated(i1Resp3)) i1Responses = i1Resp3(:, :, 1)
+    if (present(i2Responses) .and. allocated(i2Resp3)) i2Responses = i2Resp3(:, :, 1)
+  end subroutine transientResponseSources
+
+  subroutine transientResponseSignals(study, signals, sourceNodeIds, observeNodeIds, &
+                                       nyquistHz, nSamples, freqZeroHz, t, injectedCurrents, &
+                                       nodeResponses, observeElectrodeIds, i1Responses, i2Responses, options, &
+                                       independent)
+    !! Transient driver (ROADMAP Phase 9 item 4, ADR 0026). `signals(k)` is
+    !! an excitation applied at terminal k (node `sourceNodeIds(k)`, plus the
+    !! return node and quantity carried by the slot, ADR 0025).
+    !!
+    !! Two readings of the list, selected by `independent`:
+    !! - `.false.` (default): one simultaneous run. The sources superpose,
+    !!   Σ_k H_k(s)·X_k(s) per observe point before one inverse FFT; the
+    !!   response arrays have a trailing extent of 1.
+    !! - `.true.`: a list of independent signals (legacy `sinal` list, one
+    !!   response set per excitation). Signal k alone drives its terminal;
+    !!   the response arrays have a trailing extent `size(signals)`.
+    !!
+    !! H_k comes from `tStudy%runSweepUnits`: one factorisation per
+    !! frequency (or scan point) serves every *distinct* terminal, and
+    !! signals sharing a terminal share its transfer function outright, so N
+    !! signals on one node cost one solve, not N. Observing more points
+    !! costs no extra solves either. See `tTransientOptions` for the
+    !! interpolated transfer function, windows and the NLT.
+    class(tStudy), intent(inout) :: study
+    type(tSignalSlot), intent(in) :: signals(:)
+    character(len=*), intent(in) :: sourceNodeIds(:)
+    character(len=*), intent(in) :: observeNodeIds(:)
+    real(dp), intent(in) :: nyquistHz
+    integer(4), intent(in) :: nSamples
+    real(dp), intent(in) :: freqZeroHz
+    real(dp), allocatable, intent(out) :: t(:)
+    real(dp), allocatable, intent(out) :: injectedCurrents(:,:)
+    !! Sampled excitation per source (A), shape (size(signals), nSamples)
+    real(dp), allocatable, intent(out) :: nodeResponses(:,:,:)
+    !! v(t) (V), shape (size(observeNodeIds), nSamples, nOut)
+    character(len=*), intent(in), optional :: observeElectrodeIds(:)
+    real(dp), allocatable, intent(out), optional :: i1Responses(:,:,:), i2Responses(:,:,:)
+    !! i1(t)/i2(t) (A), shape (size(observeElectrodeIds), nSamples, nOut)
+    type(tTransientOptions), intent(in), optional :: options
+    logical, intent(in), optional :: independent
+
     type(tTransientOptions) :: opts
     real(dp), allocatable :: taper(:), filter(:), timeWindow(:), damp(:), binFreqHz(:), solveFreqHz(:)
-    complex(dp), allocatable :: excitation(:,:), transferFunction(:), sweepRow(:)
-    complex(dp), allocatable :: pNode(:,:), pI1(:,:), pI2(:,:)
-    integer(4), allocatable :: nodeIdx(:), elecIdx(:)
-    integer(4) :: nBins, nSrc, nObsNodes, nObsElectrodes, iSrc, iObs, k
+    complex(dp), allocatable :: excitation(:,:), transferFunction(:)
+    complex(dp), allocatable :: pNode(:,:,:), pI1(:,:,:), pI2(:,:,:)
+    complex(dp), allocatable :: hNode(:,:,:), hI1(:,:,:), hI2(:,:,:)
+    integer(4), allocatable :: nodeIdx(:), elecIdx(:), termOf(:), outOf(:)
+    character(len=256), allocatable :: termNode(:), termRet(:)
+    logical, allocatable :: termVolt(:)
+    integer(4) :: nBins, nSrc, nOut, nTerm, nObsNodes, nObsElectrodes, iSrc, iObs, iTerm, iOut, k
     real(dp) :: c
-    logical :: nlt, interpolated, wantI1, wantI2
+    logical :: nlt, interpolated, wantI1, wantI2, indep
 
     if (present(options)) opts = options
+    indep = .false.
+    if (present(independent)) indep = independent
 
     nSrc = size(signals)
     if (nSrc < 1 .or. size(sourceNodeIds) /= nSrc) then
@@ -546,70 +604,110 @@ contains
       nObsElectrodes = size(observeElectrodeIds)
       wantI1 = present(i1Responses)
       wantI2 = present(i2Responses)
-      allocate(elecIdx(nObsElectrodes))
-      do iObs = 1, nObsElectrodes
-        elecIdx(iObs) = electrodeIndex(study, trim(observeElectrodeIds(iObs)))
-      end do
     end if
+    allocate(elecIdx(nObsElectrodes))
+    do iObs = 1, nObsElectrodes
+      elecIdx(iObs) = electrodeIndex(study, trim(observeElectrodeIds(iObs)))
+    end do
 
-    ! Accumulated one-sided products P = Σ_k H_k·X_k per observe point
-    allocate(pNode(nBins, nObsNodes))
-    if (wantI1) allocate(pI1(nBins, nObsElectrodes))
-    if (wantI2) allocate(pI2(nBins, nObsElectrodes))
-    allocate(transferFunction(nBins), sweepRow(size(solveFreqHz)))
-
+    ! Output signals: one superposed response, or one per excitation
+    nOut = 1
+    if (indep) nOut = nSrc
+    allocate(outOf(nSrc))
     do iSrc = 1, nSrc
-      ! A unit current, or unit voltage, at source k (ADR 0025: across the
-      ! node pair when the slot has a return node)
-      if (nlt) then
-        call study%runSweep(solveFreqHz, [sourceNodeIds(iSrc)], [cmplx(1.0_dp, 0.0_dp, kind=dp)], &
-                            sourceIsVoltage=[signals(iSrc)%isVoltage], damping=c, &
-                            returnNodeIds=[signals(iSrc)%returnNode])
-      else
-        call study%runSweep(solveFreqHz, [sourceNodeIds(iSrc)], [cmplx(1.0_dp, 0.0_dp, kind=dp)], &
-                            sourceIsVoltage=[signals(iSrc)%isVoltage], &
-                            returnNodeIds=[signals(iSrc)%returnNode])
-      end if
+      outOf(iSrc) = merge(iSrc, 1, indep)
+    end do
 
+    ! Distinct terminals (node, return node, quantity): one transfer function each
+    allocate(termOf(nSrc), termNode(nSrc), termRet(nSrc), termVolt(nSrc))
+    nTerm = 0
+    do iSrc = 1, nSrc
+      termOf(iSrc) = 0
+      do iTerm = 1, nTerm
+        if (trim(termNode(iTerm)) == trim(sourceNodeIds(iSrc)) .and. &
+            trim(termRet(iTerm)) == trim(signals(iSrc)%returnNode) .and. &
+            (termVolt(iTerm) .eqv. signals(iSrc)%isVoltage)) then
+          termOf(iSrc) = iTerm
+          exit
+        end if
+      end do
+      if (termOf(iSrc) == 0) then
+        nTerm = nTerm + 1
+        termNode(nTerm) = sourceNodeIds(iSrc)
+        termRet(nTerm) = signals(iSrc)%returnNode
+        termVolt(nTerm) = signals(iSrc)%isVoltage
+        termOf(iSrc) = nTerm
+      end if
+    end do
+
+    ! Unit-terminal transfer functions on the solve axis: one factorisation
+    ! per frequency serves every terminal; only the observed rows are kept
+    call study%runSweepUnits(solveFreqHz, termNode(1:nTerm), termRet(1:nTerm), termVolt(1:nTerm), &
+                             nodeIdx, elecIdx, hNode, hI1, hI2, damping=c)
+    if (.not. allocated(hNode)) return
+
+    ! Accumulated one-sided products P = Σ_k H_k·X_k per observe point and output
+    allocate(pNode(nBins, nObsNodes, nOut))
+    pNode = (0.0_dp, 0.0_dp)
+    if (wantI1) then
+      allocate(pI1(nBins, nObsElectrodes, nOut))
+      pI1 = (0.0_dp, 0.0_dp)
+    end if
+    if (wantI2) then
+      allocate(pI2(nBins, nObsElectrodes, nOut))
+      pI2 = (0.0_dp, 0.0_dp)
+    end if
+    allocate(transferFunction(nBins))
+
+    do iTerm = 1, nTerm
       do iObs = 1, nObsNodes
-        do k = 1, size(solveFreqHz)
-          sweepRow(k) = study%voltageResults%get(nodeIdx(iObs), k)
+        call toBins(hNode(iObs, :, iTerm), transferFunction)
+        do iSrc = 1, nSrc
+          if (termOf(iSrc) /= iTerm) cycle
+          pNode(:, iObs, outOf(iSrc)) = pNode(:, iObs, outOf(iSrc)) + &
+            transferFunction(1:nBins) * excitation(1:nBins, iSrc)
         end do
-        call toBins(sweepRow, transferFunction)
-        call accumulate(pNode(:, iObs), transferFunction, excitation(:, iSrc), iSrc)
       end do
       do iObs = 1, nObsElectrodes
         if (wantI1) then
-          do k = 1, size(solveFreqHz)
-            sweepRow(k) = study%longCurrentResults%get(elecIdx(iObs), k)
+          call toBins(hI1(iObs, :, iTerm), transferFunction)
+          do iSrc = 1, nSrc
+            if (termOf(iSrc) /= iTerm) cycle
+            pI1(:, iObs, outOf(iSrc)) = pI1(:, iObs, outOf(iSrc)) + &
+              transferFunction(1:nBins) * excitation(1:nBins, iSrc)
           end do
-          call toBins(sweepRow, transferFunction)
-          call accumulate(pI1(:, iObs), transferFunction, excitation(:, iSrc), iSrc)
         end if
         if (wantI2) then
-          do k = 1, size(solveFreqHz)
-            sweepRow(k) = study%transCurrentResults%get(elecIdx(iObs), k)
+          call toBins(hI2(iObs, :, iTerm), transferFunction)
+          do iSrc = 1, nSrc
+            if (termOf(iSrc) /= iTerm) cycle
+            pI2(:, iObs, outOf(iSrc)) = pI2(:, iObs, outOf(iSrc)) + &
+              transferFunction(1:nBins) * excitation(1:nBins, iSrc)
           end do
-          call toBins(sweepRow, transferFunction)
-          call accumulate(pI2(:, iObs), transferFunction, excitation(:, iSrc), iSrc)
         end if
       end do
     end do
 
-    allocate(nodeResponses(nObsNodes, nSamples))
-    do iObs = 1, nObsNodes
-      nodeResponses(iObs, :) = productToTimeSeries(pNode(:, iObs))
+    allocate(nodeResponses(nObsNodes, nSamples, nOut))
+    do iOut = 1, nOut
+      do iObs = 1, nObsNodes
+        nodeResponses(iObs, :, iOut) = productToTimeSeries(pNode(:, iObs, iOut))
+      end do
     end do
     if (wantI1) then
-      allocate(i1Responses(nObsElectrodes, nSamples))
-      do iObs = 1, nObsElectrodes
-        i1Responses(iObs, :) = productToTimeSeries(pI1(:, iObs))
+      allocate(i1Responses(nObsElectrodes, nSamples, nOut))
+      do iOut = 1, nOut
+        do iObs = 1, nObsElectrodes
+          i1Responses(iObs, :, iOut) = productToTimeSeries(pI1(:, iObs, iOut))
+        end do
       end do
     end if
     if (wantI2) then
-      allocate(i2Responses(nObsElectrodes, nSamples))
-      do iObs = 1, nObsElectrodes
-        i2Responses(iObs, :) = productToTimeSeries(pI2(:, iObs))
+      allocate(i2Responses(nObsElectrodes, nSamples, nOut))
+      do iOut = 1, nOut
+        do iObs = 1, nObsElectrodes
+          i2Responses(iObs, :, iOut) = productToTimeSeries(pI2(:, iObs, iOut))
+        end do
       end do
     end if
 
@@ -626,18 +724,6 @@ contains
       end if
     end subroutine toBins
 
-    subroutine accumulate(p, h, x, iSrc)
-      !! p += H·X over the one-sided bins (first source assigns).
-      complex(dp), intent(inout) :: p(:)
-      complex(dp), intent(in) :: h(:), x(:)
-      integer(4), intent(in) :: iSrc
-      if (iSrc == 1) then
-        p = h(1:nBins) * x(1:nBins)
-      else
-        p = p + h(1:nBins) * x(1:nBins)
-      end if
-    end subroutine accumulate
-
     function productToTimeSeries(p) result(series)
       !! Filter, conjugate-symmetric rebuild, inverse FFT, NLT undamping.
       complex(dp), intent(in) :: p(:)
@@ -646,7 +732,7 @@ contains
       if (nlt) series = series * exp(c * t)
     end function productToTimeSeries
 
-  end subroutine transientResponseSources
+  end subroutine transientResponseSignals
 
   logical function scanSpans(scanHz, freqZeroHz, nyquistHz) result(ok)
     !! True when `scanHz` is strictly ascending and covers

@@ -149,52 +149,60 @@ rows keyed by `(frequency_hz, quantity, id)` (`test/conformance.jl`, same as
 | `portela1997` | `portela1997_expected.csv` | 5e-17 — **match** |
 | `rod` | `rod_expected.csv` | 1e-17 — **match** |
 | `grid` | `grid_expected.csv` | 6e-8 — **match** (fixture in pre-ADR 0020 electrode order; keyed comparison) |
+| `portela1997_transient_signals` | `portela1997_transient_signals_expected.csv` (ADR 0026) | 1e-6 — **match** (transient shape with the `signal` column) |
 | `portela1997_transient_{interpolated,hann,hann_time,multi,nlt}` | `*_expected.csv` (ROADMAP Phase 9) | **lag** — not implemented; the loader rejects the Phase 9 `signal` fields (below) |
 
-**Cross-check on every runnable `common/` case** (harmonic: same row rule;
-transient: max |Δ| over the series peak), against fresh runs of the
-Fortran (`fpm --profile release`, `OMP_NUM_THREADS=1`) and Rust
-(`cargo build --release`) executables. "0" means the `ES16.8` files are
-identical to the last printed digit.
+**Cross-check on every runnable `common/` case** (re-measured 2026-10-01
+with the Phase 10 defaults), against fresh runs of the Fortran
+(`fpm --profile release` via `build.sh`, `OMP_NUM_THREADS=1`) and Rust
+(`cargo build --release`) executables. Harmonic: worst row deviation under
+the 1e-6 row rule; transient: max |Δ| over the peak of the quantity (voltage
+or current) in the file. "0" means the `ES16.8` files are identical to the
+last printed digit.
 
 | Case | vs Fortran | vs Rust |
 | --- | --- | --- |
-| `counterpoise_3` | 0 | 1e-08 |
-| `grcev_fig12_l100_rho30` | 0 | 0 |
-| `grcev_fig12_l100_rho300` | 0 | 0 |
-| `grcev_fig12_l100_rho3000` | 0 | 0 |
-| `grcev_fig12_l10_rho30` | 0 | 0 |
-| `grcev_fig12_l10_rho300` | 0 | 0 |
-| `grcev_fig12_l10_rho3000` | 0 | 0 |
-| `grid` | 5e-10 | 3e-10 |
-| `horizontal_vertical_mesh` | 0 | 0 |
-| `linha1` (ADR 0023, `portela` waveform) | 3e-10 | 4e-10 |
-| `linha4` (ADR 0023, `catenary`; measured before the ADR 0017 finding 8 fix) | 1e-05 | 1e-05 |
-| `lima_fig6` | 0 | 0 |
-| `lima_fig7_case10` | 0 | 0 |
-| `lima_fig7_case11` | 0 | 0 |
-| `line_rod` | 1e-10 | 8e-10 |
+| `counterpoise_3` | 0 | 2e-08 |
+| `grcev_fig12_l{10,100}_rho{30,300,3000}` (6 cases) | 0 | 0 |
+| `grid` | 2e-10 | 3e-10 |
+| `horizontal_vertical_mesh` | 0 | 5e-10 |
+| `lima_fig6`, `lima_fig7_case10`, `lima_fig7_case11` | 0 | 0 |
+| `line_rod` | 1e-10 | 4e-10 |
+| `linha0` | 2e-10 | 5e-10 |
+| `linha1` (ADR 0023, `portela` waveform) | 3e-10 | 6e-10 |
+| `linha2` | 4e-09 | 5e-09 |
+| `linha3` | 1e-03 ² | 4e-03 ² |
+| `linha4` (ADR 0023, `catenary`) | 1e-05 ³ | 1e-05 ³ |
+| `linha5`, `linha5a` | 5e-05, 1e-04 | 4e-05, 1e-04 |
 | `poljak_fig4` | 0 | 0 |
-| `portela1997` | 8e-17 | 3e-17 |
-| `portelaMesh` | 2e-06 ¹ | 7e-07 ¹ |
-| `rod` | 3e-17 | 3e-17 |
-| `rod_air` | 1e-08 | 2e-08 |
-| `silva2025_rho100` | 0 | 0 |
-| `silva2025_rho1000` | 0 | 0 |
-| `silva2025_rho2400` | 0 | 0 |
-| `silva2025_rho300` | 0 | 0 |
-| `portela1997_transient` | 3e-16 | 2e-15 |
-| `portelaMesh` (transient) | 3e-11 | 2e-11 |
-| `silva2025_rho1000_transient` | 0 | 0 |
-| `silva2025_rho100_transient` | 0 | 0 |
-| `silva2025_rho2400_transient` | 0 | 0 |
-| `silva2025_rho300_transient` | 1e-11 | 1e-11 |
+| `portela1997`, `portela1997_ideal` | 2e-17, 3e-16 | 1e-16, 3e-16 |
+| `rod`, `rod_air` | 3e-17, 1e-08 | 2e-17, 1e-08 |
+| `silva2025_rho{100,300,1000,2400}` | 0 | 0 |
+| `torre0` | 2e-09 | 4e-09 |
+| `torre1` | 6e-08 | 4e-08 |
+| `torre2` | 5e-06 ³ | 5e-05 ³ |
+| transients: `linha0`, `linha1`, `linha2` | 2e-09, 5e-10, 5e-07 | 2e-10, 2e-10, 4e-07 |
+| transients: `linha3`, `linha4`, `linha5`, `linha5a` | 5e-06, 2e-06, 2e-06, 7e-07 | 7e-06, 2e-06, 3e-06, 1e-06 |
+| transients: `portela1997_transient`, `silva2025_rho{100,300,1000,2400}` | ≤ 3e-15, ≤ 1e-11 | ≤ 4e-16, 0 |
+| transients: `torre0`, `torre1`, `torre2` | 2e-09, 3e-09, 9e-11 | 2e-09, 3e-09, 9e-10 |
 
-¹ Two of 23 985 rows: `i2` of the last segment at the free grid corner
-`m-0404` at 10 MHz, a physically zero current of ~1e-12 A, where the
-rule's 1e-6 floor becomes a 1e-12 A absolute tolerance — round-off, not
-physics. Rust fails the same two rows against Fortran (1.2e-6); every other
-row is within 1e-7.
+`portelaMesh` is not in the table: its `signal` block uses the Phase 9
+`transferFunction`, which the loader refuses, so Julia cannot run the case
+whole. Its harmonic sweep (case text without that field) matches the golden
+fixture at 1.2e-13 (`test/conformance.jl`).
+
+² `linha3` (310 segments, a floating 100 m telephone wire beside the
+shield wire) is sensitive to the quadrature tolerance at low frequency, not
+a Julia discrepancy: the deviation falls from ~1e-3 at 100 Hz to 1e-9 above
+1 MHz, Julia at `--epsrel 1e-6` vs `1e-9` differs from itself by 5.4e-4,
+and Fortran vs Rust (both at 1e-6) differ by 4.6e-3.
+
+³ Worst rows are currents that are zero by symmetry (a scale of 1e-6, the
+rule's floor, so round-off counts as 1e-3 relative); rows with a scale above
+1e-3 agree to 1e-5 or better. Transient deviations are against the peak of the
+quantity (voltage or current) in the file: against a series' *own* peak,
+series that are ~1e-13 of it show O(1) round-off. (`linha4` was last compared
+before the ADR 0017 finding 8 fix: its numbers are now current.)
 
 Structure dumps (`--dump-structure`) are byte-identical to the Rust dump on
 `portelaMesh`, `lima_fig6`, `rod_air` and `counterpoise_3`.
@@ -245,6 +253,12 @@ the conformance table above.
   `portelaMesh` (its `signal` uses `transferFunction`) is in `PHASE9_LAG` too;
   `test/conformance.jl` runs its harmonic fixture and `test/physics.jl` loads
   its structure with that field removed.
+- **ADR 0026** (independent transient signals) — **implemented** for shared and
+  per-entry nodes: `transient_signals` solves one sweep per distinct node (the
+  port has no multi-right-hand-side path, so it is slower than the Fortran/Rust
+  drivers on several nodes), `transient_signals_csv/json`. `returnNode`/`quantity`
+  on a `signals` entry are refused (Phase 10b lag). The fixture
+  `portela1997_transient_signals` is run by `test/conformance.jl` at 1e-6.
 - **ROADMAP Phase 10b** ([ADR 0025](../docs/adr/0025-lightning-channel-and-two-node-sources.md)) —
   **lagging** (it also needs Phase 9: the channel fixtures use the NLT). `load_study_string` refuses the `channel` element,
   `sources[].returnNode` and `signal.returnNode`/`quantity` with a `TupaError`

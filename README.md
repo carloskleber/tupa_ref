@@ -202,12 +202,13 @@ them). State as of 2026-10-01 (Phase 10b, Fortran package 0.7.0).
 | Elements: line, `mesh` grid (ADR 0020), `catenary` (ADR 0023) | ✔ | ✔ | ✔ |
 | Transient by FFT, Heidler / double-exponential / Portela waveforms | ✔ | ✔ | ✔ |
 | Phase 9 transients: scan-fed transfer function, windows, multiple injections, Numerical Laplace Transform | ✔ | ✔ | lag |
+| Independent transient signals (`signal.signals`, ADR 0026): one transfer function, a response set per signal | ✔ | ✔ | ✔ (one sweep per distinct node; no `returnNode`/`quantity` on an entry) |
 | Phase 10 numerics: single-integral kernel, Γ(ω) images, `numerics` block, segment-length target | ✔ | ✔ | ✔ |
 | Threaded frequency sweep (OpenMP, Phase 10 item 4) | ✔ | serial | serial |
 | Lightning `channel` element, speed calibration (Phase 10b, ADR 0025) | ✔ | ✔ | lag (refuses the element) |
 | Two-node sources: `returnNode` current dipole, delta-gap voltage, `quantity` (ADR 0025) | ✔ | ✔ | lag (refuses the fields) |
 | `channels` block in the results JSON | ✔ | ✔ | — |
 | Golden fixtures in `common/` met at 1e-6 | all | all | harmonic ones (`grid`, `portela1997`, `portela1997_ideal`, `rod`, `portelaMesh`); the Phase 9 transient and Phase 10b channel ones lag (`julia/README.md`) |
-| Test suite (2026-10-01) | 18 programs, all pass | 110 tests, all pass | 239 tests, all pass |
+| Test suite (2026-10-01) | 18 programs, all pass | 111 tests, all pass | 252 tests, all pass |
 | Linear algebra / quadrature | LAPACK, SLATEC | in-repo LU, line-by-line GK 7/15 port, no external numerics | LAPACK LU via `LinearAlgebra`, line-by-line GK 7/15 port |
 | Role | reference; also builds the CLI used by the GUI | conformance port (ADR 0022) | contributed prototype, follow-along port (Phase 8J) |

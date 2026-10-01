@@ -176,3 +176,60 @@ def test_catenary_and_portela_soil():
     torre1 = load_study(COMMON / "torre1.json")
     assert torre1.soil.type == "portela" and torre1.soil.kr == 0.00271357
     assert torre1.soil.conductivity is None
+
+
+def test_signal_forms():
+    """`signal` as one waveform, simultaneous `sources` and independent `signals` (ADR 0026)."""
+    single = load_study(COMMON / "portela1997_transient.json").signal
+    assert single.form == "single" and not single.independent and len(single.excitations) == 1
+
+    superposed = load_study(COMMON / "portela1997_transient_multi.json").signal
+    assert superposed.form == "sources" and not superposed.independent
+    assert [(e.node, e.waveform) for e in superposed.excitations] == [
+        ("Node_1", "doubleExp"),
+        ("Node_2", "doubleExp"),
+        ("Node_1", "sine"),
+    ]
+    assert superposed.excitations[2].frequency_hz == pytest.approx(5000.0)
+    assert superposed.excitations[2].phase_deg == pytest.approx(90.0)
+    assert superposed.excitations[1].imax == pytest.approx(-30000.0)
+
+    listed = load_study(COMMON / "portela1997_transient_signals.json").signal
+    assert listed.form == "signals" and listed.independent
+    assert [e.name for e in listed.excitations] == ["front_1p2us", "front_8us", "far_end_hit"]
+    # an entry without its own node takes signal.sourceNode
+    assert [e.node for e in listed.excitations] == ["Node_1", "Node_1", "Node_2"]
+    assert listed.excitations[2].portela is not None
+    assert listed.excitations[2].portela.t_front == pytest.approx(2e-6)
+    assert listed.excitations[1].front == "f1_2_200"
+    assert listed.observe_electrodes == ["Line_1_e4", "Line_1_e7"]
+
+
+def test_signals_list_uses_default_names_and_block_terminals(tmp_path):
+    import json
+
+    case = json.loads((COMMON / "portela1997_transient_signals.json").read_text())
+    case["signal"]["returnNode"] = "Node_2"
+    case["signal"]["quantity"] = "voltage"
+    del case["signal"]["signals"][0]["name"]
+    case["signal"]["signals"][1]["quantity"] = "current"
+    path = tmp_path / "case.json"
+    path.write_text(json.dumps(case))
+
+    listed = load_study(path).signal
+    assert listed.excitations[0].name == "signal1"
+    # block-level terminals are the defaults, an entry overrides them
+    assert listed.excitations[0].return_node == "Node_2" and listed.excitations[0].quantity == "voltage"
+    assert listed.excitations[1].quantity == "current"
+
+
+def test_signal_options_and_terms_heidler():
+    nlt = load_study(COMMON / "portela1997_transient_nlt.json").signal
+    assert nlt.transform == "nlt"
+    hann = load_study(COMMON / "portela1997_transient_hann_time.json").signal
+    assert hann.window is not None and (hann.window.type, hann.window.placement) == ("hann", "time")
+    interp = load_study(COMMON / "portela1997_transient_interpolated.json").signal
+    assert interp.transfer_function == "interpolated"
+    # a case with the channel and a two-node source (ADR 0025) loads too
+    tower = load_study(COMMON / "channel_tower.json").signal
+    assert tower.excitations[0].return_node is not None or tower.excitations[0].node

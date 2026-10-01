@@ -63,6 +63,10 @@ entries.
   `tMaterial` subtypes named after their references: `tPortelaSoil` [1, 30,
   31], `tLongmireSmithSoil` [15, 16] (not yet implemented),
   `tVisacroAlipioSoil` [14], mean parameter set (ADR 0007).
+- **Independent signals** — `signal.signals` (ADR 0026): several waveforms
+  applied one at a time to the same structure, each with its own response
+  set; the legacy `sinal` list. Contrast `signal.sources`, whose injections
+  superpose into one response. The transfer function is solved once and shared.
 - **GPR (Ground Potential Rise)** — potential of the grounding structure vs
   remote earth under injected current; a primary engineering output.
 - **LEMP (Lightning ElectroMagnetic Pulse)** — the field radiated by the

@@ -22,6 +22,7 @@ when it reproduces every case within the stated tolerance.
 | `portela1997_transient_interpolated.json` | ROADMAP Phase 9 item 1: as `portela1997_transient.json`, `transferFunction: "interpolated"` — H(f) solved on the case's `frequencies` axis (100 Hz–1 MHz, 20/decade, 81 points; `freqZeroHz: 100`) and pchip-interpolated onto the 513 FFT bins | `portela1997_transient_interpolated_expected.csv` (transient shape) |
 | `portela1997_transient_hann.json`, `portela1997_transient_hann_time.json` | ROADMAP Phase 9 item 2: as `portela1997_transient.json`, with a half-Hann `window` in the `"spectral"` and the `"time"` placement | `portela1997_transient_hann_expected.csv`, `portela1997_transient_hann_time_expected.csv` |
 | `portela1997_transient_multi.json` | ROADMAP Phase 9 item 4: three injections via `signal.sources` — the legacy differential pattern (+30 kA at `Node_1`, −30 kA at `Node_2`, 1.2/50 µs) plus a 1 kA, 5 kHz sine at `Node_1`; observes both ends of the conductor | `portela1997_transient_multi_expected.csv` |
+| `portela1997_transient_signals.json` | [ADR 0026](../docs/adr/0026-independent-transient-signals.md): three **independent** signals via `signal.signals` — a 30 kA 1.2/50 µs and a 12 kA 1.2/200 µs double exponential at `Node_1` and a 1 kA Portela surge injected at `Node_2` (an entry's own `node`); observes both ends and two mid-line electrodes. Each signal equals the single-signal run of the same waveform bit for bit | `portela1997_transient_signals_expected.csv` (transient shape with the `signal` column) |
 | `portela1997_transient_nlt.json` | ROADMAP Phase 9 item 5: Numerical Laplace Transform (`transform: "nlt"`, default damping ln(N²)/T) on the same conductor under a slow 250/2500 µs, 1 kA surge, `nyquistHz: 1e5`, 512 samples — a well-resolved case; the fast `portela1997_transient` front is band-edge-limited and NLT output there is usable only over about half the record (docs/validation/phase9-transient-options.md) | `portela1997_transient_nlt_expected.csv` |
 | `silva2025_rho{100,300,1000,2400}.json` | Silva et al. 2025 (SBAI, references.md [36]) PEEC-vs-HEM base case: buried horizontal electrode, 60 m, 7 mm radius, 0.5 m depth, `alipio-visacro` dispersive soil (theory.md §7) at ρ0 = 100/300/1000/2400 Ω·m, 1∠0° A at `Node_1`, 128 log-spaced points 100 Hz–4 MHz (`pointsPerDecade: 27.6`, ADR 0013's `round(ppd·log10(fmax/fmin))+1` formula) — matches the paper's 2⁷ frequency samples. For comparison against the paper's Fig. 3 (\|Z(ω)\|); no tabulated digitised curve exists yet, so there is no `_expected.csv` (internal passivity/plausibility check only) | none yet |
 | `silva2025_rho{100,300,1000,2400}_transient.json` | Same geometry/soil as the files above, but a `signal` block (ADR 0015): GPR at `Node_1` under De Conti & Visacro [38]'s **MCS_FST#2** double-peaked first-stroke current (7 `terms`, physical amplitudes, no `imax` rescale), `nyquistHz: 4e6`, `fftPoints: 4096`. For comparison against the paper's Fig. 4 (GPR(t)) — see [`docs/validation/silva2025-fig4.md`](../docs/validation/silva2025-fig4.md), including why MCS_FST#2 rather than the legacy 6-term MCS_FST#1 | none yet (plausibility check only, same caveat as the frequency-domain files above) |
@@ -39,21 +40,23 @@ converted by [`tools/legacy_import.py`](../tools/legacy_import.py) (mapping
 rules in [ADR 0023](../docs/adr/0023-legacy-case-import.md)). Node `N<k>`
 and element `E<k>` keep the legacy numbering, so a legacy output on
 element `k` is `E<k>_e1` here. Each file carries both a 1 A harmonic sweep
-at the injection node and the legacy transient: the first `sinal` waveform
-(`"portela"`) at the legacy Nyquist frequency and FFT size. The line cases
-also list 2 µs and 10 µs fronts (same `imax`/`alpha`/`tTopEnd`/`tTailEnd`);
-edit `tFront` to run those. `linha0`'s first signal is the legacy linear
-`rampa` (`alpha: 0`), and its other two are Portela surges with 2 µs and
-10 µs fronts.
+at the injection node and the legacy transient at the legacy Nyquist frequency
+and FFT size. The legacy `sinal` list is kept whole as `signal.signals`
+([ADR 0026](../docs/adr/0026-independent-transient-signals.md)): every line
+case runs its three Portela fronts (1, 2 and 10 µs; same `imax`/`alpha`/
+`tTopEnd`/`tTailEnd`) in **one** run, one set of observed responses per front,
+for the cost of one (the transfer function is shared). `linha0`'s first signal
+is the legacy linear `rampa` (`alpha: 0`), and its other two are Portela
+surges with 2 µs and 10 µs fronts. The `torre*` cases have a single signal.
 
 | File | Structure | Soil | Injection | Segments | Fortran run (CPU) |
 | --- | --- | --- | --- | --- | --- |
-| `linha0.json` | 300 m copper line at 30 m, each end grounded by a thin lead and a 20 m rod | 1 mS/m, εr 1 | 1 kA linear ramp, 2 µs front, line start | 68 | 1.3 s |
-| `linha1.json` | 200 m aluminium line at 30 m, steel down-lead and 20 m rod at the far end | 1 mS/m, εr 10 | 1 kA, 1 µs front, open end | 47 | 4.4 s |
-| `linha2.json` | Shield wire over 10 iron towers with 3 m footings, 170 m channel to midspan | 1 mS/m, εr 10 | 1 kA, 1 µs, channel top | 160 | 77 s |
-| `linha3.json` | Shield wire over 6 towers, channel to midspan, unconnected 100 m telephone wire at 5 m height, 100 m away | 1 mS/m, εr 10 | 1 kA, 1 µs, channel top | 310 | 8 min |
-| `linha4.json` | Shield wire over 6 towers, outer spans as **catenaries** (5 m sag); grounded channel 100 m off the line (indirect strike) | 1 mS/m, εr 10 | 1 kA, 1 µs, channel top | 164 | 87 s |
-| `linha5.json` | 6 steel towers with crossarms, shield wire, aluminium phase conductor 5 m below the crossarm tips (not connected), channel to midspan | 1 mS/m, εr 10 | 1 kA, 1 µs, channel top | 204 | 33 s |
+| `linha0.json` | 300 m copper line at 30 m, each end grounded by a thin lead and a 20 m rod | 1 mS/m, εr 1 | 1 kA, ramp 2 µs then 2 and 10 µs fronts, line start | 68 | 1.3 s |
+| `linha1.json` | 200 m aluminium line at 30 m, steel down-lead and 20 m rod at the far end | 1 mS/m, εr 10 | 1 kA, 1/2/10 µs fronts, open end | 47 | 4.4 s |
+| `linha2.json` | Shield wire over 10 iron towers with 3 m footings, 170 m channel to midspan | 1 mS/m, εr 10 | 1 kA, 1/2/10 µs, channel top | 160 | 77 s |
+| `linha3.json` | Shield wire over 6 towers, channel to midspan, unconnected 100 m telephone wire at 5 m height, 100 m away | 1 mS/m, εr 10 | 1 kA, 1/2/10 µs, channel top | 310 | 8 min |
+| `linha4.json` | Shield wire over 6 towers, outer spans as **catenaries** (5 m sag); grounded channel 100 m off the line (indirect strike) | 1 mS/m, εr 10 | 1 kA, 1/2/10 µs, channel top | 164 | 87 s |
+| `linha5.json` | 6 steel towers with crossarms, shield wire, aluminium phase conductor 5 m below the crossarm tips (not connected), channel to midspan | 1 mS/m, εr 10 | 1 kA, 1/2/10 µs, channel top | 204 | 33 s |
 | `linha5a.json` | Same as `linha5`, with the legacy `freq_log` scan: Nyquist 2 MHz instead of 5 MHz | 1 mS/m, εr 10 | same | 204 | 45 s |
 | `torre0.json` | 2 × 2 × 100 m prism frame (`cubo`) of 0.2 mm wire, injection lead on top, 10 m lead down to a 10 m rod | 1 MS/m (near-ideal) | 1 kA, 10 µs, lead top | 87 | 17 s |
 | `torre1.json` | Guyed lattice tower (`cubo`/`piramide`): top pyramid, crossarm pyramids, mast, 4 guy wires with anchors, 10 m rod | `portela` (σ0 50 µS/m, α 0.82) | 10 kA, 2 µs, tower top | 319 | 7 min |
@@ -318,6 +321,18 @@ Semantics:
     is an error). Responses superpose (one unit-current sweep per source).
     New waveform `"sine"`: `imax`, `frequencyHz`, optional `phaseDeg`
     (default 0), switched on at t = 0. See `portela1997_transient_multi.json`.
+  - `signals` (ADR 0026): array of **independent** signals, each
+    `{ "name"?, "node"?, "returnNode"?, "quantity"?, "waveform": ..., <waveform
+    fields> }`; `node`/`returnNode`/`quantity` default to the block's
+    `sourceNode`/`returnNode`/`quantity` (so `sourceNode` is needed only if an
+    entry has no `node`), `name` to `signal<k>` (unique, ≤ 64 characters, no
+    commas, quotes or backslashes). Unlike `sources` the signals do not add: each
+    gets its own response set over the shared `observeNodes`/`observeElectrodes`,
+    FFT grid and options. The transfer function is solved once per distinct
+    (node, return node, quantity), so N signals on one node cost one solve.
+    Exclusive with `sources` and the top-level waveform fields; one entry
+    behaves as the single-signal form. See `portela1997_transient_signals.json`
+    and the `linha*.json` cases.
   - `window`: `{ "type": "none" | "hann", "placement": "spectral" | "time" }`
     (placement default `"spectral"`), the falling half of a Hann window over
     the one-sided spectrum or over the sampled excitation; multiplies with
@@ -338,6 +353,14 @@ Semantics:
   `injectedCurrent`, which, like `sourceNode`, keeps describing the first
   source; the CSV has one `injectedCurrent` row per distinct source node,
   holding the net current injected there.
+- **Transient results of independent signals** (ADR 0026, two or more
+  `signal.signals`): the JSON holds `title`, `time` and `signals`, per entry
+  `name`, `sourceNode`, `injectedCurrent`, `nodes` and `electrodes` — the
+  top-level `sourceNode`/`injectedCurrent`/`nodes`/`electrodes` are absent, so
+  a reader of the single-signal shape fails instead of showing one signal of
+  several. The CSV gains a `signal` column,
+  `time_s,signal,quantity,id,value`. A one-entry list keeps the single-signal
+  shape.
 - **Results with a channel** (ADR 0025): both results JSON files gain, only
   when the study has a `channel` element, a top-level `"channels"` array
   after `title` — per channel `id`, `calibrated`, and (if calibrated)

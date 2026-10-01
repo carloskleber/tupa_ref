@@ -27,13 +27,12 @@
     "quantities": ["voltage", "i1", "i2", "inputImpedance"]
   },
   "signal": {
-    "waveform": "portela",
-    "imax": 1000.0,
-    "alpha": 2.0,
-    "tFront": 1e-06,
-    "tTopEnd": 2e-05,
-    "tTailEnd": 0.0001,
     "sourceNode": "N1",
+    "signals": [
+      {"name": "front_1us", "waveform": "portela", "imax": 1000.0, "alpha": 2.0, "tFront": 1e-06, "tTopEnd": 2e-05, "tTailEnd": 0.0001},
+      {"name": "front_2us", "waveform": "portela", "imax": 1000.0, "alpha": 2.0, "tFront": 2e-06, "tTopEnd": 2e-05, "tTailEnd": 0.0001},
+      {"name": "front_10us", "waveform": "portela", "imax": 1000.0, "alpha": 2.0, "tFront": 1e-05, "tTopEnd": 2e-05, "tTailEnd": 0.0001}
+    ],
     "observeNodes": ["N1", "N2", "N3", "N4"],
     "observeElectrodes": ["E1_e1", "E2_e1", "E3_e1", "E4_e1"],
     "nyquistHz": 10000000.0,

@@ -179,22 +179,98 @@ class PortelaSurge:
 
 
 @dataclass(frozen=True)
+class HeidlerTerm:
+    """One term of a parametrised Heidler waveform (`signal.terms[]`)."""
+
+    i0: float
+    n: float
+    tau1: float
+    tau2: float
+
+
+@dataclass(frozen=True)
+class Excitation:
+    """One waveform and where it is applied: the top-level waveform fields of
+    the `signal` block, one `signal.sources[]` entry (superposed injections,
+    ADR 0015) or one `signal.signals[]` entry (independent signals sharing a
+    transfer function, ADR 0026). `imax` is optional for a Heidler waveform
+    given by `terms`; `front`/`jones` only apply to `"doubleExp"`."""
+
+    waveform: str
+    node: str
+    imax: float | None = None
+    name: str | None = None
+    front: str | None = None
+    jones: bool = False
+    portela: PortelaSurge | None = None
+    terms: list[HeidlerTerm] = field(default_factory=list)
+    frequency_hz: float | None = None
+    phase_deg: float = 0.0
+    return_node: str | None = None
+    quantity: str = "current"
+    """`"current"` (A) or `"voltage"` (V, across the node pair — ADR 0025)."""
+
+
+@dataclass(frozen=True)
+class SignalWindow:
+    """`signal.window` (ADR 0015 amendment 2026-09-30)."""
+
+    type: str
+    placement: str = "spectral"
+
+
+@dataclass(frozen=True)
 class Signal:
     """Time-domain excitation spec (ADR 0015) — independent of
     `sources`/`frequencies`; a study may carry either, both, or neither.
-    `front`/`jones` only apply to `waveform == "doubleExp"`."""
 
-    waveform: str
-    imax: float
-    source_node: str
+    `form` tells how `excitations` are read: `"single"` (the top-level
+    waveform), `"sources"` (simultaneous injections that superpose, one
+    response) or `"signals"` (independent signals, one response set each,
+    ADR 0026). The first excitation's fields are also reachable as
+    `waveform`/`imax`/`front`/`jones`/`source_node`/`portela`."""
+
+    excitations: list[Excitation]
     observe_nodes: list[str]
     nyquist_hz: float
     fft_points: int
-    front: str | None = None
-    jones: bool = False
+    form: str = "single"
     observe_electrodes: list[str] = field(default_factory=list)
     freq_zero_hz: float = 1.0e-6
-    portela: PortelaSurge | None = None
+    antialias_start: float | None = None
+    window: SignalWindow | None = None
+    transform: str = "fft"
+    nlt_damping: float | None = None
+    transfer_function: str = "full"
+
+    @property
+    def waveform(self) -> str:
+        return self.excitations[0].waveform
+
+    @property
+    def imax(self) -> float | None:
+        return self.excitations[0].imax
+
+    @property
+    def front(self) -> str | None:
+        return self.excitations[0].front
+
+    @property
+    def jones(self) -> bool:
+        return self.excitations[0].jones
+
+    @property
+    def source_node(self) -> str:
+        return self.excitations[0].node
+
+    @property
+    def portela(self) -> PortelaSurge | None:
+        return self.excitations[0].portela
+
+    @property
+    def independent(self) -> bool:
+        """True for a list of independent signals (`signal.signals`, ADR 0026)."""
+        return self.form == "signals"
 
 
 @dataclass
@@ -278,18 +354,16 @@ class TransientElectrodeCurrent:
 
 
 @dataclass
-class TransientResults:
-    """Mirrors the transient results JSON schema (ADR 0015) — real-valued
-    time series, structurally parallel to `Results` (ADR 0012) but a
-    distinct shape since the axis/quantities are unrelated (`time`, not
-    `frequencies`; real values, not `{"re":..,"im":..}` phasors)."""
+class TransientSignalResult:
+    """The response to one excitation: its source node, the injected current
+    and the observed nodes/electrodes. A single-signal file carries exactly
+    one, unnamed; a file of independent signals (ADR 0026) one per signal."""
 
-    title: str
     source_node: str
-    time: list[float]
     injected_current: list[float]
     nodes: list[TransientNodeVoltage] = field(default_factory=list)
     electrodes: list[TransientElectrodeCurrent] = field(default_factory=list)
+    name: str | None = None
 
     def node(self, node_id: str) -> TransientNodeVoltage:
         for n in self.nodes:
@@ -302,3 +376,45 @@ class TransientResults:
             if e.id == electrode_id:
                 return e
         raise KeyError(f"unknown electrode id: {electrode_id!r}")
+
+
+@dataclass
+class TransientResults:
+    """Mirrors the transient results JSON schema (ADR 0015, and ADR 0026 for
+    a list of independent signals) — real-valued time series, structurally
+    parallel to `Results` (ADR 0012) but a distinct shape since the
+    axis/quantities are unrelated (`time`, not `frequencies`; real values,
+    not `{"re":..,"im":..}` phasors). `signals` has one entry unless the file
+    lists independent signals; the single-signal accessors (`source_node`,
+    `nodes`, …) read the first."""
+
+    title: str
+    time: list[float]
+    signals: list[TransientSignalResult]
+
+    @property
+    def independent(self) -> bool:
+        """True for a file of independent signals (ADR 0026)."""
+        return len(self.signals) > 1 or self.signals[0].name is not None
+
+    @property
+    def source_node(self) -> str:
+        return self.signals[0].source_node
+
+    @property
+    def injected_current(self) -> list[float]:
+        return self.signals[0].injected_current
+
+    @property
+    def nodes(self) -> list[TransientNodeVoltage]:
+        return self.signals[0].nodes
+
+    @property
+    def electrodes(self) -> list[TransientElectrodeCurrent]:
+        return self.signals[0].electrodes
+
+    def node(self, node_id: str) -> TransientNodeVoltage:
+        return self.signals[0].node(node_id)
+
+    def electrode(self, electrode_id: str) -> TransientElectrodeCurrent:
+        return self.signals[0].electrode(electrode_id)
