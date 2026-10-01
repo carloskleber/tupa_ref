@@ -108,3 +108,15 @@ P1 lands.
   `portelaMesh.json` at full scale) stays impractical until ROADMAP §7 P1
   (mHEM single-integral kernel) lands — unchanged by this ADR, just no
   longer blocked on the element type existing at all.
+
+
+## Update 2026-10-01
+
+The performance caveat above is resolved by ROADMAP Phase 10 item 1 (the
+single-integral kernel, [ADR 0024](0024-phase10-numerics.md)): `portelaMesh.json`
+now carries `sources`/`frequencies`/`outputs` and a scan-fed `signal`, solves
+its 21 harmonic frequencies and the transient in about 5 s serially (1.5 s
+for 41 frequencies on 4 threads), and has golden fixtures
+(`portelaMesh_expected.csv`, `portelaMesh_transient_expected.csv`, Phase 10
+item 6). Its topology (185 nodes, 200 electrodes) is still pinned in
+`test_mesh_element.f90`.

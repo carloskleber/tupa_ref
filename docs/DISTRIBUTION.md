@@ -12,7 +12,8 @@ policy and the dependency inventory.
 | Dependency fetch + build | FPM (`fpm.toml`) | stdlib and feh fetched by fpm; LAPACK/BLAS/SLATEC linked as system/prebuilt libraries |
 | SLATEC provisioning | `fortran/build.sh` | clones the author's SLATEC fork into `fortran/slatec/`, `fpm install`s it to `~/.local/lib` with legacy flags |
 | Optimised build | `fortran/build.sh` | `--profile release` plus `-O3 -march=native -fopenmp -ffast-math …` |
-| Development build/test | `fpm build` / `fpm test` | needs `LIBRARY_PATH=$HOME/.local/lib:$LIBRARY_PATH` for the SLATEC link when not run via build.sh |
+| Development build/test | `fpm build` / `fpm test` | needs `LIBRARY_PATH=$HOME/.local/lib:$LIBRARY_PATH` for the SLATEC link when not run via build.sh; on shared LAPACK also `--link-flag "-Wl,--no-as-needed -llapack -lblas"` and `--flag "-ffree-line-length-none -fno-range-check -fopenmp"` ([fortran/README.md](../fortran/README.md)) |
+| Threads | `OMP_NUM_THREADS`, `--threads <n>` | frequency loop of `runSweep` (needs a `-fopenmp` build, i.e. `build.sh`); with a threaded BLAS set `OPENBLAS_NUM_THREADS=1` (ADR 0024 §4) |
 | API docs | FORD (`fortran/Tupa.md`) | optional; needs a Python venv (`pip install ford lxml`) |
 | Rust build/test | `cargo build --release` / `cargo test --release` in `rust/` | no system libraries; crates: `serde`, `serde_json`, `num-complex` (MIT/Apache-2.0); `Cargo.lock` is committed ([ADR 0022](adr/0022-rust-implementation.md)) |
 
@@ -20,7 +21,10 @@ policy and the dependency inventory.
 ifx-compatible (author decision, [ROADMAP §9](ROADMAP.md)). The
 `-ffast-math` flag in build.sh predates validation — expect it to be
 re-examined when reference cases exist, since it licenses reassociation
-that can perturb tight tolerance checks.
+that can perturb tight tolerance checks. It also makes NaN comparisons
+unreliable (the compiler may assume none occurs): the Phase 10 geometry
+kernel guards its singular end point without them (ADR 0024 §1), and
+new code should do the same.
 
 **SLATEC canon**: the **cloned checkout in `fortran/slatec/`** (from the
 author's fork) is the canonical copy and may be fine-tuned in place; it is

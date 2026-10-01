@@ -121,7 +121,8 @@ The converter follows the Matlab readers and writes `common/<name>.json`, keepin
   [fmax·10⁻⁴, fmax], since the schema is log-only (ADR 0013).
 - **Not carried over**, each reported by the converter: `cem`, `v`, `zl`,
   `zt` outputs; additional signals; the legacy's Γ(ω) images (`torre*` do
-  not set `solo_ideal` — TUPÃ has ideal images only until Phase 10 item 2);
+  not set `solo_ideal` — TUPÃ had ideal images only until Phase 10 item 2,
+  which restored them as the default on 2026-10-01 (ADR 0024));
   a non-vacuum air (`torre2`'s σ = 10⁻¹⁰ S/m, ADR 0019).
 
 Legacy segment lengths are kept as they are, even where they exceed the

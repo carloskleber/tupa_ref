@@ -152,8 +152,8 @@ exposes as potential/field/step-and-touch post-processing (ROADMAP §7 P7):
   along a profile [42].
 
 The observation-point geometry factor reuses the §4.2 machinery (closed
-form for the collinear/parallel cases, quadrature otherwise), so the P1
-mHEM kernel benefits this output as well.
+form for the collinear/parallel cases, quadrature otherwise), so the
+single-integral mHEM kernel (§4.2) benefits this output as well.
 
 ---
 
@@ -234,7 +234,9 @@ overvoltage peaks within 5 % of a fine-mesh reference, with speedups above
 the fine structure of the current distribution. Segment length is therefore
 an accuracy/cost knob bounded below by the thin-wire condition and above by
 $\lambda/10$; the project default stays $\lambda/10$, with coarsening per
-[19] as a documented option for large studies. The error of coarsening has
+[19] as a documented option for large studies (`numerics.maxSegmentLength`, a per-study
+target: an element gets max(`segments`, ⌈length/target⌉) segments, so elements
+that omit `segments` follow the target alone, coarse or fine — ADR 0024 §3). The error of coarsening has
 a known sign: Silva's segmentation study for the pulse basis [49, §5.3]
 (10 $r_0$ segments as the converged reference) finds that coarser
 discretisations systematically *underestimate* $|Z(\omega)|$ and GPR — a
@@ -243,9 +245,10 @@ candidate cause of the mostly negative mid-band knee error in
 
 ### 4.2 Evaluating the geometry factor
 
-- **Single-integral (mHEM) form** — the planned default (ROADMAP §7 P1;
-  not yet implemented: today the 2-D quadrature below is the production
-  path, with the parallel closed form as fast path). The inner integral over a
+- **Single-integral (mHEM) form** — the default quadrature since ROADMAP
+  Phase 10 item 1 ([ADR 0024](adr/0024-phase10-numerics.md) §1;
+  `mImpedance::geometryFactor1D`), with the parallel closed form as fast
+  path. The inner integral over a
   straight segment $b$ has a closed form: for a field point $p$ on segment
   $a$, with $r_1, r_2$ the distances from $p$ to the two ends of $b$,
 
@@ -257,10 +260,19 @@ candidate cause of the mostly negative mid-band knee error in
 
   — a 1-D adaptive quadrature of a smooth integrand [11]. Cheaper and
   better-conditioned than the double quadrature, especially for close
-  segments.
+  segments: 8× faster on 120 random non-parallel segments (14 400 pairs),
+  agreeing with the 2-D path to 7.9e-8. The implementation takes the
+  tolerance `epsrel` directly (`epsabs = 0`; the 2-D path scales it by the
+  shorter segment), writes $r_1 + r_2 - l_b$ as
+  $\rho^2\left[(r_1 + s)^{-1} + (r_2 + l_b - s)^{-1}\right]$ for a field point
+  alongside $b$ (axial coordinate $s$, distance $\rho$ to the axis) to avoid
+  cancellation, and clamps the logarithm's argument where a touching
+  end point makes the integrand $+\infty$ on a single point (an integrable
+  singularity; a T junction is resolved to 2e-7 by the bisection).
 - **General position, 2-D**: adaptive 2-D quadrature (nested Gauss–Kronrod
   7/15) of $1/R_{ab}$ over both segments. The integrand is smooth unless
-  segments touch. Kept as the test oracle for the single-integral form.
+  segments touch. Kept as the test oracle for the single-integral form and
+  selectable (`numerics.kernel: "double"`, CLI `--kernel double`).
 - **Parallel segments** and **orthogonal segments**: closed-form expressions
   exist (logarithms and arctangents of the corner distances); see [3, annex]
   for the derivation. Portela's *Campos e Ondas* problem collection [32]
@@ -433,9 +445,10 @@ and $\theta_i$ is the angle with the
 image direction (the image of a segment reverses the sign of the z-component of
 its direction vector).
 
-In the current Fortran implementation the reflection coefficients are taken
-at their ideal limits (also available as a runtime switch in the legacy
-Matlab reference), which gives the sign rules:
+The reflection coefficients default to the frequency-dependent $\Gamma(\omega)$
+below (ROADMAP Phase 10 item 2, [ADR 0024](adr/0024-phase10-numerics.md) §2).
+Their ideal limits (also a runtime switch in the legacy Matlab reference,
+`SOLO_IDEAL`; `numerics.imageModel: "ideal"` here) give the sign rules:
 
 | Configuration            | Transversal image | Longitudinal image |
 | --- | --- | --- |
@@ -456,7 +469,11 @@ with immittance $W_s = \sigma_s + j\omega\varepsilon_s$, both TAGS and PRTL-mHEM
 $$\Gamma_t(\omega) = \frac{W_s - j\omega\varepsilon_0}{W_s + j\omega\varepsilon_0}, \qquad \Gamma_\ell = 1$$
 
 applied to the image terms of $Z_t$ **and** $Z_\ell$ (PRTL-mHEM applies
-$\Gamma_t$ to both; TAGS keeps them independent parameters). The **original
+$\Gamma_t$ to both; TAGS keeps them independent parameters). TUPÃ
+follows the Matlab and PRTL-mHEM choice: in terms of the stored
+$c_E = 1/(4\pi W)$ it is $(c_E^{\text{other}} - c_E^{\text{own}})/(c_E^{\text{other}} + c_E^{\text{own}})$
+for a segment in either medium (tending to $+1$ in soil and $-1$ in air), so
+the Laplace-domain NLT path ($s = c + j\omega$) uses it unchanged. The **original
 Matlab TUPÃ already implements exactly this coefficient** as its default
 (non-ideal-soil) mode: assuming equal permeabilities it computes
 $\Gamma = (k_1^2 - k_2^2)/(k_1^2 + k_2^2)$ between the media — algebraically
@@ -468,8 +485,14 @@ C++ port dropped this and kept only the ideal limits. The ideal sign
 rules in the table are the $|W_s| \gg \omega\varepsilon_0$ limit of these
 coefficients; they degrade for high-resistivity soils toward the MHz range,
 where $\Gamma_t$ acquires magnitude < 1 and phase. Implementing $\Gamma(\omega)$
-in the Fortran code is a planned refinement (ROADMAP §7 P2) that
-*restores* reference behaviour rather than adding to it; the cross-media
+(ROADMAP §7 P2, done 2026-10-01) *restored* reference behaviour rather
+than adding to it. Its effect grows as $f^2$: for a 10 m conductor 0.5 m
+deep in 0.01 S/m, $\varepsilon_r = 10$ soil the input voltage differs from
+the ideal-image one by 2.5e-8 at 10 Hz, 2.3e-4 at 100 kHz and 1.8e-3 at
+1 MHz; against published curves it moves the mean error by under 2 points
+([validation/phase10-image-model.md](validation/phase10-image-model.md)),
+and it matches TAGS' $\Gamma_t(\omega)$ to 0.04 % below 1 MHz
+([validation/tags-xval.md](validation/tags-xval.md)). The cross-media
 coupling (air segment ↔ buried segment) is second-order and is neglected, as
 in both legacy codes (the Matlab returns zero for its "transmission"
 condition pairs). Should ROADMAP Phase 14 item 1 ("mutual impedance between
@@ -499,8 +522,9 @@ highest frequency of interest [56] (§10.1). A single 2 m vertical rod in
 *not* evidence for the ideal-image limit in general: at 100 MHz in that
 soil $\sigma/\omega\varepsilon \approx 0.003$, so
 $\Gamma_t \approx (\varepsilon_r - 1)/(\varepsilon_r + 1) \approx 0.82$
-rather than the $+1$ used today — which makes it the natural regression
-case for P2, where $\Gamma(\omega)$ and the ideal limit differ most. Kuhar,
+rather than the $+1$ of the ideal limit — which makes it the natural
+regression case for $\Gamma(\omega)$, where it and the ideal limit differ most
+(mean error below 1 MHz 4.25 % → 4.01 %, validation/phase10-image-model.md). Kuhar,
 Arnautovski-Toševa & Grčev [20] push this ceiling by replacing the
 quasi-static images with **complex images** (the finitely conducting earth
 replaced by a perfect conductor at a complex depth), recovering agreement
@@ -938,8 +962,10 @@ Every implementation must reproduce, within stated tolerance:
    conventions (a valid convention set paired with its solver, but different
    from §2), and its "immittance" system uses unknowns $(\mathbf{u}, I_\ell, I_t)$
    in a symmetric block layout rather than §6's $(\mathbf{u}, \mathbf{i}_1, \mathbf{i}_2)$.
-   Still desirable as an independent oracle (ROADMAP §7 P3), but no longer
-   release-blocking.
+   Run in ROADMAP Phase 10 item 5 (P3; [validation/tags-xval.md](validation/tags-xval.md)):
+   below 1 MHz the codes agree to 0.3 % or better once the $|\cos\theta|$
+   convention is accounted for (a closed loop oriented around itself
+   differs by 4 % at 100 kHz otherwise).
 7. **Published-curve comparisons** ([validation/](validation/README.md)) —
    the executable oracle accepted for the release bar (ADR 0018 postscript,
    2026-08-02; first public release v0.5.0). Digitized figures, harmonic
@@ -983,7 +1009,7 @@ came out of this comparison.
 | Linear solve | Dense matrix inversion | Dense LU (`ZGESV`), full $Z_{\text{eq}}$; reduced $Z_g$ as consistency check (§6) | Dense LU; immittance or admittance path | Dense inversion of $Y_g$ | Dense (Mathematica `Inverse`) |
 | Time domain | Out of scope (harmonic) | FFT↔IFFT (§8); NLT with damping + Hann window (§8, opt-in) | NLT with damping + window filters [17] | NLT (damped $s_k$ grid) + separate harmonic mode | NLT (`nILT`) |
 | Frequency axis | Single frequency | Log-spaced sweep (harmonic); linear grid for transients (§8) | Linear (example-defined, incl. log for harmonic studies) | Log (harmonic) / linear (transient) | Linear (NLT grid) |
-| Parallelism | n/a | None yet: fill-loop OpenMP deferred until `mImpedance` is reentrant (ROADMAP Phase 3 item 4); frequency-loop parallelism under evaluation (ROADMAP §7 P6) | OpenMP over the frequency loop, single-threaded BLAS | None (NumPy internal) | None |
+| Parallelism | n/a | OpenMP over the frequency loop on thread-private meshes, bit-identical for any thread count (ROADMAP Phase 10 item 4; the fill-loop OpenMP of Phase 3 item 4 is superseded — the LU is ≈ 100 % of a frequency's cost) | OpenMP over the frequency loop, single-threaded BLAS | None (NumPy internal) | None |
 | Validation anchors | Analytic canonical cases | §9: Sunde DC; published curves of Grcev [23], Lima [11], Poljak [35], Silva [36] (release oracle); Portela [2] and Grcev [18] pending data or cross-code check | Grcev [18], Visacro & Soares, Alipio, Sunjerga examples | Published line/grounding cases | Four 138 kV test cases [12] |
 
 Premises shared by TUPÃ, TAGS and PRTL-mHEM (and inherited from [1,5] —

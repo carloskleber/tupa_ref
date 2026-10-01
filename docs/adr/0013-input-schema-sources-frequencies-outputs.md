@@ -115,3 +115,15 @@ dataclasses on `Study`), and `view/tree.py` displays them, including their
 absent/empty states (no `frequencies` block; empty `outputs` lists meaning
 "everything"). Display-only, per GUI_SDD.md §2 — no solver-side computation
 (point-count conversion, output filtering) happens in the GUI.
+
+
+## Amendment 2026-10-01 — `numerics` and optional `segments`
+
+[ADR 0024](0024-phase10-numerics.md) §5 adds one optional top-level block,
+`numerics` (`kernel`, `imageModel`, `maxSegmentLength`), and makes `segments`
+optional on `line`/`catenary`/`mesh` elements (default 1, raised by
+`maxSegmentLength`). Neither touches `sources`/`frequencies`/`outputs`. One
+usage note found while building the Phase 10 grid fixture: a case with an
+`outputs.quantities` list of only `inputImpedance` writes a CSV with just a
+header — the CSV carries `voltage`/`i1`/`i2`; the input impedance is a derived
+quantity of the results JSON (`derived.inputImpedance`).

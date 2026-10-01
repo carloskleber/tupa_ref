@@ -1,5 +1,12 @@
 # Grcev et al. 2018 (IEEE TPWRD), Fig. 12 — rigorous-model harmonic impedance
 
+> **Note (2026-10-01, ROADMAP Phase 10).** The tables and prose below were
+> measured with ideal images (`Γ = ±1`), the default until 0.5.0; since 0.6.0
+> the default is the frequency-dependent `Γ(ω)`, and the figure under
+> `../figures/` was regenerated with it. [phase10-image-model.md](phase10-image-model.md)
+> measures the difference for every comparison: mean errors move by less than
+> 2 points and the qualitative conclusions stand.
+
 **Reference**: Grcev, L.; Kuhar, A.; Arnautovski-Toseva, V.; Markovski, B. —
 "Evaluation of High-Frequency Circuit Models for Horizontal and Vertical
 Grounding Electrodes", *IEEE Trans. Power Delivery*, vol. 33, no. 6,

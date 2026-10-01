@@ -45,3 +45,16 @@ points).
   e.g. `tPortelaSoil`/`tLongmireSmithSoil` — ADR 0007).
 - The sign rules are a frequent bug source; they are pinned by unit tests
   against the DC image formulas (theory.md §9.1).
+
+## Amendment 2026-10-01 — Γ(ω) is the default (ROADMAP Phase 10 item 2)
+
+The decision above (ideal images) is now the **low-frequency limit**, no
+longer the default: image parcels of both `Z_t` and `Z_ℓ` carry the
+frequency-dependent coefficient `Γ(ω) = (W_own − W_other)/(W_own + W_other)`
+(+1 → soil, −1 → air in the limit), restoring the original Matlab's default
+mode as the 2026-07-05 correction planned. Ideal images remain selectable
+(`numerics.imageModel: "ideal"`, CLI `--image-model ideal`) and keep a
+golden fixture. Cross-media coupling remains neglected. Details, size of the
+change and its validation: [ADR 0024](0024-phase10-numerics.md) §2,
+[validation/phase10-image-model.md](../validation/phase10-image-model.md),
+[validation/tags-xval.md](../validation/tags-xval.md).

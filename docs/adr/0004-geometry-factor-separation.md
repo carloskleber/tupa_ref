@@ -38,3 +38,17 @@ Adopt the geometry-factor separation as the core numerical strategy:
   quantify the error on reference cases.
 - OpenMP parallelism applies naturally to the geometry-factor fill loop
   (embarrassingly parallel over segment pairs).
+
+## Amendment 2026-10-01 — quadrature kernel and parallelism (ROADMAP Phase 10)
+
+The pairs without a closed form are now integrated by the **single-integral
+mHEM kernel** (inner integral in closed form, one adaptive Gauss–Kronrod
+integral over the first segment); the nested 2-D quadrature stays as the
+"slow exact path" the last-but-one consequence asks for, selectable and used
+as the test oracle (agreement 7.9e-8 on 14 400 random pairs, 8× faster). The
+dissertation-era tolerance scaling (`epsrel · min(la, lb)`) applies to the
+2-D path only; the 1-D path takes `epsrel` directly. See
+[ADR 0024](0024-phase10-numerics.md) §1. The OpenMP remark above is
+superseded: the geometry build runs once and stays serial, and the parallel
+axis is the **frequency loop** (ADR 0024 §4) — the per-frequency LU, not
+the fill, is the cost.

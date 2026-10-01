@@ -46,3 +46,14 @@ the self term, per theory.md §4.3). Callers do no pre-scaling of any kind.
 - When the frequency-dependent reflection coefficient Γ(ω) lands (ROADMAP
   P2), it multiplies the image parcel inside these routines only — call
   sites are untouched.
+
+
+## Amendment 2026-10-01
+
+The Γ(ω) refinement landed exactly as foreseen above (ROADMAP Phase 10
+item 2, [ADR 0024](0024-phase10-numerics.md) §2): `calcParamW`/
+`calcParamLaplace` set `tMesh%gammaAir`/`gammaSoil` and `calcZSelf`/
+`calcZMutual` multiply the image parcels by them; call sites and signatures
+are unchanged. The per-frequency body of `tStudy%run` moved into
+`solveAtFrequency(this, mesh, …)` so that a threaded sweep can fill and solve
+on a private mesh (ADR 0024 §4); the fill interface itself is untouched.

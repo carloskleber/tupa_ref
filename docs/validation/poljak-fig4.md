@@ -1,5 +1,12 @@
 # Poljak & Doric 2006 (PIER), Fig. 4 — single vertical grounding electrode
 
+> **Note (2026-10-01, ROADMAP Phase 10).** The tables and prose below were
+> measured with ideal images (`Γ = ±1`), the default until 0.5.0; since 0.6.0
+> the default is the frequency-dependent `Γ(ω)`, and the figure under
+> `../figures/` was regenerated with it. [phase10-image-model.md](phase10-image-model.md)
+> measures the difference for every comparison: mean errors move by less than
+> 2 points and the qualitative conclusions stand.
+
 **Reference**: Poljak, D.; Doric, V. — "Wire Antenna Model for Transient
 Analysis of Simple Grounding Systems, Part I: The Vertical Grounding
 Electrode", *Progress In Electromagnetics Research*, vol. 64, pp. 149–166,

@@ -15,6 +15,15 @@ the deviation from a reference implementation.
 
 Change the set with `--cases` (any name in `common/`, without `.json`).
 
+> **Since ROADMAP Phase 10 (2026-10-01)** Fortran and Rust default to the
+> single-integral kernel and `Γ(ω)` images, while the Julia port still computes
+> the pre-Phase-10 numerics (ADR 0024 §8): the Julia deviation columns now show
+> that difference (up to ~2e-3 relative at 1 MHz, growing as f²) as well as
+> round-off, and the Julia runs of the `common/` cases that use the new
+> `numerics` block or the scan-fed `portelaMesh` transient are refused. The
+> frequency sweep is also threaded in Fortran: `bench.py` runs the Fortran
+> executable with `OMP_NUM_THREADS=1` unless `--fortran-threads N` is given.
+
 ## What you need
 
 | Tool | For | Notes |
@@ -45,6 +54,7 @@ Useful options:
 | Option | Meaning |
 | --- | --- |
 | `--fortran-bin PATH` | use an existing executable instead of calling `fortran/build.sh` (must accept `-q <case.json>` and write `*_results.json` / `*_transient_results.csv` to the current directory — the `app/main.f90` program does) |
+| `--fortran-threads N` | `OMP_NUM_THREADS` of the Fortran runs (default 1; the sweep is threaded since Phase 10) |
 | `--skip-fortran-build` | reuse `fortran/build/*/app/*` from an earlier build |
 | `--rust-bin PATH` | use a given Rust binary |
 | `--julia PATH` | Julia executable (default: `julia` on `PATH`) |

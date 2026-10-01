@@ -129,6 +129,19 @@ the wrong type is an error (the Fortran reader yields 0).
 
 ## Conformance status
 
+> **ROADMAP Phase 10 (2026-10-01) — this port lags.** The Fortran and Rust
+> defaults changed (single-integral geometry kernel, `Γ(ω)` image
+> coefficients) and every harmonic golden fixture was regenerated; the Julia
+> port still computes the pre-Phase-10 numerics (nested 2-D quadrature, ideal
+> `Γ = ±1` images). Its results therefore now differ from the fixtures and
+> from Fortran by the Phase 10 effects: up to ~2e-3 relative at 1 MHz on a
+> buried conductor, growing as f², and ~1e-7 from the kernel
+> ([ADR 0024](../docs/adr/0024-phase10-numerics.md)). The tables below are
+> the **2026-09-30** measurements, valid up to that date; `test/runtests.jl`
+> lists the three regenerated harmonic fixtures in `PHASE10_LAG_FIXTURES`
+> (not run) and `portela1997_ideal` in `PHASE10_LAG_CASES`. See the Phase 10
+> bullet under "Follow-along rule" for what to port.
+
 Measured on 2026-09-30 (Linux, Julia 1.13.1, AMD Ryzen 5 8500G). Rule of
 the golden fixtures: 1e-6 relative on the row scale `max(1e-6, |re|, |im|)`,
 rows keyed by `(frequency_hz, quantity, id)` (`test/conformance.jl`, same as
@@ -202,8 +215,9 @@ alike (ROADMAP Phase 8J item 5 regenerates them).
   or `alipio-visacro` cases (ROADMAP Phase 8 item 1, Fortran side); those
   paths are checked by the cross-check above and by ported unit and
   consistency tests (`test/physics.jl`), not against fixtures.
-- Only one frequency point runs at a time, single-threaded (Phase 10
-  item 4 proposes parallelising over frequencies for all implementations).
+- Only one frequency point runs at a time, single-threaded (the Fortran
+  sweep is threaded since Phase 10 item 4; the port is optional, with one
+  BLAS thread per task — see ROADMAP Phase 8J).
 - The GUI has not been pointed at Julia output files yet (they are
   byte-compatible with the Rust files it reads).
 
@@ -230,7 +244,26 @@ the conformance table above.
   Porting guide: `rust/src/transient.rs` (same structure as the Fortran
   `mTransient`, ~300 lines), plus the `admittance_laplace`/
   `calc_param_laplace`/`internal_impedance_laplace` counterparts; remove
-  names from `PHASE9_LAG` as their fixtures pass.
+  names from `PHASE9_LAG` as their fixtures pass. The Phase 10 grid case
+  `portelaMesh` (its `signal` uses `transferFunction`) is in `PHASE9_LAG` too;
+  `test/physics.jl` loads its structure with that field removed.
+- **ROADMAP Phase 10** ([ADR 0024](../docs/adr/0024-phase10-numerics.md)) —
+  **lagging**, for the same reason (no Julia toolchain reachable: the egress
+  policy denied `julialang.org`). `load_study_string` raises a `TupaError`
+  naming `numerics (ROADMAP Phase 10)` when the block is present, so a
+  case never silently runs with the wrong kernel or image model. The edits
+  to `src/JsonParser.jl` and the three test files were made **without
+  running Julia** — run `Pkg.test()` before relying on them. Porting guide
+  (all in `rust/src`, ~150 lines): `impedance::geometry_factor_1d` →
+  `Impedance.jl` and the kernel switch in `mutual_geometry_factor`;
+  `mesh::ImageModel`, `MediumConstants::set_image_coefficients` and the
+  complex image factor in `calc_z_self`/`calc_z_mutual` → `Mesh.jl`
+  (note the ideal ±1 → `gamma_soil`/`gamma_air` change in the multiplication
+  order, `s * fpropi * gi`); the `numerics` block, optional `segments` and
+  `maxSegmentLength` → `JsonParser.jl`. Then regenerate the cross-check table
+  below and the Julia columns of
+  [`docs/validation/tupa-vs-mhem.md`](../docs/validation/tupa-vs-mhem.md),
+  and remove the `PHASE10_LAG_*` lists.
 
 ## History
 

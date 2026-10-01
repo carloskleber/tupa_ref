@@ -1,5 +1,12 @@
 # Silva et al. 2025 (SBAI), Fig. 4 — GPR time-domain comparison
 
+> **Note (2026-10-01, ROADMAP Phase 10).** The tables and prose below were
+> measured with ideal images (`Γ = ±1`), the default until 0.5.0; since 0.6.0
+> the default is the frequency-dependent `Γ(ω)`, and the figure under
+> `../figures/` was regenerated with it. [phase10-image-model.md](phase10-image-model.md)
+> measures the difference for every comparison: mean errors move by less than
+> 2 points and the qualitative conclusions stand.
+
 **Reference**: Silva, G. C. P.; Faria, F. A. C.; Moura, R. A. R.; Schroeder,
 M. A. O. — "Comparação entre os Métodos PEEC e HEM na Modelagem
 Eletromagnética de Aterramentos Elétricos", *XVII Simpósio Brasileiro de

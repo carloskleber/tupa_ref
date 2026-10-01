@@ -154,9 +154,15 @@ automatically as a side effect of `runSweep`.
 
 ## 5. Concurrency, precision, errors, logging
 
-- **Threading**: none in the code today. OpenMP flags are passed by
-  `build.sh` only; the parallelisation axis (geometry fill vs frequency
-  loop) is an open measurement question (ROADMAP P6).
+- **Threading**: `tStudy%runSweep` solves the frequencies concurrently
+  (OpenMP, ROADMAP Phase 10 item 4, [ADR 0024](adr/0024-phase10-numerics.md)
+  §4) — one thread-private `tMesh` per thread, the study read-only inside
+  `solveAtFrequency`, results written at disjoint columns, so a sweep is
+  bit-identical for any thread count. `build.sh` passes `-fopenmp`; a plain
+  `fpm build` is serial (the directives are comments). The geometry build
+  stays serial (it runs once; the single-integral kernel is re-entrant, the
+  2-D oracle is not). The transient driver reaches the same loop through
+  `runSweep`. CLI `--threads <n>`; `OMP_NUM_THREADS` otherwise.
 - **Precision**: uniform double precision. `mCtes` exports `dp`
   (`kind(1.0d0)`); new code uses `real(dp)`/`complex(dp)`, legacy `kind=8`
   declarations migrate gradually ([CONVENTIONS.md](CONVENTIONS.md)).
@@ -179,8 +185,8 @@ automatically as a side effect of `runSweep`.
 | New geometry (ring, catenary, tower, grid…) | Extend `tElement`, implement `assemble` + `report` | Priority order in ROADMAP Phases 12–13 (ring next; grid done — Phase 7 item 3; catenary done — ADR 0023) |
 | New soil/conductor model | Extend `tMaterial`, implement `calcPropagationConstant` | One subtype per literature reference, named after it (ADR 0007) |
 | New output | Extend `tResult`, implement `alloc`/`get`/`set`; wire into `runSweep` and `mResultsWriter` | Use the legacy output-class inventory to prioritise (ROADMAP P7) |
-| Alternate geometry-factor kernel (mHEM 1-D) | Swap inside `mGeometry`; 2-D quadrature stays as test oracle | ROADMAP P1; ADR 0004 |
-| Γ(ω) reflection images | Multiply the image parcel inside `calcZSelf`/`calcZMutual` | ROADMAP P2; ADR 0009 keeps call sites untouched |
+| Alternate geometry-factor kernel | `mGeometry%setGeometryKernel`; the mHEM 1-D form is the default (`mImpedance%geometryFactor1D`), the 2-D quadrature stays as test oracle and is selectable (`numerics.kernel`) | ROADMAP P1 (done, Phase 10 item 1); ADR 0004, 0024 |
+| Image reflection model | `mMesh%calcImageCoefficients` fills `gammaAir`/`gammaSoil` (Γ(ω) default, ideal ±1 selectable via `numerics.imageModel`); `calcZSelf`/`calcZMutual` multiply the image parcel by them | ROADMAP P2 (done, Phase 10 item 2); ADR 0009 keeps call sites untouched, ADR 0024 |
 | Other languages | Re-implement the object model; must pass `common/` cases | ADR 0002; JSON schema is the public contract |
 
 The **public interface** of the project is the JSON schema plus the
@@ -192,15 +198,22 @@ internal and may change without notice (author decision, ROADMAP §9).
 Tracked, deliberate, and safe at the current scale:
 
 - `mImpedance` keeps a legacy `COMMON /params/` block and module-level
-  function pointers for the nested quadrature — not reentrant, hostile to
-  threading; must be refactored before any OpenMP lands on the fill path.
+  function pointers for the nested 2-D quadrature (`geometryFactor2D`, now
+  the test oracle) — not reentrant. The default `geometryFactor1D` has no
+  such state; the geometry build is nevertheless left serial (it runs once).
+- SLATEC's `D1MACH` fills its constant table lazily and not race-free (it
+  raises its flag before filling the table): `warmUpMachineConstants` calls
+  it once before the threaded sweep. Any new threaded entry point that can
+  reach `ZBESI` first must do the same.
 - `mJsonParser` (now a json-fortran wrapper, ADR 0006) keeps one
   module-level `json_core` instance — non-reentrant, fine for this
   project's one-file-at-a-time usage but would need revisiting for a
   hypothetical concurrent/multi-file caller. The old hard subset limits
   (64 items/container, no string escapes) are gone.
-- `tMesh` per-frequency state (see §4) makes the frequency loop inherently
-  sequential over one mesh instance; frequency-level parallelism (ROADMAP
-  P6) implies one mesh (or at least one `Zeq`/solution set) per thread.
+- `tMesh` per-frequency state (see §4) makes the frequency loop sequential
+  over one mesh instance; `runSweep` therefore gives every thread its own
+  copy of the mesh (memory ≈ one `Zeq` of $(n_n + 2n_s)^2$ complex numbers
+  per thread). `-fopenmp` also puts automatic arrays on the stack: large
+  scratch arrays must be `allocatable`.
 - Dense augmented solve scales as $(n_n + 2n_s)^3$ — fine for the reference
   scale (hundreds of segments), by design (ADR 0003).

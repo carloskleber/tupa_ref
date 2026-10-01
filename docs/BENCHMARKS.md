@@ -4,15 +4,16 @@ What "validated" means for this project, which cases count, and where they
 stand. The physics definition of each anchor is in
 [theory.md §9](theory.md); this file tracks execution status and policy.
 
-**Current status (2026-07-20): the end-to-end frequency-sweep and
-time-domain pipeline are wired and green (ROADMAP Phases 0–6).** Six
+**Current status (2026-10-01): the end-to-end frequency-sweep and
+time-domain pipeline are wired and green (ROADMAP Phases 0–10).** Six
 literature comparisons (anchors 7–11, Lima's two grids sharing anchor 10)
 have run against published papers' own figures — see
-[validation/](validation/). The formula/tabulated
-anchors (1, 2, 5) and the cross-code anchor (6) are still pending: no
-Sunde/Dwight DC pin or Portela 1997/Grcev & Heimbach 1997 tabulated data
-exists yet, and the TAGS/PRTL-mHEM submodules (below) haven't been run
-against any case. Unit-level pins (sign conventions, geometry factors vs
+[validation/](validation/) — and, since Phase 10, the cross-code anchor
+(6) has run against TAGS ([validation/tags-xval.md](validation/tags-xval.md):
+below 1 MHz the codes agree to 0.3 % or better). The formula/tabulated
+anchors (1, 2, 5) are still pending: no Sunde/Dwight DC pin or Portela 1997
+/Grcev & Heimbach 1997 tabulated data exists yet, and PRTL-mHEM has been run
+only on the Grcev 10 m case ([validation/tupa-vs-mhem.md](validation/tupa-vs-mhem.md)). Unit-level pins (sign conventions, geometry factors vs
 quadrature oracles, Bessel limits, hand-solved 4×4 system) are green — see
 `fortran/test/`.
 
@@ -24,8 +25,8 @@ quadrature oracles, Bessel limits, hand-solved 4×4 system) are green — see
 | 2 | Harmonic input impedance, 10 m conductor, 0.5 m depth, σ = 0.01 S/m, εr ≈ 10, 100 Hz–1 MHz | Portela 1997 [2] | 5 % (project decision, driven by curve readability) | pending; **no tabulated data exists** — see "Data provenance" |
 | 3 | Grounding-electrode harmonic/impulse responses | Visacro & Soares 2005 [5] | — | **dropped as a data anchor** — the paper has no usable comparison data (author, 2026-07-05); kept as formulation reference only |
 | 4 | Internal consistency: full Zeq vs reduced Z_g; reciprocity; passivity; quadrature vs closed forms | theory.md §9.4 | solver/quadrature precision | partially green (reciprocity, closed forms — unit tests); rest pending |
-| 5 | Square grounding grids, harmonic impedance | Grcev & Heimbach 1997 [18] | qualitative curve match; requires Γ(ω) (ROADMAP P2) for the MHz range | grid element done (ROADMAP Phase 7 item 3); sweep pending the P1 kernel (Phase 10) |
-| 6 | Cross-code: identical cases through TAGS (and PRTL-mHEM) | references.md, companion codes | input impedance over the sweep; compare **physical outputs only** | pending submodule setup (below) |
+| 5 | Square grounding grids, harmonic impedance | Grcev & Heimbach 1997 [18] | qualitative curve match; needs Γ(ω) (ROADMAP P2, done) for the MHz range | grid element done (ROADMAP Phase 7 item 3); a 32 × 32 m grid sweeps in seconds since the P1 kernel (`common/portelaMesh.json`, Phase 10 item 6); the Grcev & Heimbach curve itself still needs its tabulated data |
+| 6 | Cross-code: identical cases through TAGS (and PRTL-mHEM) | references.md, companion codes | input impedance over the sweep; compare **physical outputs only** | **executed 2026-10-01** against TAGS — [validation/tags-xval.md](validation/tags-xval.md): ≤ 0.3 % below 1 MHz on six cases (a conductor, a rod, a loop, two Grcev electrodes, a tower footing) once TAGS' `|cos θ|` convention is accounted for; PRTL-mHEM only on the Grcev 10 m case |
 | 7 | `tVisacroAlipioSoil` harmonic impedance, 60 m buried electrode, ρ0 = 100/300/1000/2400 Ω·m | Silva et al. 2025 [36], Fig. 3 | qualitative (digitized plot, no tabulated data — see [validation/](validation/)) | **executed** — [validation/silva2025-fig3.md](validation/silva2025-fig3.md): endpoints within ~1-4%, resonance dips/peaks match in location and depth for ρ0 = 1000/2400; mid-band knee off by up to ~29% for ρ0 = 100/300 (unconfirmed cause — see writeup) |
 | 8 | Time-domain GPR, same 60 m electrode, MCS_FST#2 double-peaked first-stroke current | Silva et al. 2025 [36], Fig. 4 | qualitative (digitized plot) | **executed** — [validation/silva2025-fig4.md](validation/silva2025-fig4.md): both GPR humps agree within ~5% at every ρ0 (worst point +12.5%); mild +0.6-2% tail overestimate |
 | 9 | Harmonic input impedance, buried horizontal electrodes, ℓ = 10/100 m, ρ1 = 30/300/3000 Ω·m, vs. the paper's own rigorous full-wave MoM model | Grcev et al. 2018 [23], Fig. 12 | qualitative (digitized plot) | **executed** — [validation/grcev-fig12.md](validation/grcev-fig12.md): DC/HF asymptotes within 0-4%, resonance shape/depth/location reproduced; excluding digitization outliers, every other point within ±11.5% |
@@ -39,7 +40,7 @@ square grids) is a different reference from anchor 9's (Grcev et al. 2018,
 single electrodes) — it remains unexecuted. Additional validation
 references will be supplied by the author as they are processed.
 
-## Cross-code benchmark setup (submodules added, no case run yet)
+## Cross-code benchmark setup
 
 Decision (author, 2026-07-05): add the companion codes as git submodules
 under a top-level `benchmarks/` folder:
@@ -52,11 +53,17 @@ benchmarks/
 ```
 
 `benchmarks/tags` and `benchmarks/prtl-mhem` were added on 2026-07-05 (see
-`.gitmodules`); there is no `benchmarks/cases/` yet and neither code has
-been run against a TUPÃ case. TAGS builds locally (C99 + Cubature + LAPACK)
-and accepts arbitrary electrode lists — run the Phase 2 buried conductor
-(and later the Grcev grid) through both codes and compare input impedance
-over the sweep (ROADMAP P3).
+`.gitmodules`). TAGS builds locally (C99 + Cubature + LAPACK + OpenBLAS +
+FFTW3 — `git submodule update --init --recursive benchmarks/tags`, then
+`make -C benchmarks/tags-xval`) and accepts arbitrary electrode lists.
+ROADMAP P3 / Phase 10 item 5 ran it: [`benchmarks/tags-xval/`](../benchmarks/tags-xval/)
+holds the driver (`tags_hem.c`, homogeneous linear soil, selectable
+longitudinal image coefficient) and the runner (`xval.py`), which exports each
+`common/` case's discretisation from the Rust CLI, runs TAGS and the Fortran
+executable and compares `Zin(f)`; the per-case numbers and the two convention
+differences it found are in [validation/tags-xval.md](validation/tags-xval.md).
+The cross-implementation timing benchmark of the three TUPÃ codes lives in
+[`benchmarks/cross-impl/`](../benchmarks/cross-impl/README.md).
 
 ## Comparison policy
 
@@ -72,11 +79,19 @@ over the sweep (ROADMAP P3).
 
 ## Performance benchmarks
 
-None defined yet — correctness first (CONVENTIONS.md). When the fill loop
-and sweep driver exist, the candidates are: geometry-pass cost vs segment
-count ($O(n_s^2)$ quadratures), per-frequency solve cost
-($O((n_n+2n_s)^3)$), and the P1 (mHEM 1-D kernel) and P6 (parallelism axis)
-before/after measurements — see ROADMAP §7. Known baseline datum: the
-debug-profile 2-D quadrature fill of a 10-segment case exceeds 9 minutes,
-release profile is the only practical mode for quadrature-heavy runs
-(ROADMAP §5).
+Correctness first (CONVENTIONS.md); the measurements below are the
+before/after data of ROADMAP Phase 10 (ADR 0024), taken 2026-10-01 on a
+4-core Linux container (gfortran 13, `-O3`-class release flags, reference
+LAPACK/BLAS), not a benchmark suite:
+
+| Measurement | Result |
+| --- | --- |
+| P1, geometry kernel: 120 random non-parallel segments (14 400 pairs, direct + image, cache off) | single integral 41 ms, nested 2-D 328 ms (8×); largest relative difference of `G` 7.9e-8 |
+| P1 on a closed-form-dominated case: `portelaMesh`, 17 frequencies, serial | 1.9 s with either kernel (the quadrature is not the cost) |
+| Per-frequency cost, `portelaMesh` (585 unknowns) | the LU (`ZGESV`) is ≈ 100 % of it: 41 solves of a random 585 × 585 complex system 5.25 s, the 41-frequency sweep 5.21 s |
+| P6, frequency-level OpenMP, `portelaMesh` 41 frequencies | 5.21 s / 2.65 s / 1.53 s on 1 / 2 / 4 threads (3.4×); results bit-identical for every thread count |
+| Convergence of `|Zin|` of the 10 m conductor vs segment-length target | 2 / 4 / 10 / 20 segments differ from the 40-segment value by 0.7 / 0.26 / 0.03 / 0.08 % at 1 kHz and 9.1 / 1.8 / 0.007 / 0.13 % at 1 MHz (`test_segmentation.f90`) |
+
+The historical baseline — the debug-profile 2-D quadrature fill of a
+10-segment case exceeded 9 minutes — no longer applies to the default
+kernel; the release profile remains the practical mode.

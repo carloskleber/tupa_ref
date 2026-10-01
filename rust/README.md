@@ -23,8 +23,13 @@ cargo build --release
 
 Options (same as the Fortran executable, plus the last two):
 `-v|--verbose`, `-q|--quiet`, `--epsrel <x>` (quadrature relative-error
-factor, default `1e-6`), `--no-cache` (disable the geometry-factor memo
-table), `--dump-structure`, `--output-dir <dir>`. Result files are named
+factor, default `1e-6`), `--kernel single|double` (geometry quadrature: the
+mHEM single integral, default, or the nested 2-D oracle), `--image-model
+frequency-dependent|ideal` (image reflection coefficient: `Γ(ω)`, default, or
+the ideal ±1 limit) — ROADMAP Phase 10, [ADR 0024](../docs/adr/0024-phase10-numerics.md) —
+`--no-cache` (disable the geometry-factor memo table), `--dump-structure`,
+`--output-dir <dir>`. A case's own `numerics` block overrides the two
+Phase 10 flags. Result files are named
 like the Fortran ones (`<case>_results.csv|json`,
 `<case>_transient_results.csv|json`) and are read unchanged by the GUI.
 
@@ -42,8 +47,8 @@ cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test --r
 | `material` | `Material` | linear / Portela / Alipio–Visacro media, `W(ω)`, `γ` |
 | `node`, `electrode`, `structure`, `element/{line,mesh}` | `Node`, `Electrode`, `Structure`, `element/*` | object model and assembly (identical discretised IDs) |
 | `geometry`, `geometry_cache` | `Geometry`, `GeometryCache` | `g(a,b)`, image terms, distances, cosines |
-| `impedance`, `bessel` | `Impedance` | adaptive GK 7/15, nested 2-D quadrature, internal impedance |
-| `mesh`, `linalg` | `Mesh` | topology, `Zeq` assembly, LU with multiple RHS |
+| `impedance`, `bessel` | `Impedance` | adaptive GK 7/15, single-integral `geometry_factor_1d` (default) and nested 2-D `geometry_factor_2d` quadrature, internal impedance |
+| `mesh`, `linalg` | `Mesh` | topology, `Zeq` assembly (image coefficients `Γ(ω)`/ideal, `ImageModel`), LU with multiple RHS |
 | `study`, `result` | `Study`, `Result` | preparation, fill, sweep, voltage sources (ADR 0016) |
 | `results_writer` | `ResultsWriter` | CSV/JSON, `ES16.8` number format |
 | `signal`, `fft`, `transient`, `special` | `Signal`, `Fft`, `Transient` | waveforms, radix-2 FFT, transient driver, `erfc` |
@@ -52,7 +57,9 @@ cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test --r
 
 ## Conformance status
 
-Measured on 2026-09-30 (Linux, `rustc 1.94`; Phase 9 rows `rustc 1.97`).
+Measured on 2026-10-01 against the fixtures regenerated for ROADMAP Phase 10
+(Linux, `rustc 1.97`; every fixture below, including the ones of earlier
+phases, was re-checked then).
 Tolerance and comparison rule: 1e-6 relative on the row scale
 `max(1e-6, |re|, |im|)`, rows keyed by `(frequency_hz, quantity, id)`
 (`tests/conformance.rs`). Transient fixtures (ADR 0015 amendment
@@ -61,13 +68,14 @@ Tolerance and comparison rule: 1e-6 relative on the row scale
 
 | Case | Fixture | Result |
 | --- | --- | --- |
-| `portela1997` | `portela1997_expected.csv` | **match** (1e-6) |
-| `rod` | `rod_expected.csv` | **match** (1e-6) |
-| `grid` | `grid_expected.csv` | **match** (1e-6); fixture predates ADR 0020's FIFO order and lists electrodes in reverse declaration order — see below |
-| `portela1997_transient_{interpolated,hann,hann_time,multi,nlt}` (ROADMAP Phase 9) | `*_expected.csv` (transient shape, Fortran output) | **match** — worst 1.5e-8 under the transient rule (below); `tests/conformance.rs::check_transient_case` |
+| `portela1997` | `portela1997_expected.csv` | **match** (worst 2e-17) |
+| `rod` | `rod_expected.csv` | **match** (3e-17) |
+| `grid` | `grid_expected.csv` | **match** (1.3e-10); regenerated in Phase 10, now in declaration order (the old file listed electrodes in reverse; the keyed comparison is kept) |
+| `portela1997_ideal` (Phase 10 item 2: `numerics.imageModel: "ideal"`) | `portela1997_ideal_expected.csv` | **match** (2e-17) |
+| `portelaMesh` (Phase 10 item 6: 185 nodes / 200 electrodes, harmonic with `outputs` filter, and scan-fed transient) | `portelaMesh_expected.csv`, `portelaMesh_transient_expected.csv` | **match** (1e-6; `portela_mesh_*` tests) |
+| `portela1997_transient_{interpolated,hann,hann_time,multi,nlt}` (ROADMAP Phase 9) | `*_expected.csv` (transient shape, Fortran output) | **match** — worst 1.5e-8 (`nlt`), 3e-12 the others, under the transient rule (below); `tests/conformance.rs::check_transient_case` |
 | `portela1997_transient`, `silva2025_*_transient` | none | vs fresh Fortran runs (2026-09-30, after Phase 9): 3e-12 and 2e-9 (`silva2025_rho100_transient`) under the transient rule |
 | `silva2025_*`, `grcev_*`, `lima_*`, `poljak_fig4`, `rod_air`, … | none | load, validate, assemble; sweeps run |
-| `portelaMesh` | none (structure-only) | 185 nodes / 200 electrodes, as pinned in `test_mesh_element.f90` |
 | `linha*`, `torre*` (ADR 0023: `catenary` element, `portela` waveform) | none | load, validate, assemble; vs fresh Fortran runs: `linha1` 3e-10, `linha4` 1e-5 (quadrature-tolerance level, same with zero sag) — see `common/README.md` |
 
 **Cross-code check on Grcev ℓ = 10 m** (`grcev_fig12_l10_rho{30,300,3000}`,
@@ -89,18 +97,29 @@ item 9) still needs Fortran outputs for the non-golden cases.
   DC limit vs Sunde, passivity, sweep vs manual loop, voltage-source
   superposition, transient vs low-frequency impedance, mesh topology) but
   not compared against Fortran numbers.
-- The Fortran `test_common_cases` compares rows by position, and fails on
-  `grid_expected.csv` (reverse electrode order; confirmed with gfortran 13
-  on 2026-09-30) — the fixture needs regenerating (Phase 8 item 1).
+- The Fortran `test_common_cases` compares rows by position; the former
+  failure on `grid_expected.csv` (reverse electrode order) is gone since the
+  fixture was regenerated in Phase 10.
 - Bessel `I₀/I₁` is series + Hankel asymptotics, valid for the 45° arguments
   of the solid conductor; the tubular conductor (Phase 12 item 2) needs a
   general-phase implementation (ADR 0022).
-- No parallelism, no LAPACK/`faer` backend, no SLATEC FFI feature.
+- No parallelism (the Fortran sweep is threaded since Phase 10 item 4; the Rust one stays serial — Phase 8 scope), no LAPACK/`faer` backend, no SLATEC FFI feature.
 
 ## Phase 8 item 10 (follow-along rule)
 
 Each later contract change (schema, `common/` case, default numerics)
 carries a Rust item; lags are recorded in the conformance table above.
+
+- **ROADMAP Phase 10** ([ADR 0024](../docs/adr/0024-phase10-numerics.md)) —
+  **implemented, no lag**: `impedance::geometry_factor_1d` (line-by-line the
+  Fortran `geometryFactor1D`, the default kernel; `GeometryKernel::{Single,
+  Double}`), `mesh::ImageModel` and `MediumConstants::{gamma_air,gamma_soil}`
+  (`Γ(ω)` images, ideal selectable), the `numerics` block in `json.rs` with
+  `Study::{kernel, image_model, max_segment_length}` and the optional
+  `segments`, the CLI flags, and the item 6 fixtures. The Rust and Fortran
+  results agree to 1.3e-10 or better on every harmonic fixture and to 3e-12 on
+  the transient ones except the NLT (1.5e-8), although both quadratures are
+  adaptive: the subdivision decisions are identical operation by operation.
 
 - **ROADMAP Phase 9** (transient pipeline completion, ADR 0015 amendment
   2026-09-30) — **implemented, no lag**: `signal.sources` and the `sine`

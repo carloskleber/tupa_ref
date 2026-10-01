@@ -6,8 +6,8 @@
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Architectural vision: components, layers, flows, data management, state, extension mechanisms, known debts |
 | [CONVENTIONS.md](CONVENTIONS.md) | Coding and project conventions (absorbs the retired CLAUDE.md) |
 | [ROADMAP.md](ROADMAP.md) | Current-state gap analysis, phased plan, proposals from the open-source comparison, author-interview decisions (formerly `implementation-plan.md`) |
-| [BENCHMARKS.md](BENCHMARKS.md) | Validation anchors, execution status, cross-code benchmark setup, comparison policy |
-| [validation/](validation/) | Case-by-case comparisons against published papers' own figures (digitized plots, not tabulated data) |
+| [BENCHMARKS.md](BENCHMARKS.md) | Validation anchors, execution status, cross-code benchmark setup, comparison policy, Phase 10 performance measurements |
+| [validation/](validation/) | Case-by-case comparisons against published papers' own figures (digitized plots, not tabulated data), the TAGS cross-code check and the Phase 10 image-model study |
 | [DISTRIBUTION.md](DISTRIBUTION.md) | Build chain, dependency inventory, packaging/release, licensing, security surface |
 | [GLOSSARY.md](GLOSSARY.md) | Main model and software terms |
 | [references.md](references.md) | Bibliography, numbered as cited in the theory doc |
@@ -45,6 +45,7 @@ ARCHITECTURE → theory.md; contributors add CONVENTIONS and ROADMAP.
 | [0021](adr/0021-transient-antialias-filter.md) | Optional anti-aliasing filter for transient synthesis | Accepted |
 | [0022](adr/0022-rust-implementation.md) | Rust implementation (`rust/`): design decisions and conformance status | Accepted |
 | [0023](adr/0023-legacy-case-import.md) | Legacy case import: `catenary` element, `portela` waveform, legacy `common/` cases | Accepted |
+| [0024](adr/0024-phase10-numerics.md) | Phase 10 numerics: single-integral kernel, Γ(ω) images, segment-length target, threaded sweep (`numerics` block) | Accepted |
 
 Language-specific build documentation stays with each implementation
 (e.g. [../fortran/README.md](../fortran/README.md),
