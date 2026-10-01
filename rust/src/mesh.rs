@@ -8,6 +8,19 @@ use crate::error::{Result, TupaError};
 use crate::linalg::{CMatrix, solve_in_place};
 use num_complex::Complex64;
 
+/// Image reflection model (ROADMAP Phase 10 item 2, theory.md §5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ImageModel {
+    /// `Γ(ω) = (W_own − W_other)/(W_own + W_other)`, the quasi-static Fresnel
+    /// form of the original Matlab default mode (ADR 0017 finding 1): the
+    /// default
+    #[default]
+    FrequencyDependent,
+    /// Ideal images, `Γ = +1` in soil and `−1` in air: the `|W_own| ≫
+    /// |W_other|` limit (Matlab `SOLO_IDEAL`); the pre-Phase-10 behaviour
+    Ideal,
+}
+
 /// Medium constants at one frequency (theory.md §5: `c_E`, `c_M`, `γ`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MediumConstants {
@@ -23,6 +36,30 @@ pub struct MediumConstants {
     pub prop_air: Complex64,
     /// Soil propagation constant
     pub prop_soil: Complex64,
+    /// Reflection coefficient of the image of a segment in air (ideal: −1)
+    pub gamma_air: Complex64,
+    /// Reflection coefficient of the image of a segment in soil (ideal: +1)
+    pub gamma_soil: Complex64,
+}
+
+impl MediumConstants {
+    /// Fill `gamma_air`/`gamma_soil` from `c_e_*` (`calcImageCoefficients`).
+    ///
+    /// With `cE = 1/(4πW)`: `Γ_own = (W_own − W_other)/(W_own + W_other) =
+    /// (cE_other − cE_own)/(cE_other + cE_own)`; applied to the image
+    /// parcels of both `Z_t` and `Z_ℓ`, as the original Matlab does.
+    fn set_image_coefficients(&mut self, model: ImageModel) {
+        match model {
+            ImageModel::Ideal => {
+                self.gamma_air = Complex64::new(-1.0, 0.0);
+                self.gamma_soil = Complex64::new(1.0, 0.0);
+            }
+            ImageModel::FrequencyDependent => {
+                self.gamma_air = (self.c_e_soil - self.c_e_air) / (self.c_e_soil + self.c_e_air);
+                self.gamma_soil = (self.c_e_air - self.c_e_soil) / (self.c_e_air + self.c_e_soil);
+            }
+        }
+    }
 }
 
 /// Solution of one injection pattern: node voltages and electrode end
@@ -58,6 +95,8 @@ pub struct Mesh {
     pub zlong: CMatrix,
     /// Medium constants at the current frequency
     pub medium: MediumConstants,
+    /// Image reflection model
+    pub image_model: ImageModel,
 }
 
 /// Pair of media for impedance evaluation: position code 1 = air, 2 = soil.
@@ -97,7 +136,10 @@ impl Mesh {
                 c_m_soil: ZERO,
                 prop_air: ZERO,
                 prop_soil: ZERO,
+                gamma_air: Complex64::new(-1.0, 0.0),
+                gamma_soil: Complex64::new(1.0, 0.0),
             },
+            image_model: ImageModel::default(),
         }
     }
 
@@ -119,7 +161,10 @@ impl Mesh {
             c_m_soil: Complex64::new(0.0, omega * mu_soil / FOUR_PI),
             prop_air: (jw * mu_air * w_air).sqrt(),
             prop_soil: (jw * mu_soil * w_soil).sqrt(),
-        }
+            gamma_air: ZERO,
+            gamma_soil: ZERO,
+        };
+        self.medium.set_image_coefficients(self.image_model);
     }
 
     /// `calc_param_w` at a complex frequency `s = c + jω` (every `jω → s`),
@@ -139,23 +184,26 @@ impl Mesh {
             c_m_soil: s * (mu_soil / FOUR_PI),
             prop_air: (s * mu_air * w_air).sqrt(),
             prop_soil: (s * mu_soil * w_soil).sqrt(),
-        }
+            gamma_air: ZERO,
+            gamma_soil: ZERO,
+        };
+        self.medium.set_image_coefficients(self.image_model);
     }
 
-    fn medium_for(&self, pos: u8) -> (Complex64, Complex64, Complex64, f64) {
+    fn medium_for(&self, pos: u8) -> (Complex64, Complex64, Complex64, Complex64) {
         if pos == AIR {
             (
                 self.medium.prop_air,
                 self.medium.c_e_air,
                 self.medium.c_m_air,
-                -1.0,
+                self.medium.gamma_air,
             )
         } else {
             (
                 self.medium.prop_soil,
                 self.medium.c_e_soil,
                 self.medium.c_m_soil,
-                1.0,
+                self.medium.gamma_soil,
             )
         }
     }
@@ -166,7 +214,8 @@ impl Mesh {
     /// `Ztrans = cE (e^{-γd} g ± e^{-γdi} gi) / l²`,
     /// `Zlong  = cM (e^{-γd} g ± cosθi e^{-γdi} gi) + zint`.
     ///
-    /// Image sign "−" in air, "+" in soil.
+    /// Image factor: the reflection coefficient Γ of the image (`gamma_air`/
+    /// `gamma_soil`; ideal limit −1 in air, +1 in soil).
     #[allow(clippy::too_many_arguments)]
     pub fn calc_z_self(
         &mut self,
@@ -334,6 +383,7 @@ mod tests {
     #[test]
     fn image_sign_is_minus_in_air_plus_in_soil() {
         let mut m = Mesh::new(2, 1, &[0], &[1]);
+        m.image_model = ImageModel::Ideal; // the ±1 sign rule is the ideal limit
         let omega = 2.0 * PI * 1e3;
         let w = Complex64::new(0.01, 0.0);
         m.calc_param_w(omega, MU0, w, MU0, w);
@@ -343,6 +393,49 @@ mod tests {
         let soil = m.ztrans.get(0, 0);
         // same material constants ⇒ |soil| > |air| because image adds vs subtracts
         assert!(soil.norm() > air.norm());
+    }
+
+    #[test]
+    fn frequency_dependent_image_coefficient_matches_the_fresnel_form() {
+        use crate::ctes::EPSILON0;
+        let mut m = Mesh::new(2, 1, &[0], &[1]);
+        let omega = 2.0 * PI * 1e6;
+        let w_soil = Complex64::new(0.01, omega * 10.0 * EPSILON0);
+        let w_air = Complex64::new(0.0, omega * EPSILON0);
+        m.calc_param_w(omega, MU0, w_air, MU0, w_soil);
+        let g_soil = (w_soil - w_air) / (w_soil + w_air);
+        assert!((m.medium.gamma_soil - g_soil).norm() < 1e-14);
+        assert!((m.medium.gamma_air + g_soil).norm() < 1e-14);
+        assert!(m.medium.gamma_soil.norm() < 1.0 && m.medium.gamma_soil.im != 0.0);
+
+        // low-frequency limit: the ideal table
+        let w = 2.0 * PI * 10.0;
+        m.calc_param_w(
+            w,
+            MU0,
+            Complex64::new(0.0, w * EPSILON0),
+            MU0,
+            Complex64::new(0.01, w * 10.0 * EPSILON0),
+        );
+        assert!((m.medium.gamma_soil - 1.0).norm() < 1e-6);
+        assert!((m.medium.gamma_air + 1.0).norm() < 1e-6);
+
+        // Poljak–Doric soil at 100 MHz: |Γ| → (εr − 1)/(εr + 1)
+        let w = 2.0 * PI * 1e8;
+        m.calc_param_w(
+            w,
+            MU0,
+            Complex64::new(0.0, w * EPSILON0),
+            MU0,
+            Complex64::new(1.0 / 5400.0, w * 10.0 * EPSILON0),
+        );
+        assert!((m.medium.gamma_soil.norm() - 9.0 / 11.0).abs() < 5e-3);
+
+        // the ideal model pins ±1 at any frequency
+        m.image_model = ImageModel::Ideal;
+        m.calc_param_w(omega, MU0, w_air, MU0, w_soil);
+        assert_eq!(m.medium.gamma_soil, Complex64::new(1.0, 0.0));
+        assert_eq!(m.medium.gamma_air, Complex64::new(-1.0, 0.0));
     }
 
     #[test]

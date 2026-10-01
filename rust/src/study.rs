@@ -5,10 +5,10 @@
 use crate::ctes::{MU0, PI, ZERO};
 use crate::electrode::Electrode;
 use crate::error::{Result, TupaError};
-use crate::geometry::{GeometryMatrices, GeometryOptions, build_geometry_matrices};
+use crate::geometry::{GeometryKernel, GeometryMatrices, GeometryOptions, build_geometry_matrices};
 use crate::impedance::{internal_impedance, internal_impedance_laplace};
 use crate::linalg::{CMatrix, solve_in_place};
-use crate::mesh::{AIR, Mesh, SOIL};
+use crate::mesh::{AIR, ImageModel, Mesh, SOIL};
 use crate::result::ResultSet;
 use crate::structure::Structure;
 use crate::verbosity::{VERB_NORMAL, VERB_VERBOSE, verbose, verbosity_level};
@@ -48,8 +48,19 @@ pub struct Study {
     pub title: String,
     /// Geometry and media
     pub structure: Structure,
-    /// Quadrature/cache options
+    /// Quadrature/cache options (process defaults, e.g. from the CLI)
     pub options: GeometryOptions,
+    /// The study's own geometry kernel (`numerics.kernel`); `None` = the
+    /// process default in `options` (ROADMAP Phase 10 item 1)
+    pub kernel: Option<GeometryKernel>,
+    /// The study's own image model (`numerics.imageModel`); `None` = the
+    /// process default `default_image_model` (Phase 10 item 2)
+    pub image_model: Option<ImageModel>,
+    /// Image model of studies that do not state one (CLI `--image-model`)
+    pub default_image_model: ImageModel,
+    /// Per-study segment-length target (m, `numerics.maxSegmentLength`),
+    /// applied while loading; 0 = none (Phase 10 item 3)
+    pub max_segment_length: f64,
     /// Filled by `prepare`
     pub prepared: Option<Prepared>,
     /// Node voltages per frequency
@@ -86,6 +97,10 @@ impl Study {
             title: title.into(),
             structure,
             options: GeometryOptions::default(),
+            kernel: None,
+            image_model: None,
+            default_image_model: ImageModel::default(),
+            max_segment_length: 0.0,
             prepared: None,
             voltage_results: ResultSet::default(),
             long_current_results: ResultSet::default(),
@@ -134,7 +149,11 @@ impl Study {
             });
         }
 
-        let geom = build_geometry_matrices(&p1, &p2, &radius, Some(&pos), &self.options);
+        let mut opts = self.options;
+        if let Some(k) = self.kernel {
+            opts.kernel = k;
+        }
+        let geom = build_geometry_matrices(&p1, &p2, &radius, Some(&pos), &opts);
         if verbosity_level() == VERB_VERBOSE {
             println!(
                 " Geometry-factor quadrature cache: {} hits, {} misses ({} entries)",
@@ -171,7 +190,9 @@ impl Study {
         let laplace = damping != 0.0;
         let s = Complex64::new(damping, omega);
 
+        let image_model = self.image_model.unwrap_or(self.default_image_model);
         let prep = self.prepared.as_mut().expect("prepared");
+        prep.mesh.image_model = image_model;
         if laplace {
             let w_air = self.structure.air.admittance_laplace(s);
             let w_soil = self.structure.soil.admittance_laplace(s);

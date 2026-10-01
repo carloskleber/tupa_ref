@@ -8,7 +8,9 @@
 
 use crate::element::{Catenary, Element, Line, MeshElement};
 use crate::error::{Result, TupaError};
+use crate::geometry::GeometryKernel;
 use crate::material::{AlipioVisacroSoil, Linear, Medium, PortelaSoil};
+use crate::mesh::ImageModel;
 use crate::node::Node;
 use crate::signal::{
     Signal, new_double_exp_signal, new_heidler_signal, new_heidler_signal_terms,
@@ -60,7 +62,7 @@ struct ElementSpec {
     from: String,
     to: String,
     radius: f64,
-    segments: f64,
+    segments: Option<f64>,
     material: String,
     position: Vec<f64>,
     #[serde(rename = "lengthX")]
@@ -182,11 +184,23 @@ struct SignalSpec {
     antialias_start: Option<f64>,
 }
 
+/// `numerics` block (ADR 0024, ROADMAP Phase 10).
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct NumericsSpec {
+    kernel: Option<String>,
+    #[serde(rename = "imageModel")]
+    image_model: Option<String>,
+    #[serde(rename = "maxSegmentLength")]
+    max_segment_length: Option<f64>,
+}
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 struct CaseSpec {
     title: String,
     soil: SoilSpec,
+    numerics: Option<NumericsSpec>,
     nodes: Vec<NodeSpec>,
     materials: Vec<MaterialSpec>,
     elements: Vec<ElementSpec>,
@@ -280,21 +294,101 @@ fn build(spec: CaseSpec) -> Result<LoadedCase> {
         }
     };
 
+    let mut kernel = None;
+    let mut image_model = None;
+    let mut max_segment_length = 0.0;
+    if let Some(num) = &spec.numerics {
+        kernel = match num.kernel.as_deref() {
+            None => None,
+            Some("single") => Some(GeometryKernel::Single),
+            Some("double") => Some(GeometryKernel::Double),
+            Some(other) => {
+                return Err(TupaError::new(format!(
+                    "mTupa: unknown numerics.kernel '{other}' (expected single or double)"
+                )));
+            }
+        };
+        image_model = match num.image_model.as_deref() {
+            None => None,
+            Some("frequency-dependent") => Some(ImageModel::FrequencyDependent),
+            Some("ideal") => Some(ImageModel::Ideal),
+            Some(other) => {
+                return Err(TupaError::new(format!(
+                    "mTupa: unknown numerics.imageModel '{other}' (expected frequency-dependent or ideal)"
+                )));
+            }
+        };
+        if let Some(l) = num.max_segment_length {
+            if l <= 0.0 {
+                return Err(TupaError::new(
+                    "mTupa: numerics.maxSegmentLength must be positive",
+                ));
+            }
+            max_segment_length = l;
+        }
+    }
+
     let mut structure = Structure::new(soil);
     for n in &spec.nodes {
         structure.add_node(Node::new(n.id.clone(), pos3(&n.position)));
     }
+    let chord = |from: &str, to: &str| -> f64 {
+        match (
+            structure.find_node_index(from),
+            structure.find_node_index(to),
+        ) {
+            (Some(a), Some(b)) => {
+                let (pa, pb) = (structure.nodes[a].p, structure.nodes[b].p);
+                ((pa[0] - pb[0]).powi(2) + (pa[1] - pb[1]).powi(2) + (pa[2] - pb[2]).powi(2)).sqrt()
+            }
+            _ => 0.0,
+        }
+    };
+    // Segment counts: `segments` (default 1), raised to ceil(length / target)
+    // when the study carries a target — the target only ever refines
+    // (ROADMAP Phase 10 item 3)
+    let segments_for = |e: &ElementSpec, length: f64| -> usize {
+        let mut n = e.segments.map(count).unwrap_or(1);
+        if max_segment_length > 0.0 && length > 0.0 {
+            n = n.max((length / max_segment_length - 1.0e-9).ceil() as usize);
+        }
+        n
+    };
+    let element_segments: Vec<usize> = spec
+        .elements
+        .iter()
+        .map(|e| match e.kind.as_str() {
+            "line" => segments_for(e, chord(&e.from, &e.to)),
+            "catenary" => {
+                let c = chord(&e.from, &e.to);
+                // parabolic arc length: c + 8 s² / (3 c)
+                let arc = if c > 0.0 {
+                    c + 8.0 * e.sag * e.sag / (3.0 * c)
+                } else {
+                    c
+                };
+                segments_for(e, arc)
+            }
+            "mesh" => {
+                // one count serves every bar: the longest bar sets the target
+                let bar_x = e.length_x / (count(e.rows_x).max(1) as f64);
+                let bar_y = e.length_y / (count(e.rows_y).max(1) as f64);
+                segments_for(e, bar_x.max(bar_y))
+            }
+            _ => 0,
+        })
+        .collect();
     for m in &spec.materials {
         structure.add_material(Linear::new(m.id.clone(), m.epsilonr, m.mur, m.sigma));
     }
-    for e in &spec.elements {
+    for (e, &nseg) in spec.elements.iter().zip(&element_segments) {
         match e.kind.as_str() {
             "line" => structure.add_element(Element::Line(Line::new(
                 e.id.clone(),
                 e.from.clone(),
                 e.to.clone(),
                 e.radius,
-                count(e.segments),
+                nseg,
                 e.material.clone(),
             ))),
             "catenary" => structure.add_element(Element::Catenary(Catenary {
@@ -303,7 +397,7 @@ fn build(spec: CaseSpec) -> Result<LoadedCase> {
                     e.from.clone(),
                     e.to.clone(),
                     e.radius,
-                    count(e.segments),
+                    nseg,
                     e.material.clone(),
                 ),
                 sag: e.sag,
@@ -316,14 +410,17 @@ fn build(spec: CaseSpec) -> Result<LoadedCase> {
                 rows_x: count(e.rows_x),
                 rows_y: count(e.rows_y),
                 radius: e.radius,
-                segments: count(e.segments),
+                segments: nseg,
                 id_material: e.material.clone(),
             })),
             other => eprintln!(" mTupa: unknown element type '{other}' — skipped"),
         }
     }
 
-    let study = Study::new(spec.title.clone(), structure);
+    let mut study = Study::new(spec.title.clone(), structure);
+    study.kernel = kernel;
+    study.image_model = image_model;
+    study.max_segment_length = max_segment_length;
 
     let sources = spec.sources.as_ref().map(|list| {
         list.iter()

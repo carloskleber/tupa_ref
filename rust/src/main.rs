@@ -2,16 +2,19 @@
 //! Fortran executable (`fortran/app/main.f90`), plus `--dump-structure`.
 
 use std::process::ExitCode;
-use tupa::geometry::GeometryOptions;
+use tupa::geometry::{GeometryKernel, GeometryOptions};
+use tupa::mesh::ImageModel;
 use tupa::verbosity::{VERB_QUIET, VERB_VERBOSE, set_verbosity};
 use tupa::{RunOptions, run_from_file};
 
-const USAGE: &str = "Usage: tupa [-v|--verbose] [-q|--quiet] [--epsrel <value>] [--no-cache] \
+const USAGE: &str = "Usage: tupa [-v|--verbose] [-q|--quiet] [--epsrel <value>] \
+[--kernel single|double] [--image-model frequency-dependent|ideal] [--no-cache] \
 [--dump-structure] [--output-dir <dir>] <study.json>";
 
 fn main() -> ExitCode {
     let mut filename: Option<String> = None;
     let mut geometry = GeometryOptions::default();
+    let mut image_model = ImageModel::default();
     let mut dump = false;
     let mut output_dir = None;
 
@@ -35,6 +38,28 @@ fn main() -> ExitCode {
                     }
                 }
             }
+            "--kernel" => match args.next().as_deref() {
+                Some("single") => geometry.kernel = GeometryKernel::Single,
+                Some("double") => geometry.kernel = GeometryKernel::Double,
+                other => {
+                    eprintln!(
+                        "error: --kernel: invalid value '{}' (expected single or double)",
+                        other.unwrap_or("")
+                    );
+                    return ExitCode::FAILURE;
+                }
+            },
+            "--image-model" => match args.next().as_deref() {
+                Some("frequency-dependent") => image_model = ImageModel::FrequencyDependent,
+                Some("ideal") => image_model = ImageModel::Ideal,
+                other => {
+                    eprintln!(
+                        "error: --image-model: invalid value '{}' (expected frequency-dependent or ideal)",
+                        other.unwrap_or("")
+                    );
+                    return ExitCode::FAILURE;
+                }
+            },
             "--output-dir" => {
                 let Some(v) = args.next() else {
                     eprintln!("error: --output-dir requires a directory");
@@ -54,6 +79,7 @@ fn main() -> ExitCode {
 
     let opts = RunOptions {
         geometry,
+        image_model,
         dump_structure: dump,
         output_dir,
     };

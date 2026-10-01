@@ -4,7 +4,7 @@
 //! geometry. No dependency on the object model — plain endpoints and radii.
 
 use crate::geometry_cache::{GeometryCache, geom_cache_key};
-use crate::impedance::{DEFAULT_QUAD_EPS_REL, geometry_factor_2d};
+use crate::impedance::{DEFAULT_QUAD_EPS_REL, geometry_factor_1d, geometry_factor_2d};
 
 /// A 3-vector.
 pub type Vec3 = [f64; 3];
@@ -142,10 +142,24 @@ fn parallel_geometry_factor(
     if g.is_finite() { Some(g) } else { None }
 }
 
+/// Quadrature used for the pairs that have no closed form (ROADMAP Phase 10
+/// item 1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GeometryKernel {
+    /// mHEM single integral (theory.md §4.2): the default
+    #[default]
+    Single,
+    /// Nested 2-D Gauss–Kronrod quadrature: the pre-Phase-10 path and the
+    /// test oracle (`numerics.kernel: "double"`)
+    Double,
+}
+
 /// Numerical options of the geometry build.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GeometryOptions {
-    /// Relative-error factor of the 2-D quadrature (CLI `--epsrel`)
+    /// Quadrature kernel for pairs without a closed form
+    pub kernel: GeometryKernel,
+    /// Relative-error factor of the quadrature (CLI `--epsrel`)
     pub eps_rel: f64,
     /// Memoise quadrature results (CLI `--no-cache` disables)
     pub use_cache: bool,
@@ -156,6 +170,7 @@ pub struct GeometryOptions {
 impl Default for GeometryOptions {
     fn default() -> Self {
         Self {
+            kernel: GeometryKernel::default(),
             eps_rel: DEFAULT_QUAD_EPS_REL,
             use_cache: true,
             force_numeric: false,
@@ -165,7 +180,7 @@ impl Default for GeometryOptions {
 
 /// General mutual geometry factor `g(a,b) = ∫ dl_a dl_b / R_ab` (theory.md
 /// §4.2) for non-coincident, non-identical segments: closed form for parallel
-/// pairs, memoised adaptive 2-D quadrature otherwise.
+/// pairs, memoised adaptive quadrature (`opts.kernel`) otherwise.
 pub fn mutual_geometry_factor(
     a1: &Vec3,
     a2: &Vec3,
@@ -196,7 +211,10 @@ pub fn mutual_geometry_factor(
         }
         key = Some(k);
     }
-    let g = geometry_factor_2d(a1, &va, la, b1, &vb, lb, opts.eps_rel);
+    let g = match opts.kernel {
+        GeometryKernel::Single => geometry_factor_1d(a1, &va, la, b1, &vb, lb, opts.eps_rel),
+        GeometryKernel::Double => geometry_factor_2d(a1, &va, la, b1, &vb, lb, opts.eps_rel),
+    };
     if let Some(k) = key {
         cache.put(k, g);
     }

@@ -151,9 +151,15 @@ fn diff_transient_csv(fresh: &str, expected: &str, reltol: f64) -> Result<(), St
 }
 
 fn check_transient_case(name: &str) {
+    check_transient_case_as(name, name);
+}
+
+/// `check_transient_case` against `<fixture>_expected.csv` (a case whose
+/// harmonic sweep owns `<name>_expected.csv`).
+fn check_transient_case_as(name: &str, fixture: &str) {
     let json = common().join(format!("{name}.json"));
     let expected =
-        fs::read_to_string(common().join(format!("{name}_expected.csv"))).expect("expected csv");
+        fs::read_to_string(common().join(format!("{fixture}_expected.csv"))).expect("expected csv");
     let mut case = load_study(&json).expect("load");
     validate_study_references(&mut case).expect("validate");
     let spec = case.transient.clone().expect("signal block");
@@ -205,6 +211,43 @@ fn grid_matches_fixture() {
     check_case("grid");
 }
 
+/// Ideal images (`numerics.imageModel: "ideal"`, ROADMAP Phase 10 item 2):
+/// the low-frequency-limit pin; the cases above run the Γ(ω) default.
+#[test]
+fn portela1997_ideal_matches_fixture() {
+    check_case("portela1997_ideal");
+}
+
+/// ROADMAP Phase 10 item 6: the 32x32 m grid (185 nodes, 200 electrodes),
+/// harmonic sweep with its `outputs` filter and scan-fed transient.
+#[test]
+fn portela_mesh_matches_fixture() {
+    let json = common().join("portelaMesh.json");
+    let mut case = load_study(&json).expect("load");
+    validate_study_references(&mut case).expect("validate");
+    let sources = case.sources.clone().expect("sources");
+    let freq = case.freq_hz.clone().expect("frequencies");
+    case.study.run_sweep(&freq, &sources).expect("sweep");
+    let o = &case.outputs;
+    let fresh = results_csv(
+        &case.study,
+        o.nodes.as_deref(),
+        o.electrodes.as_deref(),
+        o.quantities.as_deref(),
+    )
+    .expect("csv");
+    let expected =
+        fs::read_to_string(common().join("portelaMesh_expected.csv")).expect("expected csv");
+    if let Err(msg) = diff_csv(&fresh, &expected, 1.0e-6) {
+        panic!("portelaMesh: fresh run differs from fixture: {msg}");
+    }
+}
+
+#[test]
+fn portela_mesh_transient_matches_fixture() {
+    check_transient_case_as("portelaMesh", "portelaMesh_transient");
+}
+
 #[test]
 fn every_expected_fixture_has_a_test() {
     let mut names: Vec<String> = fs::read_dir(common())
@@ -222,11 +265,14 @@ fn every_expected_fixture_has_a_test() {
         vec![
             "grid",
             "portela1997",
+            "portela1997_ideal",
             "portela1997_transient_hann",
             "portela1997_transient_hann_time",
             "portela1997_transient_interpolated",
             "portela1997_transient_multi",
             "portela1997_transient_nlt",
+            "portelaMesh",
+            "portelaMesh_transient",
             "rod"
         ],
         "new golden fixture in common/: add a check_case() test for it"

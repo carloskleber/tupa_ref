@@ -1,10 +1,12 @@
 //! Adaptive quadrature and solid-conductor internal impedance (`mImpedance`).
 //!
-//! The mutual geometry factor `g(a,b) = ∬ ds_a ds_b / r` is evaluated by two
-//! nested calls of a line-by-line port of `dqag_k15` (adaptive Gauss–Kronrod
-//! 7/15, at most `MAXINT` subintervals, same tolerances and subdivision
-//! strategy as the Fortran code — a crate would not meet the 1e-6 golden
-//! tolerance on the quadrature-dominated cases).
+//! The mutual geometry factor `g(a,b) = ∬ ds_a ds_b / r` is evaluated by a
+//! line-by-line port of `dqag_k15` (adaptive Gauss–Kronrod 7/15, at most
+//! `MAXINT` subintervals, same tolerances and subdivision strategy as the
+//! Fortran code — a crate would not meet the 1e-6 golden tolerance on the
+//! quadrature-dominated cases): by default the single-integral mHEM form
+//! (`geometry_factor_1d`, ROADMAP Phase 10 item 1), with the two nested calls
+//! of `geometry_factor_2d` kept as the oracle.
 
 use crate::bessel::i0_over_i1;
 use crate::ctes::{MU0, PI};
@@ -190,6 +192,51 @@ pub fn geometry_factor_2d(
     res
 }
 
+/// Geometry factor `g(a,b)` by the single-integral (mHEM) form of theory.md
+/// §4.2, ROADMAP Phase 10 item 1: the inner integral over segment `b` in
+/// closed form, `∫ dl_b/R = ln((r1 + r2 + lb)/(r1 + r2 − lb))` with `r1`,
+/// `r2` the distances from the field point on `a` to the two ends of `b`,
+/// then one adaptive Gauss–Kronrod integral over `a` (`epsabs = 0`,
+/// `epsrel = eps_rel`). Line-by-line the Fortran `geometryFactor1D`;
+/// `geometry_factor_2d` stays as the test oracle.
+pub fn geometry_factor_1d(
+    a1: &[f64; 3],
+    va: &[f64; 3],
+    la: f64,
+    b1: &[f64; 3],
+    vb: &[f64; 3],
+    lb: f64,
+    eps_rel: f64,
+) -> f64 {
+    let b2 = [b1[0] + lb * vb[0], b1[1] + lb * vb[1], b1[2] + lb * vb[2]];
+    let mut inner = |x: f64| -> f64 {
+        let p = [a1[0] + va[0] * x, a1[1] + va[1] * x, a1[2] + va[2] * x];
+        let w = [p[0] - b1[0], p[1] - b1[1], p[2] - b1[2]];
+        let w2 = [p[0] - b2[0], p[1] - b2[1], p[2] - b2[2]];
+        let r1 = (w[0] * w[0] + w[1] * w[1] + w[2] * w[2]).sqrt();
+        let r2 = (w2[0] * w2[0] + w2[1] * w2[1] + w2[2] * w2[2]).sqrt();
+        let s = w[0] * vb[0] + w[1] * vb[1] + w[2] * vb[2];
+        let diff = if (0.0..=lb).contains(&s) {
+            // r1 + r2 − lb without cancellation: r1 − s = ρ²/(r1 + s) and
+            // r2 − (lb − s) = ρ²/(r2 + lb − s)
+            let den1 = r1 + s;
+            let den2 = r2 + lb - s;
+            if den1 > 0.0 && den2 > 0.0 {
+                let rho2 = (w[0] * w[0] + w[1] * w[1] + w[2] * w[2] - s * s).max(0.0);
+                rho2 * (1.0 / den1 + 1.0 / den2)
+            } else {
+                0.0
+            }
+        } else {
+            r1 + r2 - lb
+        };
+        // field point exactly on b (a shared end point): integrand +Inf on a
+        // single point — clamp, as in the Fortran code
+        ((r1 + r2 + lb) / diff.max(1.0e-300)).ln()
+    };
+    dqag_k15(&mut inner, 0.0, la, 0.0, eps_rel).0
+}
+
 /// Internal impedance of a solid cylindrical conductor (theory.md §4.3):
 ///
 /// `z_int = √(jωμ/σ)/(2πr₀) · I₀(ρ)/I₁(ρ)`, `ρ = r₀√(jωμσ)`, `Zint = z_int·l`.
@@ -261,6 +308,70 @@ mod tests {
         // ∬ dx dy /√((x-y)²+1) = 2(asinh(1) - √2 + 1)
         let exact = 2.0 * (1.0_f64.asinh() - 2.0_f64.sqrt() + 1.0);
         assert!((g - exact).abs() < 1e-7, "{g} vs {exact}");
+    }
+
+    #[test]
+    fn single_integral_kernel_matches_the_2d_oracle() {
+        type Pair = ([f64; 3], [f64; 3], [f64; 3], [f64; 3]);
+        let cases: [Pair; 4] = [
+            // perpendicular, separated
+            (
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [2.0, 1.0, 0.0],
+                [2.0, 1.0, 1.0],
+            ),
+            // skew, general position
+            (
+                [0.0, 0.0, 0.0],
+                [3.0, 1.0, 0.5],
+                [1.0, 2.0, -1.0],
+                [2.5, -1.0, 1.5],
+            ),
+            // L junction
+            (
+                [0.0, 0.0, 0.0],
+                [2.0, 0.0, 0.0],
+                [2.0, 0.0, 0.0],
+                [2.0, 3.0, 0.0],
+            ),
+            // buried segment against its mirror image
+            (
+                [0.0, 0.0, -0.5],
+                [1.0, 0.0, -1.5],
+                [0.0, 0.0, 0.5],
+                [1.0, 0.0, 1.5],
+            ),
+        ];
+        for (a1, a2, b1, b2) in cases {
+            let unit = |p: &[f64; 3], q: &[f64; 3]| {
+                let d = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
+                let l = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+                ([d[0] / l, d[1] / l, d[2] / l], l)
+            };
+            let (va, la) = unit(&a1, &a2);
+            let (vb, lb) = unit(&b1, &b2);
+            let g1 = geometry_factor_1d(&a1, &va, la, &b1, &vb, lb, 1e-12);
+            let g2 = geometry_factor_2d(&a1, &va, la, &b1, &vb, lb, 1e-12);
+            assert!((g1 - g2).abs() <= 1e-5 * g2.abs(), "{g1} vs {g2}");
+        }
+    }
+
+    #[test]
+    fn single_integral_kernel_resolves_an_interior_endpoint_singularity() {
+        // T junction: b starts at the midpoint of a, perpendicular to it.
+        // Exact: 2 (asinh 2 + 2 asinh 0.5)
+        let g = geometry_factor_1d(
+            &[0.0, 0.0, 0.0],
+            &[1.0, 0.0, 0.0],
+            2.0,
+            &[1.0, 0.0, 0.0],
+            &[0.0, 0.0, -1.0],
+            2.0,
+            1e-6,
+        );
+        let exact = 2.0 * (2.0_f64.asinh() + 2.0 * 0.5_f64.asinh());
+        assert!((g - exact).abs() < 1e-6 * exact, "{g} vs {exact}");
     }
 
     #[test]

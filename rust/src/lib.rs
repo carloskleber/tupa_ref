@@ -50,6 +50,8 @@ pub fn basename_no_ext(path: &str) -> String {
 pub struct RunOptions {
     /// Geometry/quadrature options
     pub geometry: geometry::GeometryOptions,
+    /// Image model of studies that do not state one (CLI `--image-model`)
+    pub image_model: mesh::ImageModel,
     /// Print the assembled nodes/electrodes and stop before any physics
     pub dump_structure: bool,
     /// Directory the result files are written to (default: current dir)
@@ -66,6 +68,7 @@ pub fn run_from_file(filename: &str, opts: &RunOptions) -> Result<()> {
     }
     let mut case = load_study(filename)?;
     case.study.options = opts.geometry;
+    case.study.default_image_model = opts.image_model;
     validate_study_references(&mut case)?;
 
     if opts.dump_structure {
