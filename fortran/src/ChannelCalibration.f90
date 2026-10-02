@@ -33,7 +33,7 @@ module mChannelCalibration
   use mSignal, only: tSignalSlot, newPortelaSignal
   use mTransient, only: transientResponseSources, tTransientOptions
   use mMesh, only: IMAGE_IDEAL
-  use mError, only: raiseError
+  use mError, only: raiseError, errorRaised
   use mGeometryCache, only: geomCacheClear
   use mVerbosity
   use mCtes, only: MU0, EPSILON0
@@ -82,6 +82,7 @@ contains
           call geomCacheClear()
           call calibrateChannel(el)
           call geomCacheClear()
+          if (errorRaised()) return
         end if
       end select
     end do
@@ -99,6 +100,7 @@ contains
     real(8) :: bestErr, bestK, bestV, err
     integer :: iter, n, j1, j2
     integer :: nSeg
+    character(len=96) :: line
 
     ! Calibration channel: the first part of the channel, vertical, on its own foot
     n = size(ch%breaks) - 1
@@ -133,6 +135,7 @@ contains
     end select
     call mini%structure%addElement(el)
     call mini%structure%assembleStructure()
+    if (errorRaised()) return
     cal%breaks = brk
     cal%radius = ch%radius
     cal%speed = ch%speed
@@ -149,8 +152,10 @@ contains
     do iter = 1, MAX_ITER
       vMeas = measureSpeed(kappa)
       if (vMeas <= 0.0d0) return
-      if (verbosityLevel() .eq. VERB_VERBOSE) print '(A,F10.5,A,ES12.5,A,ES12.5)', &
-        "   kappa = ", kappa, "  v = ", vMeas, "  target = ", vTarget
+      if (verbosityLevel() .eq. VERB_VERBOSE) then
+        write(line, '(A,F10.5,A,ES12.5,A,ES12.5)') "   kappa = ", kappa, "  v = ", vMeas, "  target = ", vTarget
+        call emitMessage(MSG_INFO, trim(line))
+      end if
       err = abs(vMeas - vTarget) / vTarget
       if (err < bestErr) then
         bestErr = err
@@ -220,7 +225,7 @@ contains
       call transientResponseSources(mini, slots, ["cal-base"], ["cal-base"], nyq, N_SAMPLES, 1.0d-6, &
                                      t, inj, nodeResp, observeElectrodeIds=[electrodeId(j1), electrodeId(j2)], &
                                      i1Responses=i1, i2Responses=i2, options=opts)
-      if (.not. allocated(t)) then
+      if (errorRaised() .or. .not. allocated(t)) then
         v = 0.0d0
         return
       end if

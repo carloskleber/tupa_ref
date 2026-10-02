@@ -21,6 +21,11 @@ instructions (retired 2026-07-05).
 - **Error handling**: never `stop`/`error stop` — raise through
   `mError%raiseError` (fortran-error-handler). Numerical routine failures
   (e.g. LAPACK `INFO`) return codes; the caller decides whether to raise.
+  Code that reads input must `return` right after raising, and loops that
+  continue past a call that can raise check `errorRaised()`: a program
+  embedding the solver runs with `mError`'s library mode, where a raise does not halt
+  ([ARCHITECTURE.md](ARCHITECTURE.md) §5). Console output goes through
+  `mVerbosity`'s `emitMessage`/`verbose`, not a bare `print`.
 - **Documentation**: FORD (`!!`) comments on every public type and routine,
   citing the theory.md section a physics routine implements.
 - **Comments**: only for non-obvious physics derivations or numerical

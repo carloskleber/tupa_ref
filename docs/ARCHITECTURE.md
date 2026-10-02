@@ -88,7 +88,7 @@ oracle kept, the geometry cache, the threaded sweep — [ADR 0024](adr/0024-phas
 | `mObservation` | `fortran/src/Observation.f90` | The parsed `observation` block (`tObservation`: points, grid, touch, step pairs) and the `tObservationResults` container; depends only on `mResult` so `tStudy` can own both | working |
 | `mPotentials` | `fortran/src/Potentials.f90` | Phase 11 post-processing (theory.md §3.1, ADR 0027): `potentialsAt` (ψ at arbitrary points from the solved `i1 + i2`, closed-form geometry factor, Γ(ω) images), `computeObservations` (potentials, GPR, touch and step voltage, step map); read-only on the study, OpenMP over points | working, tested |
 | `mResultsWriter` | `fortran/src/ResultsWriter.f90` | Harmonic CSV/JSON (ADR 0012), transient CSV/JSON (single/multi-source, and the independent-signals form, ADR 0015/0026) and the observation CSV/JSON (ADR 0027) | working, tested |
-| `mCtes`, `mError`, `mVerbosity` | `Ctes.f90`, `Error.f90`, `Verbosity.f90` | Constants (`dp`, μ₀, ε₀, …); feh error boundary; global quiet/normal/verbose level | working |
+| `mCtes`, `mError`, `mVerbosity` | `Ctes.f90`, `Error.f90`, `Verbosity.f90` | Constants (`dp`, μ₀, ε₀, …); feh error boundary, with a recording library mode for embedders (§5); global quiet/normal/verbose level and the message sink every library output goes through (§5) | working, tested (`test_library_mode`) |
 
 ## 3. Execution flow
 
@@ -228,12 +228,26 @@ files, never solver internals (§8).
   the caller; inside the threaded loops it is recorded under an OpenMP
   `critical` section and raised after the parallel region. Conductor-material
   checks (`checkConductorMaterials`) run before the loop for the same reason.
+  **Library mode** (for a program that embeds the solver and cannot be halted):
+  after `setLibraryMode(.true.)`, `raiseError` records the message (first 32
+  kept, all counted; safe from OpenMP threads) and returns, printing nothing.
+  Every raise site already returned straight after raising, so the input
+  readers — `loadStudy`, `validateStudyReferences`, `assembleStructure`,
+  `calibrateChannels` — unwind to the caller, which reads `errorRaised()`,
+  `errorCount()`, `errorMessage(i)` and then `clearError()`. The mode is for
+  those boundaries only; the solve loops were not audited for continuing after
+  a raise. The default is off, so the CLI halts exactly as before.
 - **Logging**: `print`-based, with ANSI colours from `mCtes`; `tStudy%report`
   builds human-readable summaries. No logging framework, none planned.
   `mVerbosity` holds a global `VERB_QUIET`/`VERB_NORMAL`/`VERB_VERBOSE` level
   (`verbose(level, msg)`), set from the `-v`/`--verbose`/`-q`/`--quiet`
   flags; it gates routine output (report, sweep summary, geometry-cache
-  statistics, elapsed time) but never errors/warnings.
+  statistics, elapsed time) but never errors/warnings. All library output goes
+  through one **message sink** (`emitMessage(severity, text)`, severities
+  `MSG_INFO`/`MSG_WARNING`/`MSG_ERROR`): standard output by default, or a
+  procedure installed with `setMessageSink` (it may be called from OpenMP
+  threads, so it must be thread-safe). The CLI's own usage text in
+  `app/main.f90` and the `printM` debug routine print directly.
 
 ## 6. Extension mechanisms
 

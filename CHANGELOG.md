@@ -9,6 +9,15 @@ numerics, which move result files.
 
 ### Added
 
+- **Hooks for embedding the solver in another program** (a GUI or language
+  binding that cannot be halted by an input error; no change for the CLI): `mError` library mode — `setLibraryMode(.true.)` makes
+  `raiseError` record the message and return instead of halting, and the input
+  readers (`loadStudy`, `validateStudyReferences`, `assembleStructure`,
+  `calibrateChannels`) unwind with it; `errorRaised`, `errorCount`,
+  `errorMessage`, `clearError` read it back. `mVerbosity` message sink —
+  `setMessageSink` / `emitMessage` with `MSG_INFO`/`MSG_WARNING`/`MSG_ERROR`
+  — through which all library output now goes (standard output when no sink is
+  installed, as before). Test `test_library_mode`.
 - **Grounding-safety outputs** (ROADMAP Phase 11,
   [ADR 0027](docs/adr/0027-observation-potentials-and-safety-outputs.md),
   theory.md §3.1): an optional `observation` input block asks for the potential
@@ -56,6 +65,15 @@ numerics, which move result files.
   `numerics` block, `maxSegmentLength`; `--kernel`, `--image-model`). The
   regenerated harmonic fixtures and `portela1997_ideal` now run there at 1e-6.
   No solver (Fortran/Rust) behaviour changes.
+
+### Fixed
+
+- Malformed input that dereferenced a null JSON handle or built an undefined
+  frequency axis is now an input error with a message (Fortran): a study with
+  no `soil` block, a node, `mesh` or `channel` with a missing or short
+  `position` (anything but three numbers), a `signal` block without
+  `observeNodes`, and a `frequencies` block with `min <= 0`, `max < min` or no
+  `pointsPerDecade`.
 
 ## 0.7.0 — 2026-10-01 (ROADMAP Phase 10b)
 

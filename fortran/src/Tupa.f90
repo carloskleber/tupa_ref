@@ -68,7 +68,7 @@ module tupa
                              writeTransientResultsCsv, writeTransientResultsJson, &
                              writeTransientSignalsCsv, writeTransientSignalsJson, &
                              writeObservationCsv, writeObservationJson
-  use mError, only: raiseError
+  use mError, only: raiseError, errorRaised
   use mVerbosity
   implicit none
   private
@@ -181,6 +181,10 @@ contains
     !!    `transferFunction` ("interpolated" reuses the case's
     !!    `frequencies` axis as the scan grid) and `transform`/`nltDamping`.
     !!
+    !! In library mode (`mError`) an input error is recorded and the
+    !! routine returns at once, leaving `study` and the optional outputs
+    !! unusable; the caller checks `errorRaised()`. Otherwise it halts, as ever.
+    !!
     !! After this call, `study%structure` is fully populated and ready for assembly.
     !! Call `study%structure%assembleStructure()` to discretise elements into nodes
     !! and electrodes.
@@ -247,8 +251,12 @@ contains
     !! Root of the parsed JSON tree (must be TARGET for child pointers)
     type(tJsonValue), pointer :: soil_obj, nodes_arr, mats_arr, elems_arr
     !! Pointers to major JSON objects
-    type(tJsonValue), pointer :: node_obj, mat_obj, elem_obj, pos_arr, pos_item
-    !! Pointers to individual JSON objects and array items
+    type(tJsonValue), pointer :: node_obj, mat_obj, elem_obj
+    !! Pointers to individual JSON objects
+    real(8) :: pos3(3)
+    logical :: okPos
+    character(len=16) :: idx
+    !! A parsed `[x, y, z]` position, whether it was valid, and an index for messages
     type(tJsonValue), pointer :: sources_arr, src_obj, current_obj
     type(tJsonValue), pointer :: freq_obj, outputs_obj, strArr
     !! Pointers for the sources/frequencies/outputs blocks (ADR 0013)
@@ -267,10 +275,15 @@ contains
     !! Geometric and material parameters
 
     call parseJsonFile(filename, root)
+    if (errorRaised()) return
 
     study%title = json_str(root, "title")
 
     soil_obj => json_child(root, "soil")
+    if (.not. associated(soil_obj)) then
+      call raiseError("mTupa: the study has no soil block")
+      return
+    end if
     if (json_has(soil_obj, "type")) then
       elem_type = json_str(soil_obj, "type")
     else
@@ -343,11 +356,13 @@ contains
       do i = 1, n
         node_obj => json_item(nodes_arr, i)
         id       = json_str(node_obj, "id")
-        pos_arr  => json_child(node_obj, "position")
-        pos_item => json_item(pos_arr, 1); x = json_value_real(pos_item)
-        pos_item => json_item(pos_arr, 2); y = json_value_real(pos_item)
-        pos_item => json_item(pos_arr, 3); z = json_value_real(pos_item)
-        call study%structure%addNode(newNode(trim(id), [x, y, z]))
+        call readVec3(node_obj, "position", pos3, okPos)
+        if (.not. okPos) then
+          write(idx, '(I0)') i
+          call raiseError("mTupa: nodes[" // trim(idx) // "] (id '" // trim(id) // "') needs a 3-component position")
+          return
+        end if
+        call study%structure%addNode(newNode(trim(id), pos3))
       end do
     end if
 
@@ -461,10 +476,12 @@ contains
             select type (c => chElem)
             type is (tChannel)
               if (json_has(elem_obj, "position")) then
-                pos_arr  => json_child(elem_obj, "position")
-                pos_item => json_item(pos_arr, 1); c%footPosition(1) = json_value_real(pos_item)
-                pos_item => json_item(pos_arr, 2); c%footPosition(2) = json_value_real(pos_item)
-                pos_item => json_item(pos_arr, 3); c%footPosition(3) = json_value_real(pos_item)
+                call readVec3(elem_obj, "position", pos3, okPos)
+                if (.not. okPos) then
+                  call raiseError("mTupa: channel '" // trim(id) // "' position needs 3 components")
+                  return
+                end if
+                c%footPosition = pos3
               end if
               c%speed      = spd
               c%resistance = res
@@ -484,10 +501,12 @@ contains
           end block
         case ("mesh")
           id       = json_str(elem_obj, "id")
-          pos_arr  => json_child(elem_obj, "position")
-          pos_item => json_item(pos_arr, 1); x = json_value_real(pos_item)
-          pos_item => json_item(pos_arr, 2); y = json_value_real(pos_item)
-          pos_item => json_item(pos_arr, 3); z = json_value_real(pos_item)
+          call readVec3(elem_obj, "position", pos3, okPos)
+          if (.not. okPos) then
+            call raiseError("mTupa: mesh '" // trim(id) // "' needs a 3-component position")
+            return
+          end if
+          x = pos3(1); y = pos3(2); z = pos3(3)
           lengthX  = json_real(elem_obj, "lengthX")
           lengthY  = json_real(elem_obj, "lengthY")
           rowsX    = json_int(elem_obj, "rowsX")
@@ -501,7 +520,7 @@ contains
                                 radius, nseg, trim(mat_id))
           call study%structure%addElement(elem)
         case default
-          print *, "mTupa: unknown element type '", trim(elem_type), "' — skipped"
+          call emitMessage(MSG_WARNING, "mTupa: unknown element type '" // trim(elem_type) // "' — skipped")
         end select
       end do
     end if
@@ -509,6 +528,7 @@ contains
     ! Channels that asked for it are calibrated now, once their elements and
     ! the study's segment-length target are known (ADR 0025)
     call calibrateChannels(study)
+    if (errorRaised()) return
 
     ! ------------------------------------------------------------------
     ! Optional sources / frequencies / outputs blocks (ADR 0013,
@@ -551,6 +571,7 @@ contains
     if (present(freqHz) .and. json_has(root, "frequencies")) then
       freq_obj => json_child(root, "frequencies")
       freqHz = readFrequencyAxis(freq_obj)
+      if (errorRaised()) return
     end if
 
     if (json_has(root, "outputs")) then
@@ -569,7 +590,10 @@ contains
       end if
     end if
 
-    if (json_has(root, "observation")) call parseObservation(json_child(root, "observation"), study%observation)
+    if (json_has(root, "observation")) then
+      call parseObservation(json_child(root, "observation"), study%observation)
+      if (errorRaised()) return
+    end if
 
     ! ------------------------------------------------------------------
     ! Optional signal block (ADR 0015): time-domain excitation, independent
@@ -742,6 +766,7 @@ contains
               return
             end if
             opts%scanFreqHz = readFrequencyAxis(json_child(root, "frequencies"))
+            if (errorRaised()) return
           case default
             call raiseError("mTupa: unknown signal.transferFunction '" // trim(str) // &
                             "' (expected full or interpolated)")
@@ -753,6 +778,10 @@ contains
         if (present(signalSourceNode)) signalSourceNode = srcNodes(1)
         if (present(signalSourceNodeIds)) signalSourceNodeIds = srcNodes
         if (present(signalObserveNodeIds)) then
+          if (.not. json_has(signal_obj, "observeNodes")) then
+            call raiseError("mTupa: signal.observeNodes is required")
+            return
+          end if
           strArr => json_child(signal_obj, "observeNodes")
           call readJsonStringArray(strArr, signalObserveNodeIds)
         end if
@@ -927,6 +956,11 @@ contains
     fMin = json_real(freq_obj, "min")
     fMax = json_real(freq_obj, "max")
     pointsPerDecade = json_real(freq_obj, "pointsPerDecade")
+    if (.not. (fMin > 0.0d0 .and. fMax >= fMin .and. pointsPerDecade > 0.0d0)) then
+      call raiseError("mTupa: frequencies needs 0 < min <= max and pointsPerDecade > 0")
+      allocate(freqHz(0))
+      return
+    end if
     nPoints = nint(pointsPerDecade * log10(fMax / fMin)) + 1
     freqHz = logFrequencyAxis(fMin, fMax, max(2, nPoints))
   end function readFrequencyAxis
@@ -1010,6 +1044,9 @@ contains
       call raiseError("mTupa: unknown signal.waveform '" // trim(waveformType) // &
                        "' (expected heidler, doubleExp, portela or sine)")
     end select
+    ! A constructor that rejected its parameters (library mode) leaves a
+    ! default waveform behind: drop it so the caller sees the failure
+    if (errorRaised() .and. allocated(sig)) deallocate(sig)
   end subroutine parseSignalWaveform
 
   subroutine readJsonStringArray(arr, out)
@@ -1051,6 +1088,10 @@ contains
     !! caught at all: `mResultsWriter`'s `wanted()` filter silently
     !! excludes an unmatched ID rather than erroring.
     !!
+    !! In library mode (`mError`) every unresolved reference is
+    !! recorded — not just the first — and a structure that fails to assemble
+    !! ends the check at once; the caller reads `errorCount`/`errorMessage`.
+    !!
     !! Idempotent to call before `runSweep`/`transientResponse`:
     !! `assembleStructure` itself is now idempotent (`mStructure`), so the
     !! later, lazy assembly inside `tStudy%prepareStudy` stays a no-op.
@@ -1083,6 +1124,7 @@ contains
     integer :: i
 
     call study%structure%assembleStructure()
+    if (errorRaised()) return
 
     if (present(sourceNodeIds)) then
       do i = 1, size(sourceNodeIds)
@@ -1228,10 +1270,8 @@ contains
 
     call system_clock(count=clockStart, count_rate=clockRate)
 
-    if (verbosityLevel() .eq. VERB_VERBOSE) then
-      print *, ""
-      print *, "Loading study ", trim(filename)
-    end if
+    call verbose(VERB_VERBOSE, "")
+    call verbose(VERB_VERBOSE, "Loading study " // trim(filename))
     call loadStudy(filename, study, sourceNodeIds=sourceNodeIds, &
                    sourceCurrents=sourceCurrents, sourceIsVoltage=sourceIsVoltage, freqHz=freqHz, &
                    outputNodeIds=outputNodeIds, outputElectrodeIds=outputElectrodeIds, &

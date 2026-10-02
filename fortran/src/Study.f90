@@ -139,7 +139,7 @@ contains
     integer(4), allocatable :: n1(:), n2(:)
     real(8), allocatable :: p1(:,:), p2(:,:)
 
-    if (verbosityLevel() .eq. VERB_VERBOSE) print *, "Assembling structure and computing geometry factors..."
+    call verbose(VERB_VERBOSE, "Assembling structure and computing geometry factors...")
     call this%structure%assembleStructure()
 
     nno  = this%structure%getNodeCount()
@@ -180,9 +180,11 @@ contains
       block
         integer(8) :: cacheHits, cacheMisses
         integer :: cacheEntries
+        character(len=128) :: cacheLine
         call geomCacheStats(cacheHits, cacheMisses, cacheEntries)
-        print '(A,I0,A,I0,A,I0,A)', " Geometry-factor quadrature cache: ", &
+        write(cacheLine, '(A,I0,A,I0,A,I0,A)') " Geometry-factor quadrature cache: ", &
           cacheHits, " hits, ", cacheMisses, " misses (", cacheEntries, " entries)"
+        call emitMessage(MSG_INFO, trim(cacheLine))
       end block
     end if
 
@@ -743,7 +745,7 @@ contains
     block
       !$omp do schedule(dynamic)
       do k = 1, nf
-        if (verbosityLevel() .eq. VERB_VERBOSE) write(*, '("f = ",EN0.1E2," Hz")') freqHz(k)
+        call logFrequency(freqHz(k))
         call solveAtFrequency(this, meshLocal, omegaAxis(k), sourcePos, retPos, sourceCurrents, sourceIsVoltage, &
                               anyVoltage, damping, laplace, lastSrc, info)
         if (info /= 0) then
@@ -847,7 +849,7 @@ contains
     block
       !$omp do schedule(dynamic)
       do k = 1, nf
-        if (verbosityLevel() .eq. VERB_VERBOSE) write(*, '("f = ",EN0.1E2," Hz")') freqHz(k)
+        call logFrequency(freqHz(k))
         call fillAtFrequency(this, meshLocal, omegaAxis(k), damping, laplace)
         info = injectSignals(meshLocal, size(injNodes), injNodes, patterns, vU, i1U, i2U)
         if (info /= 0) then
@@ -982,7 +984,18 @@ contains
       call element%report(str)
     end do
     str = str // "=========================================" // newl
-    write(*, '(A)') str
+    call emitMessage(MSG_INFO, str)
   end subroutine report
+
+  subroutine logFrequency(freqHz)
+    !! Verbose per-frequency progress line; safe to call from the OpenMP loops
+    !! (the buffer is local to each call).
+    real(8), intent(in) :: freqHz
+    character(len=32) :: line
+
+    if (verbosityLevel() /= VERB_VERBOSE) return
+    write(line, '("f = ",EN0.1E2," Hz")') freqHz
+    call emitMessage(MSG_INFO, trim(line))
+  end subroutine logFrequency
 
 end module mStudy

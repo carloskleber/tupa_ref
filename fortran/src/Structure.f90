@@ -10,6 +10,7 @@ module mStructure
   use mElectrode
   use mMaterial
   use mElement
+  use mError, only: errorRaised
   implicit none
   private
 
@@ -370,6 +371,9 @@ contains
     !!
     !! Idempotent: a no-op if assembly already ran (see `assembled`) — calling
     !! this a second time would otherwise double-register every node/electrode.
+    !!
+    !! In library mode (`mError`) an element that fails to assemble stops the
+    !! pass: the structure is left unassembled and the error stays recorded.
     class(tStructure), intent(inout) :: this
     type(tElementNode), pointer :: p
 
@@ -378,6 +382,7 @@ contains
     p => this%elements
     do while (associated(p))
       call p%elem%assemble(this)
+      if (errorRaised()) return
       p => p%next
     end do
 
