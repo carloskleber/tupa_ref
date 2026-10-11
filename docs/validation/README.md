@@ -20,10 +20,12 @@ BENCHMARKS.md's anchor table.
 | [lima-fig6.md](lima-fig6.md) | Lima et al. 2020 (IEEE TEMC, references.md [11]), Fig. 6 (Case #9, MHEM curve only) | Harmonic input impedance \|Z(ω)\| of a 9-electrode distribution-tower counterpoise (4×6 m horizontal + 5×3 m vertical), ρ = 1000 Ω·m | Resonance dip/peak/dip locations agree within ~10-15%, but a systematic −13 to −17% gap runs from DC to ~2 MHz and the resonance amplitudes diverge by up to 2-3× above ~3 MHz; the paper doesn't state this case's electrode radius, burial depth or arm azimuths, so the gap can't be pinned on model vs. inferred-geometry — see writeup for the full table and the radius/depth sensitivity checks |
 | [lima-fig7.md](lima-fig7.md) | Lima et al. 2020 (IEEE TEMC, references.md [11]), Fig. 7 (Cases #10/#11, MHEM curve only) | Harmonic input impedance \|Z(ω)\| of two square buried grounding grids, 20×20 m 2×2 mesh (#10) and 40×40 m 4×4 mesh (#11), ρ = 1000 Ω·m | Closest agreement of the three Lima et al. comparisons — both grids track the digitized curve within ±7% below ~4 MHz (DC within +1%), then diverge to 10-19% through the ~6.5-7 MHz peak, matching the paper's own stated mismatch-onset frequency; every geometry parameter is stated explicitly for these cases, unlike case #9 — see writeup for the full tables |
 | [poljak-fig4.md](poljak-fig4.md) | Poljak & Doric 2006 (PIER, references.md [35]), Fig. 4 | Harmonic input impedance \|Z(ω)\| of a single L = 2 m, a = 5 mm vertical grounding electrode, d = 0.5 m, ρ = 5400 Ω·m, DC-100 MHz | Closest agreement of any comparison in this folder — DC plateau, roll-off and all four antenna-resonance lobes reproduced within ±10% almost everywhere (several points within ±3%); the two largest errors (up to −23%) sit at the steepest null crossings, a reading artifact rather than a modeling gap — see writeup for the full table and the digitization fix (original xlsx frequency column was 10x too low) |
-| [phase9-transient-options.md](phase9-transient-options.md) | Internal consistency (no published curve): each ROADMAP Phase 9 transient option against a slower or longer run of the existing pipeline | Scan-fed vs per-bin transient on the `silva2025_*_transient` cases; NLT vs FFT against a 16× longer record | Scan-fed within 1.7e-5 (driving point) / 2.7e-5 (remote node) of peak at 12–15× less run time; NLT 6–10× closer to the wrap-around-free reference over the first half of a short record, degrading towards the record end as e^{ct} — see writeup for the caveats |
+| [phase9-transient-options.md](phase9-transient-options.md) | Internal consistency (no published curve): each ROADMAP Phase 9 transient option against a slower or longer run of the existing pipeline; windows as a sensitivity table | Scan-fed vs per-bin transient on the `silva2025_*_transient` cases; NLT vs FFT against a 16× longer record | Scan-fed within 1.7e-5 (driving point) / 2.7e-5 (remote node) of peak at 12–15× less run time; NLT 6–10× closer to the wrap-around-free reference over the first half of a short record, degrading towards the record end as e^{ct}; windowing (§3): the spectral Hann window costs 10.5 % of the peak on the unresolved 1.2/50 µs Portela front but 0.56 % on the Silva MCS_FST#2 case (so silva2025-fig4.md's unwindowed comparison stands), the time window 0.01–0.16 %, and the window identities hold to 4e-7 / 3e-9 — see writeup for the caveats |
 | [phase10-image-model.md](phase10-image-model.md) | Internal comparison (ROADMAP Phase 10 item 2): every published-curve case above run with ideal images vs the new `Γ(ω)` default | Mean absolute percentage error and worst point, below 1 MHz and over the band, for the 14 digitized cases | Every MAPE moves by under 2 points (helps the Lima Fig. 7 grids and the long resistive Grcev electrode, slightly worse for the Silva `alipio-visacro` curves and Lima Fig. 6); no qualitative conclusion changes — see writeup |
 | [channel-validation.md](channel-validation.md) | Analytic and published (ROADMAP Phase 10b): unloaded channel against Chen's closed-form current; loaded-wire speed against Table 3 of Baba & Rakov; base impedance against the transmission-line estimate; calibrated loading scale | Worst current error over the post-front window as a fraction of the peak; speed per L′; κ table | Chen within 1.5 % of the peak (peaks within 2.5 %); speeds within 0.03c of the FDTD values; κ 0.82–1.05 on thin channels, thick coarse ones refused; the Ishii case is open — see writeup |
 | [tags-xval.md](tags-xval.md) | TAGS (pedrohnv, `benchmarks/tags`), mHEM kernels, homogeneous linear soil | Driving-point impedance over the sweep: conductor, rod, loop, two Grcev electrodes, tower footing | ≤ 0.3 % below 1 MHz on all six; two convention differences found (TAGS' `|cos θ|`, `Γ_ℓ = 1`) and quantified; the passivity dip near 7–9 MHz is shared — see writeup |
+| [sources-validation.md](sources-validation.md) | Internal consistency (ADR 0016, ADR 0025): ideal voltage sources and two-node sources (current dipole, delta gap) against superposition of unit-current runs on a two-rod pair | Pinned voltages, nodal-matrix superposition, reported input impedance (harmonic, 10 Hz–1 MHz); transient surges against U(t)/R and R·i(t) | Voltage and mixed sources, the current dipole and the delta gap reproduce the unit-current superposition to the 9-digit output precision (≤ 5e-9); a slow-surge transient agrees to 3e-5 of peak for the two-node sources and 1e-3…1e-2 for the single-node voltage source, the error tracking the surge's bandwidth against the soil's frequency-dependent R — see writeup |
+| [gpr-potentials.md](gpr-potentials.md) | Closed forms (ROADMAP Phase 11, ADR 0027): flush-rod GPR (Dwight), line-source surface potential, touch and step voltage; grid resistance bracket (disc lower bound, Laurent–Niemann, Sverak); potential beside a conductor vs its node voltage; golden fixture | `observation` block outputs: ψ at points and grids, GPR, touch, step | Rod GPR −0.06 % from Dwight; surface potential within 0.5 % beyond 5 m, −3.4 % at 0.5 m (non-uniform leakage); touch +1.1 %; far field of the 16 × 16 m grid 0.2 % from the point source; potential beside a conductor within 0.5 % of its node voltage up to 1 MHz; the grid resistance sits between the disc bound and the empirical formulas — see writeup (incl. why the static forms are used at 10 mHz) |
 
 ## Methodology
 
@@ -37,7 +39,7 @@ computed curve using the versions of the case JSON files under
 
 All figures can be regenerated using the preserved scripts alongside this
 folder (`phase10_image_model_check.py` regenerates the Phase 10 table, `channel_checks.py` the lightning-channel tables,
-`../../benchmarks/tags-xval/xval.py` the TAGS comparison) (e.g. [plot_silva2025_fig3.py](plot_silva2025_fig3.py),
+`../../benchmarks/tags-xval/xval.py` the TAGS comparison; the internal-consistency scripts are listed below) (e.g. [plot_silva2025_fig3.py](plot_silva2025_fig3.py),
 [plot_silva2025_fig4.py](plot_silva2025_fig4.py),
 [plot_grcev_fig12.py](plot_grcev_fig12.py),
 [plot_lima_fig6.py](plot_lima_fig6.py),
@@ -51,6 +53,34 @@ digitized points from a per-case xlsx (e.g.
 the TUPÃ curve out of the `fpm run` output above. Rerun the
 script after regenerating either input to refresh the SVG under
 `../figures/`.
+
+## Scripts
+
+Every number in this folder comes from a preserved script; nothing was
+computed by hand. When a feature changes, rerun the script of the writeup that
+covers it and update the tables.
+
+| Script | Regenerates | Needs |
+| --- | --- | --- |
+| [plot_silva2025_fig3.py](plot_silva2025_fig3.py), [plot_silva2025_fig4.py](plot_silva2025_fig4.py), [plot_grcev_fig12.py](plot_grcev_fig12.py), [plot_lima_fig6.py](plot_lima_fig6.py), [plot_lima_fig7.py](plot_lima_fig7.py), [plot_poljak_fig4.py](plot_poljak_fig4.py) | the figures and error tables of the six literature comparisons | `requirements.txt`, the digitized xlsx, the solver's result JSON (`run_all.sh`) |
+| [compare_fortran_mhem.py](compare_fortran_mhem.py) | [tupa-vs-mhem.md](tupa-vs-mhem.md) and its metrics CSV | `requirements.txt`, the Fortran/Julia/mHEM result CSVs |
+| [phase9_transient_checks.py](phase9_transient_checks.py) | [phase9-transient-options.md](phase9-transient-options.md): scan-fed, NLT, windows | a solver executable; standard library only |
+| [phase10_image_model_check.py](phase10_image_model_check.py) | [phase10-image-model.md](phase10-image-model.md) | Fortran executable, `requirements.txt` |
+| [channel_checks.py](channel_checks.py) | [channel-validation.md](channel-validation.md) | Fortran executable, numpy |
+| [sources_checks.py](sources_checks.py) | [sources-validation.md](sources-validation.md): voltage sources, two-node sources | a solver executable; standard library only |
+| [phase11_checks.py](phase11_checks.py) | [gpr-potentials.md](gpr-potentials.md): potentials, GPR, touch, step | a solver executable; standard library only |
+| `../../benchmarks/tags-xval/xval.py` | [tags-xval.md](tags-xval.md) | TAGS build, see BENCHMARKS.md |
+
+The scripts that take a solver executable (Fortran `Tupa` or
+`rust/target/release/tupa`; same CLI and output files) are run together by
+
+```sh
+./docs/validation/run_checks.sh <solver executable> [--all]
+```
+
+which prints their tables to the terminal; `--all` adds the channel and Phase 10
+checks. The Fortran and Rust executables give the same tables, which is itself
+a cross-implementation check.
 
 ## Run every comparison
 
@@ -71,7 +101,8 @@ This builds the reference Fortran implementation, runs all 18 JSON studies,
 regenerates the six literature-comparison figures (SVG and PDF under
 `docs/figures/`), reruns the Julia port on the 10 m Grcev cases if Julia is
 installed, and rebuilds the Fortran/Julia/mHEM comparison
-([tupa-vs-mhem.md](tupa-vs-mhem.md)). To regenerate plots from existing
+([tupa-vs-mhem.md](tupa-vs-mhem.md)). The internal-consistency checks above
+are separate (`run_checks.sh`). To regenerate plots from existing
 Fortran result JSON files without rerunning the 18 Fortran studies:
 
 ```sh

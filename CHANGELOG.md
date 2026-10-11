@@ -7,6 +7,17 @@ numerics, which move result files.
 
 ## Unreleased
 
+### Documentation
+
+- **Validation writeups for the newer features** ([docs/validation/](docs/validation/README.md)):
+  `sources-validation.md` (ideal voltage sources and two-node sources against
+  superposition of unit-current runs), `gpr-potentials.md` (surface potential,
+  GPR, touch and step voltage against closed forms) and a windowing section in
+  `phase9-transient-options.md`. The scripts behind them
+  (`sources_checks.py`, `phase11_checks.py`, `phase9_transient_checks.py`) run on
+  any solver executable through `run_checks.sh`. Root README: repository layout
+  and the full case list.
+
 ### Added
 
 - **Grounding-safety outputs** (ROADMAP Phase 11,

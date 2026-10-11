@@ -4,15 +4,16 @@ Checks behind the [ADR 0015 amendment of 2026-09-30](../adr/0015-time-domain-sig
 (scan-fed transfer function, windows, multiple injections, Numerical Laplace
 Transform). Unlike the other pages in this folder there is no published
 curve: each new option is compared against a slower or longer run of the
-existing pipeline that it must reproduce. Regenerate every table with
+existing pipeline that it must reproduce (the windows of §3 have no such
+reference and are a sensitivity table plus two identities). Regenerate every table with
 
 ```sh
 python3 docs/validation/phase9_transient_checks.py <path to the tupa executable>
 ```
 
 (Fortran `fpm run` binary or `rust/target/release/tupa`; both give the same
-tables to the digits shown. Run times below are the Rust binary on the
-session machine; the Fortran binary took 7.0–7.2 s / 0.49–0.59 s.)
+tables to the digits shown, windows included. Run times below are the Rust
+binary on the session machine; the Fortran binary took 7.0–7.2 s / 0.49–0.59 s.)
 
 ## 1. Scan-fed vs per-bin transfer function (item 1)
 
@@ -83,7 +84,58 @@ Caveats, stated in theory.md §8:
    That case is therefore not the NLT fixture; `portela1997_transient_nlt`
    uses the slow surge.
 
-## 3. Unit-level checks
+## 3. Windows and the band-edge filter (item 2)
+
+Two cases, each run with no window, the ADR 0021 band-edge filter
+(`antialiasStart` 0.85), the spectral half-Hann window and the time-placed
+half-Hann window: `common/portela1997_transient.json` (1.2/50 µs surge, 30 kA,
+1 MHz Nyquist, 1024 samples — a front only a few samples long) and
+`common/silva2025_rho100_transient.json` (MCS_FST#2, 4 MHz Nyquist, 4096
+samples — the Fig. 4 case of [silva2025-fig4.md](silva2025-fig4.md)). The
+columns are the peak GPR change against the unwindowed run, the largest
+|v| in the last 10 % of the record and in the first sample, both as a
+fraction of the peak (the record end and start are where leakage and
+wrap-around show).
+
+| Case | Variant | peak GPR vs none (%) | last 10 % / peak | first sample / peak |
+| --- | --- | --- | --- | --- |
+| Portela 1.2/50 µs | none | 0 | 5.3e-2 | 1.1e-1 |
+| | `antialiasStart` 0.85 | −3.43 | 8.4e-2 | 1.5e-1 |
+| | hann, spectral | −10.52 | 1.2e-2 | 3.3e-1 |
+| | hann, time | −0.01 | 5.3e-2 | 1.1e-1 |
+| Silva ρ0 = 100 Ω·m | none | 0 | 3.5e-3 | 3.1e-3 |
+| | `antialiasStart` 0.85 | 0.00 | 3.5e-3 | 3.1e-3 |
+| | hann, spectral | −0.56 | 3.5e-3 | 3.4e-3 |
+| | hann, time | −0.16 | 2.3e-3 | 2.0e-3 |
+
+Reading the table:
+
+- The −3.43 % of the band-edge filter on the Portela case is the number ADR
+  0021 recorded when it was introduced, reproduced here to the digit.
+- The spectral Hann window is the strongest smoother — 10.5 % off the peak of
+  the Portela surge, whose 1.2 µs front is only a few samples at 1 MHz, and it
+  cuts the record-end ripple 4×, but it also raises the first sample from 11 % to a third
+  of the peak — on this unresolved front the smoothing moves content to the
+  start of the record rather than removing it (cause not investigated further).
+  On the well-resolved Silva case (4 MHz, MCS_FST#2) it costs 0.56 % of the
+  peak: **the Fig. 4 comparison of silva2025-fig4.md, made without a window,
+  would not change by more than that** with `hann/spectral`.
+- The time-placed window multiplies the excitation, not the transfer
+  function: the GPR peak moves by 0.01 % (Portela) and 0.16 % (Silva), the
+  window acting where the surge has died away; it suppresses the leakage at
+  the record end (Silva: 3.5e-3 → 2.3e-3), not the band-edge content.
+- The band-edge filter at 0.85 is a no-op on the Silva case, whose content
+  at 4 MHz is already negligible.
+
+Two identities, checked on the Portela case: the spectral Hann window equals
+`antialiasStart` → 0 to **3.8e-7** of the peak (ADR 0021 update); and the time
+window multiplies the sampled excitation by ½[1 + cos(π k/N)] to **3.0e-9**.
+Both are exercised at the unit level too (below). Choosing the window
+remains the user's call: this is the size of the trade, not a recommendation
+(the Gómez & Uribe [17] guidance is that the window pays off when the front
+is resolved, which is where the Silva number is small).
+
+## 4. Unit-level checks
 
 In `fortran/test/test_transient.f90` (ported to `rust/tests/physics.rs`):
 pchip against SciPy's `PchipInterpolator` reference values (same algorithm
@@ -96,7 +148,7 @@ the sampled excitation exactly. In `test_material.f90`/`test_impedance.f90`
 from the Laplace-domain formulas match the harmonic ones to 1e-12 from
 1 Hz to 100 MHz, and both are conjugate-symmetric.
 
-## 4. Golden fixtures and cross-implementation
+## 5. Golden fixtures and cross-implementation
 
 `common/portela1997_transient_{interpolated,hann,hann_time,multi,nlt}_expected.csv`
 (Fortran output). The Rust implementation reproduces all five under the

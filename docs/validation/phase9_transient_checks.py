@@ -6,13 +6,14 @@ Usage: phase9_transient_checks.py <tupa executable> [workdir]
 
 Builds case variants of common/silva2025_rho*_transient.json (scan-fed vs
 per-bin transfer function) and of a slow-surge Portela 1997 conductor
-(NLT vs FFT against a 16x longer record), runs them with the given TUPA
+(NLT vs FFT against a 16x longer record; windows and band-edge filter), runs them with the given TUPA
 executable (Fortran or Rust; same CLI and output files) and prints the
 tables of the writeup. Standard library only.
 """
 import copy
 import csv
 import json
+import math
 import os
 import subprocess
 import sys
@@ -86,6 +87,54 @@ def nlt(exe, workdir):
         print(f"| first {n} | {e[0]:.1e} | {e[1]:.1e} |")
 
 
+def windows(exe, workdir):
+    """Item 2: spectral/time Hann windows and the ADR 0021 band-edge filter."""
+    cases = {"portela1997_transient (1.2/50 us, 1 MHz Nyquist)": "portela1997_transient.json",
+             "silva2025_rho100_transient (MCS_FST#2, 4 MHz Nyquist)": "silva2025_rho100_transient.json"}
+    variants = [("none", {}),
+                ("antialiasStart 0.85", {"antialiasStart": 0.85}),
+                ("hann, spectral", {"window": {"type": "hann", "placement": "spectral"}}),
+                ("hann, time", {"window": {"type": "hann", "placement": "time"}})]
+    print("| Case | Variant | peak GPR change vs none (%) | max abs of the last 10 % of the record / peak | max abs of the first sample / peak |")
+    print("| --- | --- | --- | --- | --- |")
+    for label, fname in cases.items():
+        with open(os.path.join(COMMON, fname)) as f:
+            base = json.load(f)
+        node = base["signal"]["observeNodes"][0]
+        ref_peak = None
+        for vname, extra in variants:
+            c = copy.deepcopy(base)
+            c["signal"].update(extra)
+            ser, _ = run(exe, c, workdir, "win")
+            v = ser[("voltage", node)]
+            peak = max(abs(x) for x in v)
+            ref_peak = ref_peak or peak
+            tail = max(abs(x) for x in v[-len(v) // 10:]) / peak
+            print(f"| {label} | {vname} | {100 * (peak / ref_peak - 1):+.2f} | {tail:.1e} | {abs(v[0]) / peak:.1e} |")
+    # identities
+    with open(os.path.join(COMMON, "portela1997_transient.json")) as f:
+        base = json.load(f)
+    node = base["signal"]["observeNodes"][0]
+    sp = copy.deepcopy(base)
+    sp["signal"]["window"] = {"type": "hann", "placement": "spectral"}
+    tk = copy.deepcopy(base)
+    tk["signal"]["antialiasStart"] = 1.0e-6
+    a, _ = run(exe, sp, workdir, "win_sp")
+    b, _ = run(exe, tk, workdir, "win_tk")
+    va, vb = a[("voltage", node)], b[("voltage", node)]
+    peak = max(abs(x) for x in va)
+    print(f"\nspectral Hann vs antialiasStart -> 0: max |difference| / peak = "
+          f"{max(abs(x - y) for x, y in zip(va, vb)) / peak:.1e}")
+    n0, _ = run(exe, base, workdir, "win_n0")
+    tw = copy.deepcopy(base)
+    tw["signal"]["window"] = {"type": "hann", "placement": "time"}
+    n1, _ = run(exe, tw, workdir, "win_n1")
+    i0, i1 = n0[("injectedCurrent", node)], n1[("injectedCurrent", node)]
+    last = len(i0) - 1
+    err = max(abs(i1[k] - i0[k] * 0.5 * (1 + math.cos(math.pi * k / last))) for k in range(len(i0)))
+    print(f"time Hann: max |i_windowed - w(t/t_last) i_plain| / peak i = {err / max(abs(x) for x in i0):.1e}")
+
+
 def main():
     if len(sys.argv) < 2:
         sys.exit(__doc__)
@@ -96,6 +145,8 @@ def main():
     scan_fed(exe, workdir)
     print("\n## NLT vs FFT against a 16x longer FFT record (max |error| / peak over the span)\n")
     nlt(exe, workdir)
+    print("\n## Windows and the band-edge filter\n")
+    windows(exe, workdir)
 
 
 if __name__ == "__main__":
