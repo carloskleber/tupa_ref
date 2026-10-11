@@ -45,7 +45,9 @@ Numbered as cited in [theory.md](theory.md).
    dispersion model (real/imaginary part consistency).
 10. **Sunde, E. D.** — *Earth Conduction Effects in Transmission Systems*,
     D. van Nostrand, 1949. Classical grounding resistance formulas used as DC
-    validation anchors.
+    validation anchors. The same book is listed again as [41], where its
+    insulated-wire chapter is the point; a merge would renumber everything
+    after [10], so both entries stay and theory.md §9.1 cites both.
 
 ## Modified HEM (mHEM)
 
@@ -319,7 +321,7 @@ below) as the sources of its dispersive-soil routines:
     inductance or capacitance) crossed with three excitation methods, solved
     by MoM (time or frequency domain) or FDTD; its appendix checks HEM
     channel-current distributions against FDTD. The primary design reference
-    for the planned lightning-channel element: distributed series loading is
+    for the lightning-channel element (implemented): distributed series loading is
     the catalogued technique for slowing channel propagation from c to a
     prescribed return-stroke speed (ROADMAP Phase 10b).
 45. **Silveira, F. H.** — *Modelagem para Cálculo de Tensões Induzidas por
@@ -413,7 +415,7 @@ below) as the sources of its dispersive-soil routines:
     conventional EMT underestimates them by up to ~58 %; the corrected
     method stays within ~10 % of 3-D FDTD across 77–500 kV lines and
     ρ = 0–5000 Ω·m. Quantifies the channel-coupling error HEM-class tools
-    inherit when the channel is left unmodelled (cf. [25]); TUPÃ's planned
+    inherit when the channel is left unmodelled (cf. [25]); TUPÃ's
     channel element addresses exactly this term.
 53. **Tatematsu, A.; Yamanaka, A.** — "Three-Dimensional FDTD-Based
     Simulation of Lightning-Induced Surges in Secondary Circuits With

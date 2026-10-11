@@ -106,7 +106,8 @@ TUPÃ adopts **one** convention set; every routine must conform to it.
 ## 3. Potentials of a segment source
 
 For a homogeneous, lossy, unbounded medium and sinusoidal steady state, the
-retarded potentials of the elementary sources are (Lorenz gauge):
+retarded potentials of the elementary sources are (Lorenz gauge, cf.
+Stratton [8]):
 
 **Point injected current** $I_t$ (total current, conduction + displacement):
 
@@ -186,6 +187,10 @@ The outputs built on $\psi$ (ADR 0027):
 All are harmonic phasors (peak amplitudes follow the source's), evaluated at
 each frequency of the sweep; a time-domain map is the inverse transform of
 these, which the transient driver does not yet apply.
+
+Observation outputs need a harmonic sweep: `computeObservations` raises an
+error for a Numerical Laplace Transform sweep ($s = c + j\omega$), where $\psi$ is not
+defined as a phasor.
 
 The observation-point geometry factor is a closed form for every position,
 so no quadrature is involved and the output costs $O(n_{\text{sites}}\,
@@ -411,9 +416,17 @@ $$Z_t(a,a) = Z_{t,\text{ext}} + Z_{t,\text{interface}}$$
   which reduces to the solid formula as $r_i \to 0$. The legacy Matlab
   reference implements both cases in a single routine (solid when the inner
   radius is zero), and clamps the solid-case Bessel ratio
-  $I_0/I_1 \to 1$ for large $|\rho|$ (legacy threshold $|\rho| > 700$) where
-  the unscaled Bessel evaluations overflow — an implementation note that
-  carries over to the SLATEC `ZBESI`/`ZBESK` port (scaled variants exist).
+  $I_0/I_1 \to 1$ for large $\rho$ where the unscaled Bessel evaluations
+  overflow. The legacy test is `rho > 700` on a complex $\rho$, which Matlab
+  evaluates on the real part only, i.e. $|\rho| \gtrsim 990$ (since
+  $\arg\rho = \pi/4$). The Fortran port cuts at $|\rho| > 500$
+  (`mImpedance::internalImpedance`), where the neglected
+  $1/(2|\rho|)$ correction to the ratio is about $10^{-3}$. The clamp is an
+  implementation note that carries over to the SLATEC `ZBESI`/`ZBESK` port
+  (scaled variants exist).
+  **Status**: the Fortran implements the solid case only (`tLinear`
+  conductors); the tubular formula above is the specification for ROADMAP
+  Phase 12 item 2 and is not yet implemented.
   Its tube *element* is just the straight-line element plus a wall
   thickness: $r_i = r_0 - t$ feeds this formula, everything else (external
   and interface terms) is unchanged — which is also why the same element
@@ -496,9 +509,12 @@ raises $Z_c$ and the sheath alone lowers it, so using both would let one
 case fit a target speed and a target channel impedance. This is an optional
 extension; series loading is the decided route.
 
-**Loading term.** The channel adds $z_{ch} = R' + j\omega L'$ to the
+**Loading term.** The channel puts $z_{ch} = R' + j\omega L'$ in the
 internal-impedance slot of §4.3:
-$Z_\ell(a,a) \mathrel{+}= z_{ch}\,l_a$. $Z_t$ and all off-diagonal terms are
+$Z_{\text{int}}(a) = z_{ch}\,l_a$. The slot is *replaced*, not added to:
+the channel wire is a perfect conductor, so it has no skin-effect term of
+its own, and the Fortran skips the Bessel evaluation for loaded segments.
+$Z_t$ and all off-diagonal terms are
 unchanged, so the loading slows only the transmission-line-mode current.
 The antenna-mode part still travels at $c$, so the loaded channel shows
 more current dispersion than a dielectric-slowed one, with a weak
@@ -531,10 +547,20 @@ lands within a few per cent of the closed form for the cases tried
 (validation/channel-validation.md).
 
 The speed metric must be fixed in advance. Use Baba & Rakov's: track the
-point where the 10–90 % tangent of the front crosses the time axis, over
-the first 2 km. Do not track the onset: the antenna-mode precursor makes a
-low-threshold tracking point read close to $c$ [74, ch. 9]. Two practical
-points from the implementation. First, calibrate the **lossless** wire
+point where the 10–90 % tangent of the front crosses the time axis. Do not
+track the onset: the antenna-mode precursor makes a low-threshold tracking
+point read close to $c$ [74, ch. 9]. The implementation
+(`mChannelCalibration`) excites the channel alone above ideal ground with a
+1 µs current ramp, solved by NLT (a steady final value is its native case).
+It takes the tangent crossing time of the segment current at $0.2L$ and
+$0.8L$ of the calibration length $L = \min(L_{ch}, 2.5\ \text{km})$, and
+defines the speed as the height difference over the time difference. The
+iteration stops at 0.2 % speed error, accepts the best evaluation within
+0.6 % (the metric jitters by about 0.5 %, one time sample plus the NLT
+ripple), and rejects $\kappa$ outside $[0.25, 4]$ as a sign that the metric
+has locked onto something other than the wave. For a channel with a speed
+profile, the target is the harmonic-mean speed between the two heights.
+Two practical points from the implementation. First, calibrate the **lossless** wire
 ($R' = 0$): with resistance the front turns convex and slowly rising, the
 tangent metric stops being a property of the wire (Baba & Rakov report speeds
 above $c$ for $R' > 2\ \Omega/\text{m}$), and in a trial with $R' = 1\
@@ -664,8 +690,8 @@ contribution evaluated with the image geometry factor $g_i$, image mean distance
 $\bar{R}_i$, and the propagation constant of the medium containing the *real*
 segments:
 
-$$Z_t(a,b) = \frac{c_E}{l_a \, l_b} \left( \exp(-\gamma\bar{R}) g \pm \Gamma_t \exp(-\gamma\bar{R}_i) g_i \right)$$
-$$Z_\ell(a,b) = c_M \, \cos \theta \, \exp(-\gamma\bar{R}) g \pm c_M \, \cos \theta_i \, \Gamma_\ell \exp(-\gamma\bar{R}_i) g_i$$
+$$Z_t(a,b) = \frac{c_E}{l_a \, l_b} \left( \exp(-\gamma\bar{R}) g + \Gamma \exp(-\gamma\bar{R}_i) g_i \right)$$
+$$Z_\ell(a,b) = c_M \, \cos \theta \, \exp(-\gamma\bar{R}) g + c_M \, \cos \theta_i \, \Gamma \exp(-\gamma\bar{R}_i) g_i$$
 
 where
 
@@ -676,10 +702,14 @@ and $\theta_i$ is the angle with the
 image direction (the image of a segment reverses the sign of the z-component of
 its direction vector).
 
-The reflection coefficients default to the frequency-dependent $\Gamma(\omega)$
-below (ROADMAP Phase 10 item 2, [ADR 0024](adr/0024-phase10-numerics.md) §2).
-Their ideal limits (also a runtime switch in the legacy Matlab reference,
-`SOLO_IDEAL`; `numerics.imageModel: "ideal"` here) give the sign rules:
+The reflection coefficient $\Gamma$ carries its own sign and is the same for
+$Z_t$ and $Z_\ell$ (the Matlab and PRTL-mHEM choice, below); it is
+$\Gamma_{\text{soil}}$ for a pair in soil and $\Gamma_{\text{air}}$ for a pair
+in air. It defaults to the frequency-dependent $\Gamma(\omega)$ below
+(ROADMAP Phase 10 item 2, [ADR 0024](adr/0024-phase10-numerics.md) §2).
+Its ideal limits (also a runtime switch in the legacy Matlab reference,
+`SOLO_IDEAL`; `numerics.imageModel: "ideal"` here) are $\Gamma = \pm 1$ and
+give the sign rules, where "add"/"subtract" is the sign of $\Gamma$ itself:
 
 | Configuration            | Transversal image | Longitudinal image |
 | --- | --- | --- |
@@ -700,7 +730,8 @@ with immittance $W_s = \sigma_s + j\omega\varepsilon_s$, both TAGS and PRTL-mHEM
 $$\Gamma_t(\omega) = \frac{W_s - j\omega\varepsilon_0}{W_s + j\omega\varepsilon_0}, \qquad \Gamma_\ell = 1$$
 
 applied to the image terms of $Z_t$ **and** $Z_\ell$ (PRTL-mHEM applies
-$\Gamma_t$ to both; TAGS keeps them independent parameters). TUPÃ
+$\Gamma_t$ to both; TAGS keeps them independent parameters; the single
+$\Gamma$ of the equations above is $\Gamma_t$). TUPÃ
 follows the Matlab and PRTL-mHEM choice: in terms of the stored
 $c_E = 1/(4\pi W)$ it is $(c_E^{\text{other}} - c_E^{\text{own}})/(c_E^{\text{other}} + c_E^{\text{own}})$
 for a segment in either medium (tending to $+1$ in soil and $-1$ in air), so
@@ -893,7 +924,7 @@ resistance in the driving-point impedance.
 Soil $\sigma$ and $\varepsilon$ are strongly frequency dependent between DC and a few MHz;
 ignoring this materially changes impulse impedances. TUPÃ models the soil
 immittance $W(\omega) = \sigma(\omega) + j\omega \varepsilon(\omega)$ as a minimum-phase-shift system: the real
-and imaginary parts are Hilbert-transform pairs, so a power-law model fitted to
+and imaginary parts are Hilbert-transform pairs (Bode [9]), so a power-law model fitted to
 measured $\sigma(\omega)$ fixes $\omega\varepsilon(\omega)$ as well (Portela [1] §1):
 
 $$W(\omega) = \sigma_0 + \Delta\sigma \cdot \left[ 1 + j \tan\left(\frac{\pi \alpha}{2}\right) \right] \cdot \left(\frac{\omega}{\omega_0}\right)^\alpha$$
@@ -927,8 +958,8 @@ reference — `tPortelaSoil` (implemented first, matches the validation curves),
 parametrised by Cavka et al. [16], an alternative targeted by lightning
 studies), `tVisacroAlipioSoil` (implemented; the measurement-based causal
 model of Alipio & Visacro [14], with recommended *mean* / *relatively
-conservative* / *conservative* parameter sets — the default soil of the TAGS
-and PRTL-mHEM codes), etc. All must reduce to the constant-parameter
+conservative* / *conservative* parameter sets — a built-in soil of TAGS; PRTL-mHEM uses the
+measurement-based formulas of the same group [13]), etc. All must reduce to the constant-parameter
 (`tLinear`) medium as $\omega \to 0$. Cavka et al. [16] compare these models
 side by side and are the reference for cross-checking any implementation.
 Schroeder et al. [68] compare Portela, Alipio–Visacro and Longmire–Smith at
@@ -957,8 +988,8 @@ for $100\,\text{Hz} \le f \le 4\,\text{MHz}$, reducing to a purely resistive
 `tLinear(epsilonr=0, sigma=sigma0)` medium as $\omega \to 0$ (same regression
 required of every dispersive-soil subtype, ADR 0007). Only the *mean*
 parameter set is implemented — the *relatively conservative* / *conservative*
-bounding curves of [14] are not exposed, matching how TAGS/PRTL-mHEM default
-to the mean curve.
+bounding curves of [14] are not exposed, matching how TAGS defaults to the
+mean curve.
 The effect is not confined to grounding: Alipio, Duarte & De Conti [28] show
 it materially changes underground-cable transients for $\rho > 1000$ Ω m
 — dispersive soil should be the default, not the exception, in any transient
@@ -1177,7 +1208,7 @@ single linear solve.
 Every implementation must reproduce, within stated tolerance:
 
 1. **DC limit, buried horizontal conductor** (length $l$, radius $r_0$, depth
-   $h$, soil $\sigma$): grounding resistance from the classical image formula (Sunde/Dwight form)
+   $h$, soil $\sigma$): grounding resistance from the classical image formula (Sunde/Dwight form, [10, 41])
 
    $$R = \frac{1}{2\pi \sigma l} \left[ \ln\left(\frac{2l}{r_0}\right) + \ln\left(\frac{l}{h}\right) - 2 + \frac{2h}{l} - \frac{h^2}{l^2} + \ldots \right]$$
 
@@ -1256,11 +1287,11 @@ came out of this comparison.
 | Target problem | General field problems (antennas, scattering) as integral equations | Lightning/grounding transients, thin-wire structures | Grounding system transients | Line lightning performance incl. mHEM grounding | Line lightning performance; grounding imported from file |
 | Unknowns | Expansion coefficients of the current distribution | $(\mathbf{u}, \mathbf{i}_1, \mathbf{i}_2)$: node voltages + segment end currents (§6) | $(\mathbf{u}, I_\ell, I_t)$ symmetric block system, or nodal $\mathbf{u}$ only | Nodal $\mathbf{u}$ (admittance reduction) | Nodal network quantities (Laplace domain) |
 | Basis / testing | Arbitrary (Galerkin, point matching, …) — the general framework | Pulse basis per segment; matching on segment averages | idem | idem | n/a (circuit/TL level) |
-| Coupling integrals | Full Green's-function integrals, re-evaluated per frequency | Frequency-independent geometry factor $g$, $\exp(-\gamma\bar R)$ at midpoint distance (§4.1); $g$ via 1-D mHEM integral (§4.2, planned) or 2-D quadrature | Selectable: double, single, mHEM, midpoint-only | mHEM (1-D integral, precomputed $P$, $P_i$) | n/a — line by TL theory; grounding external |
-| Half-space interface | Not treated (homogeneous medium assumed) | Images; ideal signs $\pm 1$ today, $\Gamma_t(\omega)$ planned (§5) | Images with complex $\Gamma_\ell$, $\Gamma_t$ as free parameters | Images with $\Gamma_t(\omega)$ applied to both $Z_t$ and $Z_\ell$ | Earth return at TL level (line above lossy ground) |
+| Coupling integrals | Full Green's-function integrals, re-evaluated per frequency | Frequency-independent geometry factor $g$, $\exp(-\gamma\bar R)$ at midpoint distance (§4.1); $g$ via 1-D mHEM integral (§4.2, default) or 2-D quadrature | Selectable: double, single, mHEM, midpoint-only | mHEM (1-D integral, precomputed $P$, $P_i$) | n/a — line by TL theory; grounding external |
+| Half-space interface | Not treated (homogeneous medium assumed) | Images with $\Gamma_t(\omega)$ applied to both $Z_t$ and $Z_\ell$ (default); ideal $\pm 1$ signs selectable (§5) | Images with complex $\Gamma_\ell$, $\Gamma_t$ as free parameters | Images with $\Gamma_t(\omega)$ applied to both $Z_t$ and $Z_\ell$ | Earth return at TL level (line above lossy ground) |
 | Cross-media coupling (air↔soil segments) | n/a | Neglected (§5) | Neglected | Neglected | n/a |
 | Soil dispersion | n/a (σ, ε constants) | `tPortelaSoil` [1,31] and `tVisacroAlipioSoil` [14] (mean set) implemented; `tLongmireSmithSoil` [15,16] planned (§7) | Alipio–Visacro [14] and Smith–Longmire [16] built in | Visacro–Alipio [13] | Delegated to the imported grounding data |
-| Conductor internal impedance | None (PEC wires) | Solid Bessel (§4.3); tubular planned | None (neglected) | Solid + tubular Bessel | Tubular Bessel |
+| Conductor internal impedance | None (PEC wires) | Solid Bessel (§4.3); tubular specified, not yet implemented | None (neglected) | Solid + tubular Bessel | Tubular Bessel |
 | Linear solve | Dense matrix inversion | Dense LU (`ZGESV`), full $Z_{\text{eq}}$; reduced $Z_g$ as consistency check (§6) | Dense LU; immittance or admittance path | Dense inversion of $Y_g$ | Dense (Mathematica `Inverse`) |
 | Time domain | Out of scope (harmonic) | FFT↔IFFT (§8); NLT with damping + Hann window (§8, opt-in) | NLT with damping + window filters [17] | NLT (damped $s_k$ grid) + separate harmonic mode | NLT (`nILT`) |
 | Frequency axis | Single frequency | Log-spaced sweep (harmonic); linear grid for transients (§8) | Linear (example-defined, incl. log for harmonic studies) | Log (harmonic) / linear (transient) | Linear (NLT grid) |
@@ -1284,9 +1315,9 @@ it produces non-TEM near fields like the former, but couples electric and
 magnetic effects through separate circuit quantities like the latter — and
 reports HEM channel-current distributions consistent with full
 electromagnetic solutions, an independent endorsement of the family's
-physics from outside the grounding literature. The planned TUPÃ
-lightning-channel element (ROADMAP Phase 10b, theory in §4.5) sits
-exactly in this class. The channel is ordinary HEM segments in air with
+physics from outside the grounding literature. TUPÃ's
+lightning-channel element (ROADMAP Phase 10b, implemented; theory in §4.5)
+sits exactly in this class. The channel is ordinary HEM segments in air with
 **added distributed series impedance, calibrated so the computed
 propagation matches a prescribed return-stroke speed**. This is the
 type-2 wire loading of [44; 74, ch. 8], and it makes the target speed a
