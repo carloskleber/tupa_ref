@@ -42,6 +42,12 @@ module tupa
   !!   `growth` (graded from the foot). Plants `<id>-base` (separate from
   !!   the strike node), `<id>_n<k>` and `<id>-top`.
   !!
+  !! - `"branch"` — lumped series R-L-C branch (`mElementBranch`, ADR 0028,
+  !!   theory.md §6): `id`, `from` (node), optional `to` (node; absent =
+  !!   remote earth), and `resistance` (Ω), `inductance` (H),
+  !!   `capacitance` (F), each optional but not all zero. Plants no nodes
+  !!   and no segments; the usual matched termination of an overhead line.
+  !!
   !! - `"observation"` (optional, ADR 0027): potentials, GPR, touch and step
   !!   voltages from the solved sweep — `points`, `grid`, `touch`, `steps`
   !!   (`mObservation`, evaluated by `mPotentials`; written to
@@ -59,6 +65,7 @@ module tupa
   use mElementMesh
   use mElementCatenary
   use mElementChannel
+  use mElementBranch
   use mChannelCalibration, only: calibrateChannels
   use mJsonParser
   use mSignal, only: tSignal, tSignalSlot, newHeidlerSignal, newHeidlerSignalTerms, newDoubleExpSignal, &
@@ -396,6 +403,20 @@ contains
           elem = newElementCatenary(trim(id), trim(from_id), trim(to_id), &
                                     sag, radius, nseg, trim(mat_id))
           call study%structure%addElement(elem)
+        case ("branch")
+          block
+            real(8) :: brR, brL, brC
+            id      = json_str(elem_obj, "id")
+            from_id = json_str(elem_obj, "from")
+            to_id   = ""
+            if (json_has(elem_obj, "to")) to_id = json_str(elem_obj, "to")
+            brR = 0.0d0; brL = 0.0d0; brC = 0.0d0
+            if (json_has(elem_obj, "resistance"))  brR = json_real(elem_obj, "resistance")
+            if (json_has(elem_obj, "inductance"))  brL = json_real(elem_obj, "inductance")
+            if (json_has(elem_obj, "capacitance")) brC = json_real(elem_obj, "capacitance")
+            elem = newElementBranch(trim(id), trim(from_id), trim(to_id), brR, brL, brC)
+            call study%structure%addElement(elem)
+          end block
         case ("channel")
           block
             class(tElement), allocatable :: chElem

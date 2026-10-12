@@ -181,6 +181,32 @@ contains
     mesh%D    = ZERO_CPLX
   end subroutine initMesh
 
+  subroutine stampBranch(mesh, a, b, y)
+    !! Add a lumped branch of admittance `y` between nodes `a` and `b`
+    !! (`b = 0`: remote earth) to the Kirchhoff rows of `mesh%Zeq`
+    !! (theory.md §6).
+    !!
+    !! The KCL block of `Zeq` reads `C i1 + D i2 = i_e`, with currents leaving
+    !! the node into its segments. A branch is one more outflow, `y (u_a − u_b)`
+    !! at `a` and `y (u_b − u_a)` at `b`, so its stamp is the usual nodal
+    !! admittance pattern in the `u` columns of those rows. It touches nothing
+    !! else: no segment, no geometry factor, no unknown. Call after `calcFreq2`.
+    type(tMesh), intent(inout) :: mesh
+    integer(4), intent(in) :: a, b
+    !! 1-based node indices (b = 0: remote earth)
+    complex(8), intent(in) :: y
+    !! Branch admittance 1/Z (S)
+    integer(4) :: off
+
+    off = 2 * mesh%nseg
+    mesh%Zeq(off + a, a) = mesh%Zeq(off + a, a) + y
+    if (b /= 0) then
+      mesh%Zeq(off + a, b) = mesh%Zeq(off + a, b) - y
+      mesh%Zeq(off + b, b) = mesh%Zeq(off + b, b) + y
+      mesh%Zeq(off + b, a) = mesh%Zeq(off + b, a) - y
+    end if
+  end subroutine stampBranch
+
   ! =====================================================================
   ! Topology matrix assembly
   ! =====================================================================
@@ -412,13 +438,13 @@ contains
     !!
     !! Builds the augmented (nno + 2*nseg) × (nno + 2*nseg) matrix:
     !!
-    !!     ┌─────────────────────────────────┐
-    !!     │  A   | Zlong/2  | -Zlong/2    │
-    !!     ├─────────────────────────────────┤
-    !!     │  B   | Ztrans   | Ztrans      │
-    !!     ├─────────────────────────────────┤
-    !!     │  0   | C        | D           │
-    !!     └─────────────────────────────────┘
+    !!     ┌───────────────────────────────┐
+    !!     │  A     | Zlong/2  | -Zlong/2  │
+    !!     ├───────────────────────────────┤
+    !!     │  B     | Ztrans   | Ztrans    │
+    !!     ├───────────────────────────────┤
+    !!     │  0     | C        | D         │
+    !!     └───────────────────────────────┘
     !!
     !! This matrix is then solved by ZGESV in `injectSignal`.
     type(tMesh), intent(inout) :: mesh

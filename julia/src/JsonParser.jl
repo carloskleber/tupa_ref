@@ -165,6 +165,11 @@ function load_study_string(text::AbstractString)
             # channel case never runs without its channel by mistake
             raise_error("mTupa: the channel element (ROADMAP Phase 10b) is not implemented in the Julia " *
                         "port yet (follow-along lag, see julia/README.md)")
+        elseif kind == "branch"
+            # ROADMAP Phase 10d (ADR 0028): rejected rather than skipped, so a case never
+            # runs without its terminations by mistake
+            raise_error("mTupa: the branch element (ROADMAP Phase 10d) is not implemented in the Julia " *
+                        "port yet (follow-along lag, see julia/README.md)")
         else
             println(stderr, " mTupa: unknown element type '$kind' — skipped")
         end

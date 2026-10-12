@@ -20,6 +20,20 @@ numerics, which move result files.
 
 ### Added
 
+- **Lumped series-RLC `branch` element and the lightning-induced voltage anchor**
+  ([ADR 0028](docs/adr/0028-induced-voltages-and-lumped-branch.md), ROADMAP
+  Phase 10d, theory.md §4.6): `{"type": "branch", "from", "to"?, "resistance",
+  "inductance", "capacitance"}` puts a lumped `R + sL + 1/(sC)` between two nodes,
+  or from one node to remote earth (no `to`), on the harmonic and the
+  Laplace path; it adds no node and no segment. With it a matched overhead
+  line can be terminated, and the Nucci et al. (1993) base case — a 1 km, 10 m
+  high line, a subsequent stroke 50 m away — runs as `common/induced_nucci1993.json`
+  (resistor at the wire end) and `common/induced_nucci1993_risers.json`
+  (vertical risers, the reference's boundary condition); results against the
+  paper's tables in [docs/validation/induced-validation.md](docs/validation/induced-validation.md).
+  Fortran only: the Rust and Julia loaders refuse the element, the GUI skips it.
+  theory.md also gains §4.6 (fields of the channel, the Taylor/Agrawal/Rusck
+  coupling forms, lossy ground) and references.md [75]–[81].
 - **Grounding-safety outputs** (ROADMAP Phase 11,
   [ADR 0027](docs/adr/0027-observation-potentials-and-safety-outputs.md),
   theory.md §3.1): an optional `observation` input block asks for the potential

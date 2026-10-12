@@ -669,6 +669,14 @@ fn build(spec: CaseSpec) -> Result<LoadedCase> {
             "channel" => {
                 structure.add_element(Element::Channel(build_channel(e, max_segment_length)?))
             }
+            // ROADMAP Phase 10d (ADR 0028): rejected rather than skipped, so a case never
+            // runs without its terminations by mistake
+            "branch" => {
+                return Err(TupaError::new(
+                    "mTupa: the branch element (ROADMAP Phase 10d, ADR 0028) is not implemented in the Rust \
+                     port yet (follow-along lag, see rust/README.md)",
+                ))
+            }
             other => eprintln!(" mTupa: unknown element type '{other}' — skipped"),
         }
     }

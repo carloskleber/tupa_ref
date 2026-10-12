@@ -5,13 +5,13 @@
 Reference model for electromagnetic field transient simulations — codename
 TUPÃ.
 
-TUPÃ computes the frequency-domain (and, via inverse transform, time-domain)
+TUPÃ (also spelled as Tupan) computes the frequency-domain (and, via inverse transform, time-domain)
 response of networks of thin cylindrical conductors in air and soil — tower
 footings, counterpoises, grounding grids — under lightning-type excitation.
 It is an application of the Method of Moments (MoM), known in the power
 community as the **Hybrid Electromagnetic Model (HEM)**.
 
-The model follows the author's M.Sc. dissertation — *Modelagem de Linhas de
+The model follows and expands the author's dissertation — *Modelagem de Linhas de
 Transmissão para Análise de Comportamento Quanto a Descargas Atmosféricas*
 (UFRJ, 2003, DOI:10.13140/RG.2.2.19894.56644) — building on the advisor's
 original work:
@@ -23,16 +23,18 @@ original work:
 
 and acknowledging colleagues' work in the field:
 
-* Salari, J. C.; Azevedo, R. M.; Portela, C. "An efficient modeling of
-  transmission lines towers and grounding systems for lightning propagation
-  studies", *IX SIPDA*, Foz do Iguaçu, Brazil, Nov. 2007.
 * Visacro, S.; Soares, A., Jr. "HEM: A model for simulation of lightning
   related engineering problems", *IEEE Trans. Power Del.*, vol. 20, no. 2,
   pp. 1206–1208, Apr. 2005.
+* Salari, J. C.; Azevedo, R. M.; Portela, C. "An efficient modeling of
+  transmission lines towers and grounding systems for lightning propagation
+  studies", *IX SIPDA*, Foz do Iguaçu, Brazil, Nov. 2007.
 
-## Problem, scope, metrics
+Actually implemented in 3 languages - Fortran (at the moment, the reference), Rust and Julia, as an exercise for comparison. Feel free to port to others. The main requirement is read the same JSON input format.
 
-**Problem.** Lightning performance of power systems hinges on how grounding
+## Problem
+
+Lightning performance of power systems hinges on how grounding
 structures behave at frequencies from DC to a few MHz, where soil
 dispersion, propagation delay and electromagnetic coupling between conductor
 segments all matter. Circuit-level models lose accuracy exactly where it
@@ -40,7 +42,9 @@ counts; full-wave solvers are opaque and heavy. The HEM occupies the middle
 ground, and TUPÃ is a **reference implementation** of it: readable,
 verifiable against theory, and portable across languages.
 
-**Scope.** MVP: tower-footing grounding electrodes under lightning. Full
+## Scope
+
+MVP: tower-footing grounding electrodes under lightning. Full
 application tier: complete transmission lines and substation grids. By
 design the model is linear (no soil ionisation, arresters or corona),
 frequency-domain, thin-wire, with a two-half-space air/soil medium — the
@@ -48,7 +52,9 @@ boundaries are stated precisely in [docs/theory.md](docs/theory.md) §10.
 The project's primary role is a *scientifically citable* implementation;
 engineering-tool convenience is secondary.
 
-**Metrics.** An implementation is correct when it reproduces the validation
+## Metrics
+
+An implementation is correct when it reproduces the validation
 anchors of [docs/theory.md](docs/theory.md) §9 within stated tolerances —
 DC grounding resistance (Sunde), the Portela 1997 harmonic-impedance case,
 internal-consistency checks, and cross-code agreement with the open-source
@@ -129,8 +135,9 @@ studies with an `observation` block, `<case>_potentials.{csv,json}`.
 
 ## Implementations
 
-**Fortran** (2008+, built with FPM) — based in the original numerical core, cleaned up
-and modernised ([ADR 0001](docs/adr/0001-modern-fortran-reference-implementation.md)).
+### Fortran
+
+Fortran 2008+, built with FPM — based in the original numerical core ([ADR 0001](docs/adr/0001-modern-fortran-reference-implementation.md)).
 
 ```bash
 cd fortran
@@ -169,7 +176,20 @@ fpm run --profile release \
 For `fpm test` (fast/slow split in docs/ROADMAP.md §5) use the same flags; see
 [fortran/README.md](fortran/README.md#building-and-testing-without-buildsh).
 
-**Rust** — only `cargo` is needed ([rust/README.md](rust/README.md)):
+`build.sh` enables OpenMP: the frequency sweep runs on all cores (results are
+bit-identical for any thread count; `OMP_NUM_THREADS` or `--threads <n>`
+choose the count). Per-study numerics — geometry kernel, image model and a
+segment-length target — are set by the optional `numerics` block of the case
+file ([common/README.md](common/README.md), [ADR 0024](docs/adr/0024-phase10-numerics.md)).
+
+See [fortran/README.md](fortran/README.md) for the full setup (Windows/Linux)
+and for the bundled Fortran demo programs (`fpm run --example example1`).
+The JSON case files under [common/](common/README.md) are the shared,
+language-neutral inputs every implementation must reproduce.
+
+### Rust
+
+Only `cargo` is needed ([rust/README.md](rust/README.md)):
 
 ```bash
 cd rust
@@ -178,7 +198,9 @@ cargo build --release
 cargo test --release                               # tests
 ```
 
-**Julia** (≥ 1.10) — no build step ([julia/README.md](julia/README.md)):
+### Julia
+
+(≥ 1.10) — no build step ([julia/README.md](julia/README.md)):
 
 ```bash
 cd julia
@@ -187,7 +209,9 @@ julia bin/tupa.jl ../common/portela1997.json          # writes portela1997_resul
 julia --project=. -e 'using Pkg; Pkg.test()'          # tests
 ```
 
-**GUI** — Python ≥ 3.11 with [uv](https://docs.astral.sh/uv/)
+### GUI
+
+Python ≥ 3.11 with [uv](https://docs.astral.sh/uv/)
 ([gui/README.md](gui/README.md)). It views a case and, optionally, the result
 file written by any of the solvers above:
 
@@ -202,24 +226,13 @@ uv run pytest                                         # headless data-layer test
 All three solvers take the same JSON case and write result files with the same
 names, so the GUI reads any of them unchanged.
 
-`build.sh` enables OpenMP: the frequency sweep runs on all cores (results are
-bit-identical for any thread count; `OMP_NUM_THREADS` or `--threads <n>`
-choose the count). Per-study numerics — geometry kernel, image model and a
-segment-length target — are set by the optional `numerics` block of the case
-file ([common/README.md](common/README.md), [ADR 0024](docs/adr/0024-phase10-numerics.md)).
-
-See [fortran/README.md](fortran/README.md) for the full setup (Windows/Linux)
-and for the bundled Fortran demo programs (`fpm run --example example1`).
-The JSON case files under [common/](common/README.md) are the shared,
-language-neutral inputs every implementation must reproduce.
-
-### Cases
+## Cases
 
 All files are in [common/](common/README.md), which documents each one in
 full. A *golden* case also has an `_expected.csv` that every implementation must
 reproduce at the 1e-6 rule.
 
-**Basic and smoke cases**
+### Basic and smoke cases
 
 | Case | Description |
 | --- | --- |
@@ -230,7 +243,9 @@ reproduce at the 1e-6 rule.
 | `line_rod.json`, `horizontal_vertical_mesh.json`, `counterpoise_3.json` | Horizontal line in air with a grounded rod; horizontal and vertical conductors with a grid; closed-square counterpoise with two central cables |
 | `portelaMesh.json` (golden) | 32 × 32 m grid built with the `mesh` element, harmonic sweep and scan-fed transient |
 
-**Transient cases** (`signal` block; golden unless noted)
+### Transient cases
+
+(`signal` block; golden unless noted)
 
 | Case | Description |
 | --- | --- |
@@ -238,7 +253,9 @@ reproduce at the 1e-6 rule.
 | `portela1997_transient_{interpolated,hann,hann_time,multi,nlt}.json` | Phase 9 options on the same conductor: scan-fed transfer function, spectral and time Hann windows, three injections, Numerical Laplace Transform |
 | `portela1997_transient_signals.json` | Three independent signals (ADR 0026) in one run |
 
-**Literature comparisons** (compared against the papers' own figures in [docs/validation/](docs/validation/README.md); no golden file)
+### Literature comparisons
+
+(compared against the papers' own figures in [docs/validation/](docs/validation/README.md); no golden file)
 
 | Case | Reference |
 | --- | --- |
@@ -247,7 +264,9 @@ reproduce at the 1e-6 rule.
 | `lima_fig6.json`, `lima_fig7_case{10,11}.json` | Lima et al. 2020, Figs. 6–7: tower counterpoise and two square grids |
 | `poljak_fig4.json` | Poljak & Doric 2006, Fig. 4: 2 m vertical electrode, 10 Hz–100 MHz |
 
-**Lightning channel and two-node sources** (Phase 10b, ADR 0025; golden)
+### Lightning channel and two-node sources
+
+(Phase 10b, ADR 0025; golden)
 
 | Case | Description |
 | --- | --- |
@@ -255,13 +274,17 @@ reproduce at the 1e-6 rule.
 | `channel_loaded.json` | 3 km channel loaded and speed-calibrated to c/2 |
 | `channel_tower.json`, `channel_tower_gap.json` | Strike to a 30 m tower with a rod footing through a two-node source: 1 A current dipole; 1 kV delta-gap voltage source |
 
-**Grounding-safety outputs** (Phase 11, ADR 0027; golden)
+### Grounding-safety outputs
+
+(Phase 11, ADR 0027; golden)
 
 | Case | Description |
 | --- | --- |
 | `grid_safety.json` | 16 × 16 m grid with a tower riser: surface potential grid, step map, touch voltage, GPR and a step pair (`observation` block) |
 
-**Legacy cases** (imported from the original Matlab implementation, ADR 0023; no golden file)
+### Legacy cases
+
+Imported from the original Matlab implementation, ADR 0023; no golden file
 
 | Case | Description |
 | --- | --- |

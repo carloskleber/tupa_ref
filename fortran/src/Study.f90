@@ -13,6 +13,7 @@ module mStudy
   !! 4. Study stores results from `mesh%getOutputs()`
   !! 5. I/O writes results to CSV or JSON
   use mMesh
+  use mBranch, only: tBranch
   use mStructure
   use mElement
   use mMaterial
@@ -531,6 +532,16 @@ contains
     end do
 
     call calcFreq2(mesh)
+
+    ! Lumped branches (theory.md §6, ADR 0028): admittance stamps in the
+    ! Kirchhoff rows, after the electromagnetic block is assembled
+    if (this%structure%branchCount > 0) then
+      if (.not. laplace) sLap = cmplx(0.0d0, omega, kind=8)
+      do i = 1, this%structure%branchCount
+        call stampBranch(mesh, this%structure%branches(i)%nodeA, this%structure%branches(i)%nodeB, &
+                         this%structure%branches(i)%admittance(sLap))
+      end do
+    end if
   end subroutine fillAtFrequency
 
   subroutine solveWithVoltageSources(mesh, sourcePos, retPos, injNodes, patterns, sourceValues, isVoltage, &

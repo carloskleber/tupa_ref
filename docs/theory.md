@@ -643,7 +643,8 @@ discharge-type models use 0.01–1 µF [74, ch. 10].
   limits how fine the base segments can go.
 
 **Scope.** With cross-media coupling neglected (§5), the channel couples
-only to other air segments: towers, shield wires, conductors. For a strike
+only to other air segments: towers, shield wires, conductors, and the
+overhead lines of §4.6 whose induced voltages it causes. For a strike
 at ground level, buried-electrode outputs see the channel only through the
 source current, which a current source fixes. GPR, touch and step voltages
 therefore stay unchanged until Phase 14 item 1 exists (Phase 14 item 2
@@ -672,12 +673,499 @@ then adds the coupling).
    $(c/v)\,60\ln(2vt/r_0)$ at 1.5 µs and within 5 % of it from 3 µs on:
    the estimate neglects the front's finite rise and $R'$, which matter
    early. Details in [validation/channel-validation.md](validation/channel-validation.md).
-3. *Induced voltages.* The reduced-scale experiment of Ishii et al., as
-   reproduced by Pokharel et al. with NEC-2: a 25 m wire over 0.06 S/m ground, channel at
-   6 µH/m and 0.5 Ω/m, $v \approx 0.43c$ [74, ch. 8]. Every segment is in
-   air, so the present image model covers it. [46] gives the HEM
-   counterpart. **Not done**: it needs the measured waveform of the
-   original experiment, available here only as a description.
+3. *Induced voltages.* Two cases, both with every segment in air. The
+   reduced-scale experiment of Ishii et al., as reproduced by Pokharel et al.
+   with NEC-2: a 25 m wire over 0.06 S/m ground, channel at 6 µH/m and
+   0.5 Ω/m, $v \approx 0.43c$ [74, ch. 8], with [46] as the HEM counterpart.
+   **Not done**: it needs the measured waveform of the original experiment,
+   available here only as a description. The Nucci et al. base case of
+   §4.6.5, a 1 km line 10 m high over perfect ground with tabulated reference
+   values [75], needs no digitised figure; it is the induced-voltage anchor
+   (§9 item 9).
+
+### 4.6 Lightning-induced voltages on nearby lines
+
+*Status: implemented and validated for perfect ground, 2026-10-12
+([ADR 0028](adr/0028-induced-voltages-and-lumped-branch.md); Fortran only).
+The channel (§4.5) and the line wires need no new geometry. The one new piece
+is the lumped termination of §6 (series-RLC `branch` element), which a matched
+line needs. The validation anchor is item 9 of §9; its numbers are in
+[validation/induced-validation.md](validation/induced-validation.md).*
+
+§4.5 puts the channel on top of the struck object, whose response is the
+goal. Here the channel ends on the ground (or on any structure) at a
+distance $d$ from an overhead line that is **not** struck. The line sees only
+the channel's fields, and the wanted quantities are the voltages at its
+terminations and along it. The engineering literature solves this in two
+steps: a return-stroke model turns the measured channel-base current into
+fields, and a transmission-line coupling model turns the fields into line
+voltages [75–77]. The HEM solves both in one linear system. This section does
+three things:
+
+1. collects the field and coupling theory of the two-step procedure, so that
+   a TUPÃ result can be mapped onto the published ones (§4.6.1–§4.6.2);
+2. states what the HEM line model contains and what it leaves out
+   (§4.6.3–§4.6.4);
+3. fixes the validation anchor (§4.6.5).
+
+Sources: the base case and its parametric study are Nucci et al. [75]. The
+CIGRE review [76] covers return-stroke models and fields, and its companion
+[77] the coupling models. Rachidi et al. [78, 79] treat the lossy ground.
+The dipole fields are Master et al. [80], and the TL model comes from
+Uman & McLain [81]. Several printed equations in these papers are wrong; the
+verified forms are used below and the errata are listed at the end of
+§4.6.5.
+
+#### 4.6.1 Fields of the channel
+
+Take a vertical channel on the $z$ axis with its base at the ground, and an
+observation point at horizontal distance $r$ and height $z$. The channel
+carries $i(z',t)$. Over a perfect ground the image channel carries the
+current in the same direction, so a vertical dipole $dz'$ at height $z'$ and
+its image give the field as an integral over $z' \in [-H, H]$. Write
+$R = \sqrt{r^2 + (z-z')^2}$ and evaluate every current at the retarded time
+$t - R/c$. Solving Maxwell's equations through the retarded Lorenz-gauge
+potentials gives, for one dipole [80, 76],
+
+$$dE_z = \frac{dz'}{4\pi\varepsilon_0}\left[\frac{2(z-z')^2 - r^2}{R^5}\int_0^t i\,d\tau
++ \frac{2(z-z')^2 - r^2}{cR^4}\, i - \frac{r^2}{c^2R^3}\frac{\partial i}{\partial t}\right]$$
+
+$$dE_r = \frac{dz'}{4\pi\varepsilon_0}\left[\frac{3r(z-z')}{R^5}\int_0^t i\,d\tau
++ \frac{3r(z-z')}{cR^4}\, i + \frac{r(z-z')}{c^2R^3}\frac{\partial i}{\partial t}\right]$$
+
+$$dB_\varphi = \frac{\mu_0\, dz'}{4\pi}\left[\frac{r}{R^3}\, i + \frac{r}{cR^2}\frac{\partial i}{\partial t}\right]$$
+
+The three bracket terms are the electrostatic term (it follows the charge
+moment $\int i\,d\tau$), the induction term and the radiation term. The signs
+of the radiation terms follow from the projection of $\hat z$ transverse to
+the ray: its $z$ part is $r^2/R^2$ and its $r$ part is $-r(z-z')/R^2$, and the
+radiation field is $-\mu_0/(4\pi R)\,\partial i/\partial t$ times that
+projection.
+
+Two consequences matter below. Over a perfect ground the vector potential of
+the channel and its image is purely vertical, so the horizontal field is a
+pure scalar-potential gradient, $E_r = -\partial\varphi/\partial r$. And
+$E_r$ is zero at the ground and grows about linearly with height, because
+it is the small difference between the dipole and its image at different
+distances and retardations [75, 78].
+
+**Return-stroke models with a specified channel-base current.** The current
+along the channel is tied to the measurable $i(0,t)$ by an engineering model
+[76]. The table lists the ones used in the induced-voltage literature (the
+current is zero for $z' > vt$):
+
+| Model | $i(z',t)$ for $z' \le vt$ | Remarks |
+| --- | --- | --- |
+| Bruce–Golde (BG) | $i(0,t)$ | discontinuous front; removes charge instantly |
+| Transmission line (TL) [81] | $i(0,\,t - z'/v)$ | no net charge removed |
+| Modified TL (MTL) [75, 76] | $e^{-z'/\lambda}\, i(0,\,t - z'/v)$ | $\lambda \approx$ 1.5–2 km (1.7 km in [75]) accounts for the corona-sheath charge |
+| Travelling current source (TCS) | $i(0,\,t + z'/c)$ | source climbs at $v$, current falls at $c$ |
+| MULS [80] | uniform + breakdown pulse $e^{-z'/\lambda_p}$ + corona current | with equal decay constants it equals MTL apart from the uniform current [76] |
+| Diendorfer–Uman (DU) | two discharge processes ($\tau_{bd} \approx 0.6$ µs, $\tau_c \approx 5$ µs) | most elaborate; more parameters |
+
+**Channel-base current.** Both [75] and [76] use a sum of Heidler-type
+functions [37]
+
+$$i(0,t) = \sum_k \frac{I_{0k}}{\eta_k}\,\frac{(t/\tau_{1k})^{n_k}}{1 + (t/\tau_{1k})^{n_k}}\,e^{-t/\tau_{2k}},
+\qquad \eta_k = \exp\!\left[-\frac{\tau_{1k}}{\tau_{2k}}\left(\frac{n_k\tau_{2k}}{\tau_{1k}}\right)^{1/n_k}\right],$$
+
+which, unlike the double exponential, has zero slope at $t = 0$. The
+typical negative **subsequent** stroke of [75, 76] is the two-term case
+$n_1 = n_2 = 2$ with $(I_{01}, \tau_{11}, \tau_{21}) = (10.7\ \text{kA},\ 0.25\ \mu\text{s},\ 2.5\ \mu\text{s})$
+and $(I_{02}, \tau_{12}, \tau_{22}) = (6.5\ \text{kA},\ 2.1\ \mu\text{s},\ 230\ \mu\text{s})$.
+It reproduces the 50 % values of Berger's statistics (Table II of [75],
+identical to Table I of [76]: 4.6/12/30 kA and 12/40/120 kA/µs at 95/50/5 %). Recomputed here the
+sum peaks at 12.01 kA (0.81 µs), its steepest slope is 40.08 kA/µs
+(0.135 µs) and it carries 1.4 C. The tail constant $\tau_{22}$ barely
+moves the peak: 280 µs, the value in Table 11.1 of Cooray [74], gives
+12.00 kA and 40.07 kA/µs, only the charge (1.6 C) changes. The two sources
+disagree here; [76] and [75] print 230 µs, and so does the De Conti & Visacro
+set [38]. TUPÃ uses 230 µs, and the case is not sensitive to it.
+Note that §IV-A of [75] says "50 kA/µs", a slip against the 40 kA/µs
+printed in its own Tables II–III and recomputed above.
+
+**Where the TUPÃ channel sits.** The loaded wire of §4.5 is a TL-type
+representation with a distributed series loss. Its current is *solved*, not
+prescribed, so the base current is the source current but the current
+higher up follows from the wire. With the attenuation of §4.5,
+$\alpha \approx R'/(2Z_c)$, the MTL decay $e^{-z'/\lambda}$ is matched to
+first order by
+
+$$R' \approx \frac{2 Z_c}{\lambda},$$
+
+about 1.7 Ω/m for the base case below ($r_0 = 3$ cm, $v = 1.3\times10^8$ m/s,
+$Z_c \approx 1.44$ kΩ at $z = 500$ m, $\lambda = 1.7$ km). The same
+speed calibration as §4.5 gives $L' \approx 9\ \mu$H/m. The match is only to
+first order and in amplitude. MTL scales every frequency alike, whereas the
+loaded wire adds antenna-mode dispersion and radiation, the precursor at $c$,
+and the reaction of the line currents on the channel. The reference
+procedure has none of these. The comparison in §4.6.5 therefore measures
+HEM-plus-loaded-channel against MTL-plus-Agrawal, and the tolerance has to
+include the spread between return-stroke models themselves: with the same
+channel-base current, TCS and MTL differ by 12 % in peak voltage and 37 % in
+front steepness in [75] (Table IV: 74 vs 66 kV, 260 vs 190 kV/µs).
+
+#### 4.6.2 Field-to-line coupling formulations
+
+Take a lossless wire of radius $a$ along $x$ at height $h$ over a perfect
+ground, with
+$L' = \dfrac{\mu_0}{2\pi}\cosh^{-1}\dfrac{h}{a} \simeq \dfrac{\mu_0}{2\pi}\ln\dfrac{2h}{a}$,
+$C' = \dfrac{2\pi\varepsilon_0}{\cosh^{-1}(h/a)}$ and $Z_c = \sqrt{L'/C'} \simeq 60\ln(2h/a)\ \Omega$
+($498\ \Omega$ for $a = 5$ mm, $h = 10$ m). The **incident** field is that of
+the channel plus the ground-reflected field, both computed without the wire.
+The **scattered** field is the reaction of the wire's currents and charges, and the
+total is their sum. The three coupling models used for induced voltages
+follow from one Faraday-law balance [77].
+
+*Total voltage and Taylor's form.* Define the total voltage
+$u(x,t) = -\int_0^h E_z\,dz$. Faraday's law on the rectangle $[x, x+dx]\times[0,h]$
+has the tangential field vanishing on the wire and on the ground. The
+magnetic flux through the rectangle is the wire's own flux, $L' i$, plus
+the incident flux, so
+
+$$\frac{\partial u}{\partial x} + L'\frac{\partial i}{\partial t} = -\frac{\partial}{\partial t}\int_0^h B^i_y\,dz,
+\qquad
+\frac{\partial i}{\partial x} + C'\frac{\partial u}{\partial t} = -C'\frac{\partial}{\partial t}\int_0^h E^i_z\,dz.$$
+
+The second equation is current continuity together with $q = C'u^s$ for the
+scattered voltage (see below).
+
+*Agrawal's form.* Faraday's law for the *incident* field alone, using that its
+horizontal component vanishes on the ground, gives
+
+$$\frac{\partial}{\partial t}\int_0^h B_y^i\,dz = -E^i_x(x,h,t) + \frac{\partial}{\partial x}\int_0^h E_z^i\,dz.$$
+
+Define the incident voltage $u^i = -\int_0^h E_z^i\,dz$ and the scattered
+voltage $u^s = u - u^i$. Substituting into Taylor's first equation leaves
+
+$$\frac{\partial u^s}{\partial x} + L'\frac{\partial i}{\partial t} = E^i_x(x,h,t),
+\qquad
+\frac{\partial i}{\partial x} + C'\frac{\partial u^s}{\partial t} = 0,$$
+
+the Agrawal–Price–Gurbaxani pair [77, 75]. The horizontal incident field at
+the wire height is a distributed voltage source. The vertical field enters
+through the incident voltage $u^i$ and through the boundary conditions. Rachidi's
+form, in which only $B$ appears explicitly, is a third algebraic rearrangement;
+all three are equivalent within the transmission-line approximation.
+
+*Terminations.* A termination $R_A$ at $x = 0$ and $R_B$ at $x = l$ is reached
+through a vertical wire (a **riser**) of height $h$, which is itself exposed
+to $E_z^i$. For the total voltage the boundary conditions are the circuit
+ones, $u(0,t) = -R_A\,i(0,t)$ and $u(l,t) = R_B\,i(l,t)$. In scattered
+voltage, $u^s(0,t) = -R_A\,i(0,t) + h E^i_z(0,0,t)$, and likewise at $l$, so
+the riser contributes a source. **At the terminations the total voltage is
+$R\,i$**: the incident voltage and the riser term cancel. That makes the
+termination voltage the one observable that does not depend on the
+formulation.
+
+*Other formulations in the power literature.*
+
+- **Chowdhuri–Gross** keep the total voltage and write
+  $\partial u/\partial x + L'\,\partial i/\partial t = 0$, dropping the
+  right-hand side of Taylor's first equation. Combining the two relations
+  above, the dropped term is
+  $E_x^i(x,h,t) + \partial u^i/\partial x$. [77] (eq. 27) shows this and
+  we re-derived it here. The omission can underestimate the voltage: for a
+  500 m line with the stroke on its prolongation, 50 m from one end, the
+  Chowdhuri–Gross equations give 19 kV where Agrawal and Taylor give
+  33 kV [75].
+- **Rusck** writes the same equations for the *total scalar potential*
+  $\varphi$ and the incident potential $\varphi^i$, with total voltage
+  $u = \varphi + \int_0^h \partial A^i_z/\partial t\,dz$, and a first equation
+  that omits the incident vector-potential source
+  $-\int_0^h \partial A_x^i/\partial t\,dz$. For a **vertical channel over
+  perfect ground** $A_x^i = 0$, so Rusck's model and Agrawal's give the same
+  voltage [77].
+- The earlier paper [75] calls the Chowdhuri–Gross pair "Rusck's"; the later
+  review [77] reassigns the name. Read the two with that in mind.
+
+A consequence: "the contribution of the horizontal field" has no meaning
+without naming the formulation. In Agrawal's form it is the distributed
+source $E^i_x$; in Taylor's it is shared between $B$ and $E_z$; in
+Rusck's it is absent (the vertical-channel horizontal field is a scalar-potential
+gradient and sits in $\varphi^i$). The fractions of [75] Fig. 9 and [77]
+Fig. 9 against Fig. 11 (same totals, different splits) are formulation
+bookkeeping, not physics.
+
+*Domain of validity.* The TL approximation needs $h$ and the line spacing
+well below the shortest wavelength: for $h = 10$ m, $\lambda = 10h$ at 3 MHz,
+which bounds the useful spectrum of the whole procedure. The quasi-static
+alternative [77] is unusable because lines are many wavelengths long, and the
+rigorous alternative, antenna theory, was dismissed in 1995 as computationally
+prohibitive for km-long lines [77]. The HEM is antenna theory with a
+circuit closure, and §4.6.3 shows what that gives.
+
+#### 4.6.3 The HEM line model
+
+Channel and line are ordinary segments in one system (§6), so none of the
+source terms above is imposed. The incident field enters through the
+mutual terms $Z_t(a,b)$ and $Z_\ell(a,b)$ of §5, image included.
+
+*Which coupling acts.* A vertical channel segment (image included) and a
+horizontal line segment are orthogonal, so $\cos\theta = 0$ in the
+$Z_\ell$ formula of §5: the channel does not drive the line through the
+vector potential. It acts only through the transversal path, the scalar potential of the charge
+distribution on the channel. Hence the incident horizontal field the
+wire sees is exactly $E_x^i = -\partial\varphi^i/\partial x$ (as in
+§4.6.1), and the HEM line equations have the **Rusck structure**,
+$\partial\varphi/\partial x + L'\,\partial i/\partial t = 0$ with the incident
+scalar potential as forcing. For this geometry Rusck and Agrawal are equivalent
+(§4.6.2), so the HEM is neither more nor less rigorous in the TL limit.
+The nodal unknown $u(k)$ is the scalar potential $\varphi$ at the
+node, relative to remote earth (the ground plane for ideal images), not the
+Agrawal total voltage. They differ by the vertical vector-potential
+integral:
+
+$$u_{\text{line}}(x,t) = \varphi(x,t) + \int_0^h \frac{\partial A^i_z(x,z,t)}{\partial t}\,dz .$$
+
+*The consequences for terminations.* A lumped resistor between the line's
+end node and remote earth carries $\varphi$ at that node. The boundary
+condition is Rusck's without the riser term, the $h_{riser} \to 0$ limit.
+The literature's termination, a vertical wire plus a resistor at its foot, adds
+$\int \partial A_z^i/\partial t\,dz$ over the riser. Both are well defined and they
+differ. Two HEM constructions follow, and §4.6.5 runs both:
+
+- **A (decided baseline).** The resistor sits directly at the wire end
+  (no riser).
+- **B (like-for-like).** A vertical wire from the line end down to the ground,
+  with the resistor at its foot. The channel couples to the riser through
+  $Z_\ell$ (parallel segments), so the vertical-field term appears by itself
+  and $R\,i$ at the foot is the termination voltage of the reference.
+
+*Interior points.* At a point inside the line TUPÃ reports $\varphi$,
+and the reference reports the total voltage $u$. The conversion needs
+$A_z^i$ along the line, which the observation block (ADR 0027) does not
+supply (its field-vector remainder is open, ROADMAP Phase 11). The anchor
+therefore gates the terminations only; interior curves are reported as
+$\varphi$ and labelled as such.
+
+*Transmission-line limit.* For $a \ll h \ll \lambda_{min}$ the
+thin-wire equations reduce to the telegrapher equations with the $L'$ and
+$C'$ of §4.6.2, so the HEM line has $Z_c = 60\ln(2h/a)\ \Omega$ without any
+per-unit-length input. A matched termination equals this value:
+498 Ω for $a = 5$ mm, $h = 10$ m. Nucci et al. state the line as "matched"
+without a radius [75]; [78] gives about 500 Ω as the termination for the same
+line, i.e. $a \approx 4.8$ mm, and the case below takes 5 mm. The
+thin-wire bound of §4.1 ($l \gtrsim 10 r_0$) is far from binding.
+
+*What the HEM adds.* The reaction of the line currents on the channel; any 3-D
+wire arrangement (several conductors, towers, bends) with no TL idealisation;
+non-TEM effects; structure strikes with induced voltages on neighbours in
+one model (the `linha3`/`linha4` legacy cases). The HEM literature has used
+exactly this construction for induced voltages, with resistor-terminated
+line ends: Silveira et al. [45, 46] compare it with NEC-4 for a 1 km, 8 m
+high line and an 1800 m channel with the same 12 kA, 40 kA/µs current, and
+with Ishii's reduced-scale experiment.
+
+*What it leaves out.* Corona and nonlinear terminations (linearity premise,
+§10); the lossy-ground horizontal field and ground return beyond the
+quasi-static $\Gamma(\omega)$ images (§4.6.4); and a channel top finite
+height, which is irrelevant for fast observations (the channel above
+$vt$ carries no current at time $t$).
+
+*Size.* Segment length follows the $\lambda/10$ rule of §4.1 at the highest
+frequency of interest. For a 10 m high line that is about 3 MHz, i.e. 10 m
+segments (100 for 1 km). The channel graded from a few metres at the foot
+adds about 100–150 segments, so a case has roughly 250 unknowns in air and
+costs less than the grounding grids of §9.
+
+#### 4.6.4 Lossy ground
+
+A lossy ground enters in two separate ways [78], and they should not be mixed.
+
+*The exciting field.* $E_z$ and $B_\varphi$ within about a kilometre of the
+channel are well approximated by their perfect-ground values; the
+horizontal field is the quantity that depends on the ground, and its
+perfect-ground value is not a reliable guide for a poor soil. Of the
+approximations compared in [78, 76], the **Cooray–Rubinstein formula** is
+the one that works at all the ranges tested (100 m to 1.5 km) and at ground
+level, where the perfect-ground value is zero:
+
+$$E_r(r,z,j\omega) = E_r^{pg}(r,z,j\omega) - H_\varphi^{pg}(r,0,j\omega)\,
+\frac{c\,\mu_0}{\sqrt{\varepsilon_{rg} + \sigma_g/(j\omega\varepsilon_0)}},$$
+
+the perfect-ground horizontal field minus the perfect-ground magnetic
+field at the ground times the ground's surface-impedance factor. The wave-tilt
+ratio $E_r/E_z = 1/\sqrt{\varepsilon_{rg} + \sigma_g/(j\omega\varepsilon_0)}$ holds only
+for grazing incidence, i.e. several kilometres out, and the perfect-ground
+value is acceptable only within a few hundred metres and for
+$\sigma_g \gtrsim 10^{-2}$ S/m. Norton's approximation to the Sommerfeld
+integrals is the heavier alternative that the HEM literature uses [45, 46].
+The time factor of [78] is $\exp(+j\omega t)$, the same as §2, so the formulas
+carry over unchanged.
+
+*The line parameters.* The telegrapher equations gain the ground impedance
+$Z'_g$ in series [78]:
+
+$$\frac{dV^s}{dx} + \left(j\omega L' + Z'_w + Z'_g\right) I = E^e_x,
+\qquad \frac{dI}{dx} + j\omega C'\,V^s = 0,$$
+
+with the wire impedance $Z'_w$ (§4.3) and the ground admittance both
+negligible for ordinary lines below about 10 MHz [78, 79]. Sunde's
+logarithmic form is accurate and simple,
+
+$$Z'_g \simeq \frac{j\omega\mu_0}{2\pi}\ln\frac{1 + \gamma_g h}{\gamma_g h},\qquad
+\gamma_g = \sqrt{j\omega\mu_0(\sigma_g + j\omega\varepsilon_0\varepsilon_{rg})}.$$
+
+It tends to $\frac{1}{2\pi h}\sqrt{\mu_0/(\varepsilon_0\varepsilon_{rg})}$ at high
+frequency (1.89 Ω/m for $h = 10$ m, $\varepsilon_{rg} = 10$) and to the
+complex-plane (Carson) form for $\sigma_g \gg \omega\varepsilon_0\varepsilon_{rg}$.
+For several wires the mutual term, with $H = (h_i + h_j)/2$ and the horizontal
+distance $r_{ij}$, is [79]
+
+$$Z'_{g,ij} \simeq \frac{j\omega\mu_0}{4\pi}\ln\frac{(1 + \gamma_g H)^2 + (\gamma_g r_{ij}/2)^2}{(\gamma_g H)^2 + (\gamma_g r_{ij}/2)^2},$$
+
+checked here from the complex-height identity. In the time domain it becomes
+the convolution of Timotin's ground transient resistance [78, 79].
+
+*How much it matters.* For $\sigma_g = 0.001$ S/m, $\varepsilon_{rg} = 10$, the
+1 km line of the base case: the ground changes the voltage's size, shape and
+polarity. The field mechanism dominates, and the ground impedance can be
+dropped for lines shorter than the inverse attenuation constant at 1 MHz,
+about 1.5 km for 0.001 S/m and 4.2 km for 0.01 S/m [78]. The other
+conductors of a three-wire line shield a given one by about 20 % of the peak
+[79].
+
+*TUPÃ.* The $\Gamma(\omega)$ images of §5 give the line a quasi-static ground
+return, which plays the part of $Z'_g$ approximately. The wave effect that
+changes the horizontal field over a lossy ground (what Cooray–Rubinstein and
+Norton capture) is not a quasi-static one, so it is **not** represented.
+TUPÃ's induced-voltage claim therefore stops at the perfect ground. The lossy variant of
+§4.6.5 is run to size the discrepancy, and carries no tolerance. A Norton-type
+field correction is the route if the claim must extend ([45, 46];
+ROADMAP Phase 14 item 2).
+
+#### 4.6.5 Validation anchor: the Nucci et al. base case
+
+*Run 2026-10-12* (Fortran; every number in
+[validation/induced-validation.md](validation/induced-validation.md), script
+`docs/validation/induced_checks.py`). Summary against the criteria below:
+variant B gives 62.9 kV and 154 kV/µs at the terminations for the base case
+(MTL reference 66 kV, 190 kV/µs: −4.6 % and −18.8 %); the Table III trends are
+reproduced; the formulation test gives 32.4 kV against 33 kV for B and 15.8 kV
+for A; the matched line has $Z_c$ = 497.5 Ω against 497.6 Ω. Variant A, the
+resistor at the wire end, is within 8.5 % / 21 % for the base case but is
+**half the reference in the formulation test**: the riser term it omits
+(§4.6.3) is what dominates when the stroke is on the line's axis, so A is not
+a safe termination for a general geometry, and B is the construction to use.
+
+**Reference case** [75, 77]: a single-wire line, $l = 1$ km long,
+$h = 10$ m high, lossless, matched at both ends, over perfect ground. The
+channel is vertical, struck at the point 50 m from the line centre, i.e.
+the line runs from $x = -500$ to $500$ m at $y = 50$ m and the channel stands
+at the origin. The stroke is a typical subsequent stroke: the two-term
+Heidler current of §4.6.1 and the MTL model with
+$v = 1.3\times10^8$ m/s, $\lambda = 1.7$ km (the time origin of the reference
+is shifted by $y_0/c$; the figures show it shifted). No corona, no line
+resistance. The reference plots the voltage at the terminations, at 250 m and at the
+centre.
+
+**TUPÃ construction.**
+
+- Channel: free-standing at the origin (`position`, §4.5) over `imageModel:
+  "ideal"`, length 3 km (the top reflection returns at
+  $2L/v \approx 46$ µs, beyond the 10 µs window of interest), radius 3 cm,
+  `speed: 1.3e8`, `resistance` $\approx 2Z_c/\lambda$ (1.7 Ω/m start value,
+  adjusted by the attenuation check below), `calibrate: true`, segments graded
+  from a few metres at the foot. Driven by a current source at `ch-base`
+  against remote earth with the two-term Heidler current.
+- Line: a wire of 5 mm radius from $(-500, 50, 10)$ to $(500, 50, 10)$ with 10 m
+  segments.
+- Terminations: one 498 Ω branch (§6) per end. In variant A it connects the
+  end node to remote earth. In variant B a vertical wire (5 mm radius) takes the
+  line end down to $z = 0$ and the branch connects its foot.
+- Window: 10–20 µs after the stroke, NLT (§8), Nyquist above the 3 MHz TL
+  limit.
+
+**Observables and reference values** (MTL, [75] Tables III–IV):
+
+| Case | $U_p$ (kV) | $(dU/dt)_{max}$ (kV/µs) | $t_{30-90\%}$ (µs) | $t_{50\%}$ (µs) |
+| --- | --- | --- | --- | --- |
+| Base ($I_p$ = 12 kA, 40 kA/µs, $v = 1.3\times10^8$) | 66 | 190 | 0.5 | 1.4 |
+| $I_p$ = 4.6 kA | 28 | 105 | 0.3 | 1.1 |
+| $I_p$ = 30 kA | 133 | 225 | 0.7 | 2.1 |
+| $di/dt$ = 12 kA/µs | 50 | 65 | 0.8 | 2.2 |
+| $di/dt$ = 120 kA/µs | 72 | 290 | 0.3 | 1.1 |
+| $v = 0.6\times10^8$ | 69 | 120 | 0.7 | 2.2 |
+| $v = 2\times10^8$ | 61 | 220 | 0.3 | 0.8 |
+| Base, TCS model | 74 | 260 | 0.3 | 1.2 |
+
+(Rows from Tables III and IV of [75]; the base row is the MTL row of Table IV.
+The TCS row is the second return-stroke model of the same paper.)
+
+**Pass criteria.**
+
+1. *Base case at the terminations:* shape and polarity (unipolar,
+   positive) agree; the peak is within 12 % and the maximum steepness within 37 % of the
+   MTL values, i.e. the MTL–TCS spread, since the loaded channel is a
+   different return-stroke model (§4.6.1). The criterion applies to variant
+   **B**, whose boundary condition equals the reference's. Variant A, the
+   decided baseline, is reported against the same numbers; the riser term of
+   §4.6.3 is the expected difference between A and B and is not a model error.
+   **Met by B**: −4.6 % in peak, −18.8 % in steepness, unipolar, positive (the
+   most negative sample is 1.5 % of the peak). A: −8.5 % and −21 %. The 30–90 %
+   rise (0.30 against 0.5 µs) is faster than MTL's, and the time to half value
+   (1.6 against 1.4 µs) a little longer.
+2. *Trends of Table III:* peak scales with $I_p$ at fixed $di/dt$ (28 → 66 → 133
+   kV), is weakly dependent on $di/dt$ (50 → 72 kV for a factor 10) while the steepness grows
+   (65 → 290 kV/µs), and is nearly independent of $v$ (69, 66, 61 kV) while
+   the steepness grows with it (120 → 220 kV/µs). **Met by B**: peaks 24.7 /
+   62.9 / 139.6 kV for 4.6 / 12 / 30 kA; 52.2 / 62.9 / 65.9 kV and 63 / 154 /
+   188 kV/µs for $di/dt$ = 12 / 40 / 120 kA/µs; 65.6 / 62.9 / 58.8 kV and
+   100 / 154 / 178 kV/µs for $v$ = 0.6 / 1.3 / 2×10⁸ m/s. All trends have the
+   reference's direction and ratio; the steepness is 17–19 % low at the base
+   current and 35 % low at 120 kA/µs, the edge of the 37 % allowance.
+   (At $v = 2\times10^8$ m/s the channel calibration of §4.5 refuses the
+   target, with $r_0 = 3$ cm; that row uses the closed-form loading, $\kappa = 1$.)
+3. *The formulation test* (Fig. 14 of [75]): 500 m line, stroke on the line
+   prolongation at 50 m from the left end. The HEM must give about the Agrawal
+   value (33 kV), not the Chowdhuri–Gross one (19 kV), since §4.6.3 puts it on
+   the rigorous side. **Met by B**: 32.4 kV. Variant A gives 15.8 kV, which
+   fails the criterion: it lacks the riser term, and for this geometry that
+   term is as large as the rest of the voltage.
+4. *Internal checks:* a matched line shows no reflection from the far end
+   (the voltage at the far termination is the near one delayed by the wave
+   travel time only); the HEM line's $Z_c$ matches $60\ln(2h/a)$ within the
+   discretisation error; the channel attenuation, measured as the peak
+   current at 500 m against the base, is within 20 % of $e^{-500/1700}$.
+   **Met**: a 1 kA step into one end of the matched line gives $u/i$ =
+   497.5 Ω between 1 and 15 µs, flat past the $2l/c$ = 6.7 µs at which an
+   echo would appear (theory: 497.6 Ω); the channel current at 491 m is 0.705
+   of the base value (MTL: 0.750). The sensitivity study moves the base result
+   by under 2.5 % for every change tried: line segments 5 or 20 m, channel
+   segmentation, time step, $R'$ from 0.05 to 2.5 Ω/m, channel length 2 km,
+   channel and wire radius, $\lambda$ = 1 km.
+
+**Lossy-ground variant** (Rachidi et al. [78]): same line with
+$\sigma_g = 0.001$ S/m, $\varepsilon_{rg} = 10$ and both ends 500 Ω. [78] shows
+magnitude, shape and polarity changes. It is run with the §5 images only;
+the expected discrepancy is the missing wave effect of §4.6.4, no tolerance
+applies, and the outcome is recorded as a limitation. **Result**: with the
+$\Gamma(\omega)$ images the peak rises from 62.9 to 69.1 kV (+10 %), the steepness
+from 154 to 217 kV/µs and the negative lobe from −0.9 to −2.5 kV. [78] reports
+a change in sign for this ground, which the model does not show, and gives
+the curves only as figures, so no numerical comparison is possible; the
+missing field correction is the likely cause.
+
+**Errata and conflicts found in the sources** (the verified forms are those
+used above):
+
+- the radiation term of $E_r$ must carry a **plus** sign: [76] eq. (13) prints a
+  minus; [78] eqs. (4) and (7) exchange the radiation terms of $E_z$ and $E_r$
+  (each has the other's geometric factor); [75] eq. (5) and [80] are right;
+- [78] eq. (11) has a stray $\varepsilon_0$ and is missing a minus sign relative to
+  eq. (13), and its eq. (40) mixes two meanings of $\gamma$; the 1997 erratum
+  probably fixes some of these (its text is not held);
+- [79] eq. (24), the off-diagonal Timotin formula, is printed with prefactor
+  $\mu_0/(2\pi T_{ij})$ and exponent $(T_{ij}/t)^{2n+1}$; reducing it to the diagonal
+  case [79] eq. (22) needs $\mu_0/(\pi T_{ij})$ and $(T_{ij}/t)^{n+1/2}$ (derived here, not
+  taken from a source);
+- [75] §IV-A: "50 kA/µs" against 40.1 kA/µs everywhere else (above);
+- the subsequent-stroke $\tau_{22}$: 230 µs ([75, 76], [38]) against 280 µs
+  (Table 11.1 of [74]);
+- [77] gives the 1985 Florida line as 448 m in the text and 488 m in its
+  reference list; the 448 m of the original record is taken.
+
 
 ---
 
@@ -888,8 +1376,8 @@ variants), the augmented form (with LU and GMRES-fallback variants), and
 additionally a TAGS-style symmetric block system in the unknowns
 $(\mathbf{u}, I_\ell, I_t)$ (its "método 5").
 
-**Lumped circuit branches** (registered finding, feeds ROADMAP Phase 12 item 3,
-series-RLC element): the legacy Matlab appends its `Impedancia` elements
+**Lumped circuit branches** (implemented 2026-10-12 as the `branch` element,
+ADR 0028; the legacy mechanism is described first, TUPÃ's form after it): the legacy Matlab appends its `Impedancia` elements
 *after* the $n_s$ electromagnetic segments as extra branches of the same
 $(\mathbf{i}_1, \mathbf{i}_2)$ system. A lumped branch between two existing
 nodes carries $Z(\omega) = R + j\omega L + 1/(j\omega C)$ (the capacitor
@@ -906,6 +1394,20 @@ the diagonal *after* filling, relying on its incidence rows to keep the
 system determined) — a port should pin this with a DC test: a lumped $R$
 from an energised node to a grounded electrode must reproduce the series
 resistance in the driving-point impedance.
+
+*TUPÃ's form.* The Fortran reference does not add branch unknowns. A branch
+between nodes $a$ and $b$ ($b = 0$: remote earth, the ground plane of ideal
+images) is one more current leaving the node in the KCL block, $Y(s)(u_a -
+u_b)$ at $a$ and the opposite at $b$, with $Y = 1/(R + sL + 1/(sC))$
+(written $sC/(1 + sCR + s^2LC)$ when a capacitor is present). It is stamped
+into the $\mathbf{u}$ columns of the KCL rows of $Z_{\text{eq}}$ after the
+electromagnetic block is assembled, at $s = j\omega$ or $s = c + j\omega$
+(NLT), and touches no segment row, so the "no electromagnetic coupling" and
+"no leakage current" properties of the legacy branch hold by construction,
+and no zeroed-$Z_t$ nonsingularity argument is needed. The DC pin above is
+a unit test: a 5 Ω resistor in series with a grounded rod, and a 50 Ω shunt in
+parallel with it, reproduce the closed forms to 1e-9
+(`fortran/test/test_branch.f90`). A zero-impedance branch is refused at load.
 
 > **Sign caveat.** The literature differs in the direction assumed for $\mathbf{i}_2$
 > (Portela [1] takes it *out* of the segment at node $n_2$, flipping signs in B,
@@ -1271,6 +1773,16 @@ Every implementation must reproduce, within stated tolerance:
    on an unloaded cylinder over perfect ground, and the speed of an
    inductance-loaded wire against Baba & Rakov's Table 3 [44] —
    [validation/channel-validation.md](validation/channel-validation.md).
+9. **Lightning-induced voltages** (§4.6.5, ROADMAP Phase 10d): the Nucci et
+   al. base case [75] — a 1 km, 10 m high line matched at both ends, a
+   subsequent stroke 50 m from its centre, perfect ground — against the
+   tabulated peak and steepness of the MTL + Agrawal procedure, with the
+   parametric trends of its Table III and the formulation test of its Fig. 14.
+   The tolerance is the spread between return-stroke models in the same
+   paper (12 % in peak, 37 % in steepness), because the loaded channel is a
+   different return-stroke model from MTL. Run 2026-10-12: met by the
+   like-for-like variant (§4.6.5); results in
+   [validation/induced-validation.md](validation/induced-validation.md).
 
 ---
 
@@ -1321,11 +1833,12 @@ sits exactly in this class. The channel is ordinary HEM segments in air with
 **added distributed series impedance, calibrated so the computed
 propagation matches a prescribed return-stroke speed**. This is the
 type-2 wire loading of [44; 74, ch. 8], and it makes the target speed a
-user input rather than an emergent artefact of the unloaded wire. The same channel-as-segments machinery is what the
-HEM family uses for lightning-*induced* voltage studies — channel and line
-in one model, with the lossy-ground coupling handled by Norton's
-approximation [45,46] — a documented extension route beyond the direct-strike
-scope, not an MVP target.
+user input rather than an emergent artefact of the unloaded wire. The same
+channel-as-segments machinery is what the HEM family uses for
+lightning-*induced* voltage studies — channel and line in one model, with the
+lossy-ground coupling handled by Norton's approximation [45,46]. TUPÃ takes
+that route for a perfect ground (§4.6, ROADMAP Phase 10d, anchor 9 of §9);
+the lossy-ground field correction stays outside it (§4.6.4).
 
 ### 10.1 Neighbouring model families
 
@@ -1343,6 +1856,7 @@ relative to each:
 | Antenna theory (Pocklington) | Frequency | Thin-wire Pocklington EFIE, sub-segment current expansion, boundary-element solve; interface via a Fresnel reflection coefficient in the kernel | The reflection-coefficient kernel is the antenna-theory analogue of §5's $\Gamma(\omega)$ images — accuracy between quasi-static images and full Sommerfeld treatment at a fraction of the Sommerfeld cost | [35] |
 | Multilayer-soil hybrid | Frequency + time | Layered-earth Green's functions via quasi-static complex images (matrix pencil); soil ionisation via conductor-radius adjustment | Lifts §5's single-interface premise; TUPÃ assumes a uniform soil half-space by design — the reference route if stratified soil is ever required | [33] |
 | TL-model + FDTD | Time | Per-unit-length parameters (frequency-dependent Z, Y via vector fitting), 1-D FDTD over the wire mesh; soil ionisation representable | Cheaper thin-wire route solved directly in time; route originated by the nonuniform-TL model [57] (space-dependent per-unit-length parameters from summed segment couplings — predicts effective length where uniform-TL fits fail), with an earlier finite-element/TL precedent [60] (frequency-dependent Voltage Distribution Functions per segment, pre-HEM); ≤5 % deviation from a full EM model on parallel counterpoises (effective length independent of wire separation); scales to grids and wind-farm grounding networks; Grcev's empirical impulse-efficiency formulas [63] quantify the same effective-length behaviour under fast-fronted pulses from the full-wave side | [24,48,57,60,63] |
+| LEMP + transmission-line coupling (MTL/TCS fields, Agrawal/Taylor/Rusck equations) | Time (or frequency + FFT) | Return-stroke model gives the field from the channel-base current, and a telegrapher equation with a distributed source gives the line voltage | The reference procedure of the induced-voltage literature [75–79]; a HEM line (§4.6.3) solves the same problem as a thin-wire structure, with the line–channel reaction and any 3-D wire layout, at the price of segments instead of a 1-D grid; the perfect-ground base case is the validation anchor | [75–79] |
 | FDTD–PEEC hybrid | Time | 1-D FDTD for the line + PEEC for tower and lightning channel | Models the lightning-channel↔tower coupling that HEM-class tools (TUPÃ included) neglect; relevant for tower-surge, not grounding, accuracy | [25] |
 | Full-wave MoM (NEC-4 class) | Frequency | Sommerfeld-integral treatment of the interface, sub-segment current expansion | The accuracy oracle above HEM: [20] and [23] use it as reference; no geometry-factor shortcut, so far costlier; NEC-2 tower studies [50] show the non-TEM effects (transient footing impedance, sub-TEM shield-wire coupling) EMT models compress | [20,23,50] |
 | EMT line-level analysis (multistory towers, LEMP-corrected) | Time (EMT programs) | Towers as TL/multistory circuit models calibrated from full-wave analyses [50]; grounding as macromodels; LEMP field-to-line coupling addable [52] | The consumer layer above TUPÃ for line lightning performance: component-coupling neglect is validated (< a few % on peaks, less than soil-parameter uncertainty [51]), but frequency-dependent grounding [51] and LEMP-induced voltages [52] must be represented — plain EMT underestimates insulator voltages by up to ~58 %; model choices swing outage rates by up to ~70 % [54]; nonuniform spans (wide river crossings, tall towers) break the cascaded-uniform-line recipe, which can go numerically unstable — HEM segments over the catenary handle them natively [58] | [50,51,52,54,58] |

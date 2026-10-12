@@ -199,7 +199,7 @@ Where the former Phase 7 items went:
 | GPR, touch and step voltage (§7 P7) | Phase 11 items 1–2 — done 2026-10-01 (harmonic) |
 | `tCircumference` (grounding rings) | Phase 12 item 1 |
 | Tubular conductor | Phase 12 item 2 |
-| Series RLC element | Phase 12 item 3 |
+| Series RLC element | Phase 12 item 3 — pulled forward 2026-10-11 into Phase 10d (Fortran done) |
 | `tCatenary` | Phase 13 item 1 — done 2026-09-30 |
 | Generic internal impedance models (OPGW) | Phase 13 item 2 |
 | Insulated conductor | Phase 13 item 3 |
@@ -718,6 +718,30 @@ potential post-processing; the field vector is its open remainder), induced-volt
 the HEM option of an enlarged transversal radius to lower the channel
 impedance (theory.md §4.5, optional extension).
 
+### Phase 10d — Lightning-induced voltages on nearby lines — **Fortran done 2026-10-12**
+
+Raised by the author on 2026-10-11, when the Nucci/Rachidi papers entered the
+reference library; [ADR 0028](adr/0028-induced-voltages-and-lumped-branch.md).
+Design basis: theory.md §4.6 (new). Numbered 10d for the same reason as 10b:
+the Phase 11–15 cross-references in ADRs and READMEs stay valid.
+
+1. **Lumped series-RLC `branch` element** — **S–M** — **done (Fortran)**; this
+   is Phase 12 item 3, pulled forward because a matched line needs a
+   termination resistor. Nodal-admittance stamp in the Kirchhoff rows,
+   harmonic and Laplace paths; `test_branch.f90` pins the DC cases of
+   theory.md §6 to 1e-9. **Rust, Julia, GUI lag**: the loaders refuse the
+   element, the tests list the new cases as lagging.
+2. **Validation anchor** — **M** — **done (Fortran)**: the Nucci et al. 1993
+   base case, the trends of its Table III, its Fig. 14 formulation test, the
+   sensitivity study and the lossy-ground variant
+   ([validation/induced-validation.md](validation/induced-validation.md),
+   `docs/validation/induced_checks.py`; cases
+   `common/induced_nucci1993*.json`).
+3. **Open remainder**: interior line voltages need `A_z^i` (the field-vector
+   post-processing left open by Phase 11); the lossy-ground horizontal-field
+   correction (Norton / Cooray–Rubinstein, Phase 14 item 2 territory); a
+   branch-current output; the follow-along ports.
+
 ### Phase 10c — Independent transient signals — **done 2026-10-01**
 
 Raised by the author on 2026-10-01: the legacy case accepts a list of signals
@@ -793,7 +817,7 @@ geometries (rods, counterpoises, rings, lumped branches).
    formula in theory.md §4.3 [40]; element = `tLine` + wall thickness
    (legacy `Tubo.m`); extends `mImpedance` with SLATEC `ZBESK` alongside
    `ZBESI` (scaled variants for large arguments).
-3. **Series RLC element** — **M**. *Series form only first
+3. **Series RLC element** — **M** — **done 2026-10-12 (Fortran), as Phase 10d item 1**. *Series form only first
    (R + jωL + 1/(jωC) two-terminal, Matlab-style non-coupling lumped
    element); parallel later if a case needs it.* Legacy mechanism (extra
    non-electromagnetic branch, Z(ω) on the Z_ℓ diagonal, zeroed Z_t row)
@@ -934,6 +958,8 @@ shielded-wire segment.
   (series-loaded, graded, speed-calibrated), two-node current and voltage
   sources, four `common/` fixtures matched by Rust, validation against Chen
   and Baba & Rakov (the Ishii case is open); ADR 0025; Fortran package **0.7.0**.
+- **Phase 10d — Fortran met (2026-10-12)**: the `branch` element and the Nucci
+  et al. induced-voltage anchor (ADR 0028); Rust, Julia and the GUI follow.
 - **Next engineering steps**: Phase 8 item 1 (the rest — widened fixtures, the
   structure dump and the conformance tag, which now falls on the Phase 10
   fixture set; it closes Milestone 8b and gives the Julia port a sharper

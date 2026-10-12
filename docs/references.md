@@ -684,6 +684,73 @@ below) as the sources of its dispersive-soil routines:
     models: logarithmic $L(z)$ and $C(z)$, corona and nonlinear resistance.
     Read with care: the extraction turns some μs into ms and some Ω into W.
 
+## Lightning-induced voltages: LEMP fields and field-to-line coupling
+
+The source set of theory.md §4.6. Equation errata found in these papers are
+listed at the end of theory.md §4.6.5; the corrected forms are the ones used.
+
+75. **Nucci, C. A.; Rachidi, F.; Ianoz, M. V.; Mazzetti, C.** — "Lightning-
+    Induced Voltages on Overhead Lines", *IEEE Trans. Electromagnetic
+    Compatibility*, vol. 35, no. 1, pp. 75–86, Feb. 1993. DOI:
+    10.1109/15.249398. The original MTL + Agrawal procedure: the MTL
+    return-stroke model ($\lambda$ = 1.7 km) with a two-Heidler subsequent-stroke
+    current gives the field, and Agrawal's equations (finite differences) give
+    the voltage on a 1 km, 10 m high matched line with the stroke 50 m from its
+    centre. The primary validation source of theory.md §4.6.5: Tables III–IV
+    (peak, steepness and times against current peak, $di/dt$, speed and
+    return-stroke model) and the 500 m formulation test of its Fig. 14. The
+    paper does not state the wire radius, and §IV-A prints 50 kA/µs for a
+    current whose own tables and waveform give 40 kA/µs.
+76. **Nucci, C. A. (CIGRE Working Group 33.01)** — "Lightning-Induced
+    Voltages on Overhead Power Lines. Part I: Return-Stroke Current Models
+    with Specified Channel-Base Current for the Evaluation of the
+    Return-Stroke Electromagnetic Fields", *Electra*, no. 161, Aug. 1995,
+    pp. 75–102. No DOI.
+    Review of the BG, TL, MTL, TCS, MULS and DU models (with the proof that
+    MULS and MTL coincide apart from the uniform current), the dipole field
+    equations over perfect ground, the wave-tilt, Rubinstein and Cooray options
+    over a lossy ground, and the comparison of models at 50 m, 5 km and 100 km.
+    Its eq. (13) prints a wrong sign on the $E_r$ radiation term.
+77. **Nucci, C. A. (CIGRE Task Force 33.01.01)** — "Lightning-Induced
+    Voltages on Overhead Power Lines. Part II: Coupling Models for the
+    Evaluation of the Induced Voltages", *Electra*, no. 162, Oct. 1995,
+    pp. 121–145. No DOI. The Rusck, Chowdhuri–Gross and Agrawal–Price–Gurbaxani
+    formulations and the Taylor and Rachidi equivalents. Agrawal ≡ Taylor ≡
+    Rachidi within the transmission-line approximation; Rusck equals Agrawal for
+    a vertical channel over perfect ground; Chowdhuri–Gross omits a magnetic
+    source term. Its in-text citation numbers are off by one from its
+    ref. 46 on.
+78. **Rachidi, F.; Nucci, C. A.; Ianoz, M.; Mazzetti, C.** — "Influence of a
+    Lossy Ground on Lightning-Induced Voltages on Overhead Lines", *IEEE
+    Trans. Electromagnetic Compatibility*, vol. 38, no. 3, pp. 250–264, Aug.
+    1996. DOI: 10.1109/15.536054; erratum vol. 39, no. 2, p. 187, 1997, DOI:
+    10.1109/TEMC.1997.584944 (the erratum text is not held). The
+    Cooray–Rubinstein horizontal-field formula, the ground impedance of Sunde,
+    Carson and the complex-plane method, Timotin's transient ground resistance,
+    and the finding that the ground changes shape and polarity of the induced
+    voltage while the line-propagation effect can be dropped below a critical
+    line length (≈ 1.5 km at 0.001 S/m). Three equations are wrong in print
+    (eqs. 4, 7, 11; eq. 40 doubtful).
+79. **Rachidi, F.; Nucci, C. A.; Ianoz, M.** — "Transient Analysis of
+    Multiconductor Lines Above a Lossy Ground", *IEEE Trans. Power Delivery*,
+    vol. 14, no. 1, pp. 294–302, Jan. 1999. DOI: 10.1109/61.736741. Sunde's
+    logarithmic ground impedance extended to the mutual terms of a
+    multiconductor line, Timotin's ground transient resistance extended to the
+    off-diagonal terms, and the numerical treatment of the singularity of the
+    convolution at $t = 0$. Eq. (24) is misprinted (prefactor and exponent).
+80. **Master, M. J.; Uman, M. A.; Lin, Y. T.; Standler, R. B.** —
+    "Calculations of Lightning Return Stroke Electric and Magnetic Fields
+    Above Ground", *Journal of Geophysical Research*, vol. 86, no. C12,
+    pp. 12127–12132, 1981. DOI: 10.1029/JC086iC12p12127. The MULS model and
+    the first return-stroke fields at altitude (0–10 km, 20 m–10 km range,
+    perfect ground, image dipole); source of the $E_r$/$E_z$ dipole equations
+    of theory.md §4.6.1, with the correct sign of the $E_r$ radiation term.
+81. **Uman, M. A.; McLain, D. K.** — "Magnetic Field of Lightning Return
+    Stroke", *Journal of Geophysical Research*, vol. 74, no. 28,
+    pp. 6899–6910, 1969. DOI: 10.1029/JC074i028p06899. Origin of the
+    transmission-line (TL) return-stroke model: ground-level magnetic flux
+    density for four first-stroke and three subsequent-stroke current models.
+
 ## Related open-source implementations
 
 Companion codes of the same model family, useful as executable cross-checks
