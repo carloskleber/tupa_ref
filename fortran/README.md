@@ -43,14 +43,15 @@ Look for `gcc-fortran`
 
 ## Building and testing without build.sh
 
-`build.sh` installs SLATEC to `~/.local/lib`, which is not on the default
-linker search path. Plain `fpm` invocations therefore need:
+SLATEC is a path dependency of `fpm.toml`, so plain `fpm build` / `fpm test`
+need no library path setup. Its F77 sources need legacy flags, which fpm applies
+to all packages:
 
 ```bash
-export LIBRARY_PATH=$HOME/.local/lib:$LIBRARY_PATH
-fpm build
-fpm test
+fpm build --flag "-std=legacy -Wno-argument-mismatch -fallow-invalid-boz -ffree-line-length-none -fno-range-check -fopenmp"
 ```
+
+`bash build.sh` does an optimised `fpm install` to `fortran/bin/Tupa`.
 
 The SLATEC checkout that `build.sh` clones into `fortran/slatec/` is the
 canonical copy (author's fork) and may be fine-tuned in place.
@@ -61,7 +62,6 @@ long source lines allowed, OpenMP for the threaded sweep, and LAPACK kept on
 the link line after SLATEC (`D1MACH` calls `DLAMCH`):
 
 ```bash
-export LIBRARY_PATH=$HOME/.local/lib:$LIBRARY_PATH
 fpm test --profile release \
   --flag "-ffree-line-length-none -fno-range-check -fopenmp" \
   --link-flag "-Wl,--no-as-needed -llapack -lblas"
@@ -88,9 +88,8 @@ the `test_geometry`/`test_impedance` runtime note above is about the 2-D
 oracle. To profile:
 
 ```bash
-export LIBRARY_PATH=$HOME/.local/lib:$LIBRARY_PATH
 fpm build --profile release --flag "-g"
-perf record --call-graph dwarf ./build/gfortran_*/app/Tupa ../common/rod_air.json
+perf record --call-graph dwarf ./bin/Tupa ../common/rod_air.json
 perf report
 ```
 
@@ -102,12 +101,12 @@ change it, `gprof` is a lower-resolution fallback that doesn't need it:
 
 ```bash
 fpm build --profile release --flag "-pg"
-./build/gfortran_*/app/Tupa ../common/rod_air.json
-gprof ./build/gfortran_*/app/Tupa gmon.out | less
+./bin/Tupa ../common/rod_air.json
+gprof ./bin/Tupa gmon.out | less
 ```
 
 For exact call counts and a navigable call graph (much slower to run),
-`valgrind --tool=callgrind ./build/gfortran_*/app/Tupa ../common/rod_air.json`
+`valgrind --tool=callgrind ./bin/Tupa ../common/rod_air.json`
 then open the resulting `callgrind.out.*` in `kcachegrind`.
 
 ## Running Tupa
@@ -125,7 +124,7 @@ path after `--` as its command-line argument. The command is identical on
 Linux and inside WSL on Windows — there is no separate native-Windows
 build (see "Recommended setup" above). Once built, the compiled binary can
 also be run directly, e.g.
-`./build/gfortran_*/app/Tupa ../common/portela1997.json`, or install it to
+`./bin/Tupa ../common/portela1997.json`, or install it to
 a stable path with `fpm install` and invoke it as `Tupa <study.json>`.
 
 `-v`/`--verbose` and `-q`/`--quiet` may be passed alongside (or in place of)

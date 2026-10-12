@@ -142,8 +142,7 @@ Fortran 2008+, built with FPM — based in the original numerical core ([ADR 000
 ```bash
 cd fortran
 bash build.sh                          # fetch+build SLATEC, optimised build
-./build/gfortran_*/app/Tupa ../common/portela1997.json   # run the solver on a JSON case
-./build/gfortran_*/app/Tupa ../common/channel_tower.json # e.g. the lightning-channel case
+./bin/Tupa ../common/portela1997.json   # run the solver on a JSON case
 ```
 
 The solver takes one argument, the path to a study JSON, and writes
@@ -152,24 +151,14 @@ The solver takes one argument, the path to a study JSON, and writes
 both the `./build/...` binary path and the `../common/` case path are relative to
 it. From another directory, give the full path to both.
 
-Run the binary that `build.sh` produced. The `build/gfortran_*` glob only
-works when a single such folder exists; if there are several (one per compiler
-flag set), pick the newest, which is the one just built:
+`build.sh` installs the optimised binary at the stable path `fortran/bin/Tupa`
+(SLATEC is an fpm path dependency, compiled together with the project). A bare
+`fpm run` / `fpm test` uses fpm's default (debug) profile; for the same flags
+as `build.sh` see [fortran/README.md](fortran/README.md#building-and-testing-without-buildsh):
 
 ```bash
-BIN=$(ls -td build/gfortran_*/app/Tupa | head -1)
-$BIN ../common/channel_tower.json
-```
-
-A bare `fpm run` / `fpm test` rebuilds with fpm's default (debug) profile and
-different flags, and needs the SLATEC library on the linker path, which
-`build.sh` sets only for its own process. To use fpm directly:
-
-```bash
-export LIBRARY_PATH=$HOME/.local/lib:$LIBRARY_PATH
 fpm run --profile release \
-  --flag "-ffree-line-length-none -fno-range-check -fopenmp" \
-  --link-flag "-Wl,--no-as-needed -llapack -lblas" \
+  --flag "-std=legacy -Wno-argument-mismatch -fallow-invalid-boz -ffree-line-length-none -fno-range-check -fopenmp" \
   -- ../common/portela1997.json
 ```
 
