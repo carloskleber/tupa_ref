@@ -7,7 +7,7 @@ Validation of the induced-voltage anchor of theory.md §4.6.5 / §9 item 9
 [induced_checks.py](induced_checks.py); nothing was computed by hand.
 
 ```
-python3 docs/validation/induced_checks.py --fortran-bin <Tupa executable> [--only base,sweep,fig14,conv,internal,lossy]
+python3 docs/validation/induced_checks.py --fortran-bin <Tupa executable> [--only base,sweep,fig14,conv,interior,internal,lossy]
 ```
 
 Needs numpy only. The full run takes about 15 minutes.
@@ -39,9 +39,12 @@ of the tail.
   its foot — the reference's boundary condition, and the one the pass criteria
   gate. Observed at the foot (`Fw`, `Fe`; the voltage across the resistor).
 
-Observables are the terminations only: an interior node reports the scalar
-potential $\varphi$, which differs from the paper's total voltage by the
-$\int \partial A_z^i/\partial t\,dz$ term that TUPÃ does not output yet.
+The termination observables are the nodal scalar potential $\varphi$ (variant A, at
+the wire end) and the voltage at the foot of the riser (variant B). An interior node
+reports $\varphi$ by default, which differs from the paper's total voltage by the
+$\int \partial A_z^i/\partial t\,dz$ term; `signal.totalVoltage` adds it (section
+[Total voltage along the line](#total-voltage-along-the-line)). The committed
+variant B case sets it.
 
 ## Base case
 
@@ -109,6 +112,43 @@ missing riser), and should not be read as one. **Conclusion for the project:
 variant B is the termination to use; A is correct only as the $h_{riser} \to 0$
 limit.**
 
+## Total voltage along the line
+
+The paper's Fig. 9 gives the total voltage at three points of the base line: the
+terminations, 250 m from the end and the centre. Only the terminations are
+tabulated (Table III and Fig. 10), so the other two rows are read off the figure
+and are good to a few kV. Variant B, run with `"totalVoltage": true`
+(theory.md §4.6.3: $u = \varphi + s\int_0^h A_z^i\,dz$, the incident potential of
+the channel only):
+
+| Point | Fig. 9 total (kV, from the figure) | scalar potential $\varphi$ (kV) | total voltage $u$ (kV) | $u$: max dU/dt (kV/µs) |
+| --- | --- | --- | --- | --- |
+| termination (foot Fw) | 66 | 62.9 | 62.9 | 154 |
+| riser top Lw | - | 58.0 | 62.9 | 154 |
+| 250 m from the end | 74 | 58.9 | 68.1 | 168 |
+| centre | 100 | 51.3 | 81.8 | 237 |
+
+The scalar potential alone is 20 % (250 m) and 49 % (centre) below the figure; the
+total voltage is 8 % and 18 % below. The deficit grows towards the centre, the
+point closest to the stroke, where the return-stroke model matters most (a loaded
+wire with a solved current against a prescribed MTL current); the termination
+deficit (−4.6 %) and the front-steepness deficit (−19 %) are of the same order.
+The cause was not isolated here and no tolerance is claimed for these two points.
+
+**Riser identity** (an internal check that needs no reference): in the paper's
+transmission-line model the total voltage at the top of a riser equals the
+resistor voltage at its foot. In the HEM the riser is a wire of its own, and the
+two differ by that wire's inductive drop. The total voltage at the riser top
+$L_w$ must therefore track the foot voltage up to $L_{riser}\,di/dt$. It does: the
+peak is 62.9 kV at both points, and the largest difference over the first 12 µs is
+5.0 kV, on the rising front, where a 10 m riser of about 13 µH carrying
+$di/dt \approx 0.3$ A/ns predicts about 4 kV. The scalar potential at the same node is 58.0 kV.
+
+Unit test (`fortran/test/test_incident.f90`): the drop $s\int A_z^i dz$ against a
+double Simpson quadrature of the retarded potential (400 points along the
+channel segment, 100 along the path), from the currents of the same solve, at 10 kHz,
+300 kHz and 1 MHz: the difference is 0.03 % of the largest drop.
+
 ## Sensitivity (variant B)
 
 | Change | U_p (kV) | max dU/dt (kV/µs) | t30–90 (µs) |
@@ -171,7 +211,9 @@ this is where the model's claim stops: perfect ground.
   trends and the formulation test, without a field-to-line coupling model.
 - It does so only with the riser (variant B) in the formulation test. The
   decided baseline A is adequate for the base case and not for an on-axis stroke.
-- Interior voltages are not compared (they need $A_z^i$).
+- Interior voltages follow the paper's Fig. 9 in shape, polarity and ordering
+  (the total grows from the terminations to the centre), but the centre is 18 % low;
+  they are compared against figure readings only, not tabulated values.
 - The channel is a different return-stroke model from MTL, so a residual of the
   order of the MTL–TCS spread is expected, and the steepness is the quantity
   that carries it.

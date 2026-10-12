@@ -20,6 +20,8 @@ Sections (run all, or pick with --only):
   fig14     the formulation test: 500 m line, stroke on its prolongation
   conv      sensitivity: line/channel segmentation, time step, R', channel
             length, wire radius
+  interior  the total voltage along the line (signal.totalVoltage) against the
+            line-position curves of Nucci 1993 Fig. 9
   internal  matched-line Z_c, channel current attenuation
   lossy     the Rachidi 1996 lossy-ground variant (information only)
 
@@ -51,6 +53,9 @@ REF = {
     "v=2e8": (61.0, 220.0, 0.3, 0.8),
 }
 TCS = (74.0, 260.0, 0.3, 1.2)
+# Peak total voltage along the base line, read off the curves of Nucci 1993 Fig. 9 (the paper tabulates
+# only the terminations; these two are figure readings, good to a few kV)
+FIG9 = {"terminations": 66.0, "250 m": 74.0, "centre": 100.0}
 
 
 # ----------------------------------------------------------------------------
@@ -126,11 +131,15 @@ def zc_line(h, a):
 def build_case(variant="A", *, xs=-500.0, xe=500.0, ys=50.0, strike=(0.0, 0.0), h=10.0, a=5.0e-3,
                line_seg=10.0, terms=None, v=1.3e8, lam=1700.0, rprime=None, ch_len=3000.0, ch_radius=0.03,
                first=5.0, growth=1.15, maxseg=20.0, nyq=1.0e7, npts=1024, ground=None,
-               observe_currents=False, sigma_wire=1.0e9, calibrate=True, title=None):
+               observe_currents=False, sigma_wire=1.0e9, calibrate=True, title=None, total=None, observe_line=None, observe_extra=()):
     """The base case of Nucci et al. 1993 and its variants. `variant` "A": the matching
     resistor is connected to the wire end node; "B": vertical risers of height h
     with the resistor at their foot. `rprime`: channel resistance per metre,
-    default 2 Zc(v)/lam at z = 500 m (theory.md 4.6.1)."""
+    default 2 Zc(v)/lam at z = 500 m (theory.md 4.6.1). `total`: report the observed nodes as the
+    total voltage u = phi + s int A_z dz (signal.totalVoltage; default on for variant B, whose
+    observed termination nodes are at the ground and unaffected, off for A, whose observed
+    termination is the wire end where phi is the circuit voltage). `observe_line`: line node
+    indices to observe (default: the centre only); `observe_extra`: further node IDs."""
     terms = terms or BASE_TERMS
     if rprime is None:
         zc_ch = (C / v) * 60.0 * math.log(2.0 * 500.0 / ch_radius)
@@ -155,7 +164,9 @@ def build_case(variant="A", *, xs=-500.0, xe=500.0, ys=50.0, strike=(0.0, 0.0), 
          "radius": ch_radius, "speed": v, "resistance": rprime, "calibrate": calibrate,
          "firstSegment": first, "growth": growth, "maxSegment": maxseg},
     ]
-    observe = term_nodes + ["Line_n%d" % (n // 2)]
+    if total is None:
+        total = variant == "B"
+    observe = term_nodes + ["Line_n%d" % k for k in (observe_line or [n // 2])] + list(observe_extra)
     signal = {
         "waveform": "heidler",
         "terms": [{"i0": round(i0, 3), "n": float(nn), "tau1": float("%.6e" % t1), "tau2": float("%.6e" % t2)}
@@ -163,6 +174,8 @@ def build_case(variant="A", *, xs=-500.0, xe=500.0, ys=50.0, strike=(0.0, 0.0), 
         "sourceNode": "ch-base", "observeNodes": observe,
         "nyquistHz": nyq, "fftPoints": npts, "transform": "nlt",
     }
+    if total:
+        signal["totalVoltage"] = True
     if observe_currents:
         signal["observeElectrodes"] = ["ch_e1", "ch_e%d" % _segment_near(500.0, ch_len, first, growth, maxseg)]
     case = {
@@ -331,6 +344,28 @@ def sec_conv(fb, wd):
     return out
 
 
+def sec_interior(fb, wd):
+    print("\n### Total voltage along the line (variant B; Nucci 1993 Fig. 9)\n")
+    print("| Point | Fig. 9 total (kV, from the figure) | scalar potential U_p (kV) | total voltage U_p (kV) "
+          "| total dU/dt (kV/µs) |\n| --- | --- | --- | --- | --- |")
+    kw = dict(observe_line=[25, 50], observe_extra=["Lw"])
+    resS = run(fb, build_case("B", total=False, **kw), wd, "interior_phi")
+    resT = run(fb, build_case("B", total=True, **kw), wd, "interior_u")
+    rows = (("termination (foot Fw)", "Fw", FIG9["terminations"]), ("riser top Lw", "Lw", None),
+            ("250 m from the end", "Line_n25", FIG9["250 m"]), ("centre", "Line_n50", FIG9["centre"]))
+    out = {}
+    for label, node, ref in rows:
+        ms, mt = metrics(resS[("voltage", node)]), metrics(resT[("voltage", node)])
+        out[node] = (ms, mt)
+        print("| %s | %s | %.1f | %.1f | %.0f |" % (label, ("%.0f" % ref) if ref else "-", ms["Up"], mt["Up"], mt["dUdt"]))
+    fw, lw = resT[("voltage", "Fw")], resT[("voltage", "Lw")]
+    m = fw[:, 0] <= 12e-6
+    print("\nRiser identity: the total voltage at the riser top (Lw) against the voltage across the matching "
+          "resistor at the foot (Fw); they differ by the riser's own inductive drop. Largest |u(Lw) - u(Fw)| "
+          "over the first 12 µs: %.2f kV (peak %.1f kV)." % (np.abs(lw[m, 1] - fw[m, 1]).max() / 1e3, fw[m, 1].max() / 1e3))
+    return out
+
+
 def sec_internal(fb, wd):
     print("\n### Internal checks\n")
     # 1. matched-line impedance: a current step into one end, the other end matched
@@ -380,7 +415,7 @@ def sec_lossy(fb, wd):
 
 
 SECTIONS = {"base": sec_base, "sweep": sec_sweep, "fig14": sec_fig14, "conv": sec_conv,
-            "internal": sec_internal, "lossy": sec_lossy}
+            "interior": sec_interior, "internal": sec_internal, "lossy": sec_lossy}
 
 
 def write_common():

@@ -737,8 +737,11 @@ the Phase 11–15 cross-references in ADRs and READMEs stay valid.
    ([validation/induced-validation.md](validation/induced-validation.md),
    `docs/validation/induced_checks.py`; cases
    `common/induced_nucci1993*.json`).
-3. **Open remainder**: interior line voltages need `A_z^i` (the field-vector
-   post-processing left open by Phase 11); the lossy-ground horizontal-field
+3. **Interior voltages** — **done 2026-10-12 (Fortran, transient)**:
+   `signal.totalVoltage` adds `s ∫ A_z^i dz` of the channel to the observed node
+   voltages (ADR 0028 amendment, theory.md §4.6.3, `mIncident`).
+4. **Open remainder**: a total-voltage option for harmonic output and for
+   incident sources other than the loaded channel; the lossy-ground horizontal-field
    correction (Norton / Cooray–Rubinstein, Phase 14 item 2 territory); a
    branch-current output; the follow-along ports.
 

@@ -14,6 +14,7 @@ module mStudy
   !! 5. I/O writes results to CSV or JSON
   use mMesh
   use mBranch, only: tBranch
+  use mIncident, only: tIncidentPath, buildIncidentPath, incidentDrop
   use mStructure
   use mElement
   use mMaterial
@@ -797,7 +798,7 @@ contains
   end subroutine runSweep
 
   subroutine runSweepUnits(this, freqHz, termNodeIds, termReturnIds, termIsVoltage, nodeRows, electrodeRows, &
-                           hNode, hI1, hI2, damping)
+                           hNode, hI1, hI2, damping, totalVoltage)
     !! Transfer functions of several independent unit terminals at once
     !! (transient driver, ADR 0026). Terminal m is a unit current (A) or unit
     !! voltage (V) at node `termNodeIds(m)` — across the pair when
@@ -813,6 +814,11 @@ contains
     !! `electrodeRows(i)`, at `freqHz(k)` for terminal m. The study's own
     !! sweep storage (`voltageResults` etc.) is not touched. A nonzero
     !! `damping` c solves at s = c + 2πj·f as in `runSweep`.
+    !!
+    !! With `totalVoltage` the rows of `hNode` are the *total* voltage
+    !! u = φ + s ∫₀^h A_z^i dz of the lightning channel's incident field
+    !! (theory.md §4.6.3, `mIncident`) instead of the scalar potential φ;
+    !! nodes at or below the ground are unchanged.
     class(tStudy), intent(inout) :: this
     real(8), intent(in) :: freqHz(:)
     character(len=*), intent(in) :: termNodeIds(:), termReturnIds(:)
@@ -821,9 +827,13 @@ contains
     !! 1-based node / electrode indices to keep
     complex(8), allocatable, intent(out) :: hNode(:,:,:), hI1(:,:,:), hI2(:,:,:)
     real(8), intent(in), optional :: damping
+    logical, intent(in), optional :: totalVoltage
+    !! Report the total voltage at `nodeRows` (default: scalar potential)
     real(8), allocatable :: omegaAxis(:)
     integer(4), allocatable :: sourcePos(:), retPos(:), injNodes(:)
-    complex(8), allocatable :: patterns(:,:), unitValues(:)
+    complex(8), allocatable :: patterns(:,:), unitValues(:), drop(:)
+    type(tIncidentPath) :: incident
+    logical :: wantTotal
     integer(4) :: nf, nT, k, solveInfo
     logical :: anyVoltage, laplace
     type(tMesh) :: meshLocal
@@ -848,12 +858,15 @@ contains
 
     omegaAxis = 2.0d0 * PI * freqHz
     call injectionPatterns(sourcePos, retPos, injNodes, patterns)
+    wantTotal = .false.
+    if (present(totalVoltage)) wantTotal = totalVoltage
+    if (wantTotal) call buildIncidentPath(this%structure, this%geomPos, this%geomRadius, nodeRows, incident)
 
     ! Same threading scheme as `runSweep`: independent frequencies, one
     ! thread-private mesh each, disjoint writes, bit-identical for any thread count.
     solveInfo = 0
     call warmUpMachineConstants()
-    !$omp parallel default(shared) private(meshLocal, vU, i1U, i2U, scale, m, info)
+    !$omp parallel default(shared) private(meshLocal, vU, i1U, i2U, scale, m, info, drop)
     meshLocal = this%mesh
     block
       !$omp do schedule(dynamic)
@@ -875,6 +888,10 @@ contains
             scale = cmplx(1.0d0, 0.0d0, kind=8) / scale
           end if
           hNode(:, k, m) = scale * vU(nodeRows, m)
+          if (wantTotal) then
+            drop = incidentDrop(incident, meshLocal, i1U(:, m), i2U(:, m))
+            hNode(:, k, m) = hNode(:, k, m) + scale * drop
+          end if
           hI1(:, k, m)   = scale * i1U(electrodeRows, m)
           hI2(:, k, m)   = scale * i2U(electrodeRows, m)
         end do

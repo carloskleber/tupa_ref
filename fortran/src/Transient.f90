@@ -64,6 +64,10 @@ module mTransient
     real(dp), allocatable :: scanFreqHz(:)
     !! Ascending scan axis (Hz) for "interpolated"; must span
     !! [freqZeroHz, nyquistHz]
+    logical :: totalVoltage = .false.
+    !! Report the observed node voltages as the total voltage
+    !! φ + s ∫ A_z^i dz of the lightning channel's incident field instead of
+    !! the scalar potential φ (theory.md §4.6.3, ADR 0028)
   end type tTransientOptions
 
 contains
@@ -643,7 +647,7 @@ contains
     ! Unit-terminal transfer functions on the solve axis: one factorisation
     ! per frequency serves every terminal; only the observed rows are kept
     call study%runSweepUnits(solveFreqHz, termNode(1:nTerm), termRet(1:nTerm), termVolt(1:nTerm), &
-                             nodeIdx, elecIdx, hNode, hI1, hI2, damping=c)
+                             nodeIdx, elecIdx, hNode, hI1, hI2, damping=c, totalVoltage=opts%totalVoltage)
     if (.not. allocated(hNode)) return
 
     ! Accumulated one-sided products P = Σ_k H_k·X_k per observe point and output

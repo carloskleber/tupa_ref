@@ -1,0 +1,29 @@
+{
+  "title": "Total-voltage fixture: a 60 m channel at the origin, a 40 m, 10 m high line 40 m away with a riser, ideal ground",
+  "soil": { "conductivity": 1.0, "permittivity": 10.0, "permeability": 1.0 },
+  "numerics": { "imageModel": "ideal" },
+  "nodes": [
+    { "id": "Lw", "position": [-20.0, 40.0, 10.0] },
+    { "id": "Le", "position": [20.0, 40.0, 10.0] },
+    { "id": "Fw", "position": [-20.0, 40.0, 0.0] }
+  ],
+  "materials": [ { "id": "pec", "epsilonr": 1.0, "mur": 1.0, "sigma": 1000000000.0 } ],
+  "elements": [
+    { "type": "line", "id": "Line", "from": "Lw", "to": "Le", "radius": 0.005, "segments": 4, "material": "pec" },
+    { "type": "line", "id": "Riser", "from": "Lw", "to": "Fw", "radius": 0.005, "segments": 2, "material": "pec" },
+    { "type": "branch", "id": "Rw", "from": "Fw", "resistance": 497.643 },
+    { "type": "branch", "id": "Re", "from": "Le", "resistance": 497.643 },
+    { "type": "channel", "id": "ch", "position": [0.0, 0.0, 0.0], "length": 60.0, "radius": 0.03,
+      "speed": 130000000.0, "resistance": 1.695, "firstSegment": 5.0, "growth": 1.1, "maxSegment": 10.0 }
+  ],
+  "signal": {
+    "waveform": "heidler",
+    "terms": [ { "i0": 10700.0, "n": 2.0, "tau1": 2.5e-07, "tau2": 2.5e-06 } ],
+    "sourceNode": "ch-base",
+    "observeNodes": [ "Lw", "Le", "Fw", "Line_n2" ],
+    "nyquistHz": 5000000.0,
+    "fftPoints": 64,
+    "transform": "nlt",
+    "totalVoltage": true
+  }
+}

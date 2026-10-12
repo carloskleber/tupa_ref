@@ -735,6 +735,7 @@ contains
             return
           end select
         end if
+        if (json_has(signal_obj, "totalVoltage")) opts%totalVoltage = json_getbool(signal_obj, "totalVoltage")
         if (json_has(signal_obj, "nltDamping")) then
           opts%nltDamping = json_real(signal_obj, "nltDamping")
           if (opts%nltDamping <= 0.0d0) then

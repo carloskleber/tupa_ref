@@ -932,12 +932,33 @@ differ. Two HEM constructions follow, and §4.6.5 runs both:
   $Z_\ell$ (parallel segments), so the vertical-field term appears by itself
   and $R\,i$ at the foot is the termination voltage of the reference.
 
-*Interior points.* At a point inside the line TUPÃ reports $\varphi$,
-and the reference reports the total voltage $u$. The conversion needs
-$A_z^i$ along the line, which the observation block (ADR 0027) does not
-supply (its field-vector remainder is open, ROADMAP Phase 11). The anchor
-therefore gates the terminations only; interior curves are reported as
-$\varphi$ and labelled as such.
+*Interior points.* By default TUPÃ reports $\varphi$ at a node, and the
+reference reports the total voltage $u$. With `signal.totalVoltage` the transient
+driver adds the missing term, per frequency and for every observed node above the
+ground,
+
+$$u(x,y) = \varphi(x,y,h) + s\int_0^h A^i_z(x,y,z)\,dz,$$
+
+where $A^i$ is the vector potential of the *incident* sources: the series-loaded
+channel segments of §4.5 and their images, with the solved mean segment current
+$I_b = (i_1 - i_2)/2$. Written with the kernel of the impedance fill
+(`calcZMutual`, §5) and the field point moved onto the vertical path,
+
+$$s\,A_z(P) = \sum_b \frac{s\mu_0}{4\pi}\,I_b\,u_{z,b}\left[e^{-\gamma R_b}\,g_b(P) - \Gamma\,e^{-\gamma R_{b,i}}\,g_{b,i}(P)\right],
+\qquad g_b(P) = \int_b \frac{d\ell}{|P - \mathbf r(\ell)|},$$
+
+with $g$ the closed form of §4.2 for a point off the axis, $R_b$ and $R_{b,i}$ the
+distances to the midpoints of the segment and its mirror image, and
+$-\Gamma = +1$ for the ideal ground (the image of a vertical current is a
+vertical current in the same direction). Horizontal segments do not contribute.
+The path is integrated with 4-point Gauss–Legendre panels no longer than 10 m. Only the
+channel is incident: the line, its risers and any structure carry the scattered
+field, which the TL formulation of §4.6.2 also leaves out of $u$. Two limits
+follow. A node at or below the ground is returned unchanged (no vertical path in
+air), which is why the foot of a riser reports $R\,i$ either way; and a path
+that passes within a segment length of the channel is outside the method.
+Harmonic output has no total-voltage option yet. The anchor gates the terminations, and the interior
+total voltage is compared with the curves of [75] Fig. 9 in §4.6.5.
 
 *Transmission-line limit.* For $a \ll h \ll \lambda_{min}$ the
 thin-wire equations reduce to the telegrapher equations with the $L'$ and
@@ -1135,6 +1156,14 @@ The TCS row is the second return-stroke model of the same paper.)
    by under 2.5 % for every change tried: line segments 5 or 20 m, channel
    segmentation, time step, $R'$ from 0.05 to 2.5 Ω/m, channel length 2 km,
    channel and wire radius, $\lambda$ = 1 km.
+
+5. *Interior total voltage* (information, no tolerance; Fig. 9 of [75], values
+   read off the figure): with the total voltage of §4.6.3 variant B gives 68.1 kV
+   at 250 m from the end (figure: about 74) and 81.8 kV at the centre (about
+   100), against 58.9 and 51.3 kV for the scalar potential alone. The riser
+   identity holds: the total voltage at the top of a riser has the same 62.9 kV peak
+   as the resistor voltage at its foot and differs on the rising front by the
+   riser's own inductive drop (5.0 kV measured, about 4 kV estimated).
 
 **Lossy-ground variant** (Rachidi et al. [78]): same line with
 $\sigma_g = 0.001$ S/m, $\varepsilon_{rg} = 10$ and both ends 500 Ω. [78] shows

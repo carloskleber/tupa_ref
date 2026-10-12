@@ -16,6 +16,7 @@ module mPotentials
   use mStudy
   use mObservation
   use mResult
+  use mIncident, only: segmentPotentialFactor
   use mMesh, only: tMesh, calcParamW
   use mCtes, only: PI, MU0
   use mError, only: raiseError
@@ -25,31 +26,6 @@ module mPotentials
   public :: computeObservations, potentialsAt, segmentPotentialFactor
 
 contains
-
-  pure function segmentPotentialFactor(a, b, p, radius) result(g)
-    !! Geometry factor of a straight segment seen from a point,
-    !! g = ∫ dℓ / |P − r(ℓ)| over the segment from `a` to `b` (theory.md
-    !! §3.1; the closed form of §4.2 for a field point off the axis).
-    !!
-    !! With s1, s2 the axial coordinates of P relative to the two ends and ρ
-    !! its distance to the axis, g = asinh(s1/ρ) − asinh(s2/ρ). A point closer
-    !! to the axis than the conductor radius is treated as lying on the
-    !! surface (ρ = `radius`), the §4.3 regularisation of the self terms.
-    real(8), intent(in) :: a(3), b(3), p(3)
-    !! Segment end points and field point (m)
-    real(8), intent(in) :: radius
-    !! Conductor radius (m): floor of the distance to the axis
-    real(8) :: g
-    real(8) :: l, u(3), s1, s2, rho
-
-    l  = norm2(b - a)
-    u  = (b - a) / l
-    s1 = dot_product(p - a, u)
-    s2 = s1 - l
-    rho = sqrt(max(dot_product(p - a, p - a) - s1 * s1, 0.0d0))
-    rho = max(rho, radius)
-    g = asinh(s1 / rho) - asinh(s2 / rho)
-  end function segmentPotentialFactor
 
   subroutine potentialsAt(study, pts, psi)
     !! ψ at every point of `pts` for every frequency of the study's stored

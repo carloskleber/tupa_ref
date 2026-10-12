@@ -132,6 +132,7 @@
     ],
     "nyquistHz": 10000000.0,
     "fftPoints": 1024,
-    "transform": "nlt"
+    "transform": "nlt",
+    "totalVoltage": true
   }
 }

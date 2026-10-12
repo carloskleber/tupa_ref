@@ -20,6 +20,16 @@ numerics, which move result files.
 
 ### Added
 
+- **Total voltage along an overhead line** (`signal.totalVoltage`, ADR 0028
+  amendment, theory.md §4.6.3): the observed node voltages of a transient run can be
+  reported as the total voltage `φ + s∫A_z^i dz` of the lightning channel's incident
+  field, the quantity the induced-voltage literature plots, instead of the scalar
+  potential `φ` (default; goldens unchanged). Nodes at or below the ground are
+  unchanged. For the Nucci base case (variant B) the voltage 250 m from the end
+  goes from 58.9 to 68.1 kV and the centre from 51.3 to 81.8 kV against about 74
+  and 100 kV in the paper's Fig. 9. New module `mIncident`
+  (`segmentPotentialFactor` moved there), `test_incident.f90`; `induced_nucci1993_risers.json`
+  sets the option. Fortran only; harmonic output has no such option yet.
 - **Lumped series-RLC `branch` element and the lightning-induced voltage anchor**
   ([ADR 0028](docs/adr/0028-induced-voltages-and-lumped-branch.md), ROADMAP
   Phase 10d, theory.md §4.6): `{"type": "branch", "from", "to"?, "resistance",
