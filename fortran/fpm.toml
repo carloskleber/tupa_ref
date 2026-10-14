@@ -20,6 +20,9 @@ link = ["lapack", "blas"]
 library = false
 test = false
 
+[preprocess]
+cpp.suffixes = ["F90"]
+
 [fortran]
 implicit-typing = false
 implicit-external = false

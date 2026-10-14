@@ -18,3 +18,5 @@ benchmarks/cross-impl/results/
 __pycache__/
 benchmarks/tags-xval/tags_hem
 fortran/bin/
+fortran/src/version_generated.inc
+fortran/man/

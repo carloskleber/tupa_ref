@@ -58,7 +58,9 @@ An implementation is correct when it reproduces the validation
 anchors of [docs/theory.md](docs/theory.md) §9 within stated tolerances —
 DC grounding resistance (Sunde), the Portela 1997 harmonic-impedance case,
 internal-consistency checks, and cross-code agreement with the open-source
-TAGS/PRTL-mHEM solvers. Current status: the end-to-end frequency-sweep and
+TAGS/PRTL-mHEM solvers.
+
+Current status: the end-to-end frequency-sweep and
 time-domain pipeline are wired and green (ROADMAP Phases 0–7, 9, 10, 10b and 11 —
 Phase 9 adds scan-fed transients, windows, multiple injections and the
 Numerical Laplace Transform; Phase 10 makes the single-integral mHEM kernel
