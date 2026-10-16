@@ -471,6 +471,15 @@ $z = 0$. The §4.1 segment-length bounds apply along the arc. Moura's
 thesis [58] models non-uniform overhead spans this way and supports
 carrying the mean-distance approximation over to them.
 
+The sag matters most for induced voltages (§4.6). Stracqualursi et al. [96]
+solve the Agrawal equations on a nonuniform line with parabolic sag. Against
+the same line at a uniform average height, sag changes direct-strike surges by
+under 1 % but induced voltages by more than 20 % (27–35 % on the phases of
+their realistic line). The uniform line underestimates the peak, and so does a
+staircase of constant-height sections. In the HEM a sagged span is just this
+chain of segments, so the incident field reaches each segment at its own
+height without any further approximation.
+
 ### 4.5 The lightning-channel element
 
 Implemented in ROADMAP Phase 10b ([ADR 0025](adr/0025-lightning-channel-and-two-node-sources.md);
@@ -659,7 +668,12 @@ then adds the coupling).
    MoM, NEC-2 and FDTD all agree with Chen on it [44; 74, ch. 8]. TUPÃ runs
    it with `imageModel: "ideal"` and a zero-length source at the base
    (Chen's own premise) — `common/channel_unloaded.json`. This case tests the
-   antenna-mode attenuation that TL models miss. **Result**: the segment
+   antenna-mode attenuation that TL models miss. On a lossless wire that
+   attenuation comes from field scattering on a conductor of nonzero radius:
+   the field has a non-TEM structure, and the pulse loses amplitude with
+   height while its tail grows, so the charge transferred stays the same.
+   A nonuniform line whose $Z_c$ rises with height reproduces it [100].
+   **Result**: the segment
    currents follow Chen's to 1.3–1.5 % of the peak over the window after the
    front (heights 5–905 m), the peak itself within 2.5 %; the discrepancy is
    of the order the cited codes show against each other.
@@ -712,9 +726,13 @@ Sources: the base case and its parametric study are Nucci et al. [75]. The
 CIGRE review [76] covers return-stroke models and fields, and its companion
 [77] the coupling models. Rachidi et al. [78, 79] treat the lossy ground.
 The dipole fields are Master et al. [80], and the TL model comes from
-Uman & McLain [81]. Several printed equations in these papers are wrong; the
-verified forms are used below and the errata are listed at the end of
-§4.6.5.
+Uman & McLain [81]. The coupling equations go back to Agrawal et al. [82],
+and Rachidi's review [85] is their modern statement. Field data come from
+Rubinstein et al. [83] and Barker et al. [84]. [86–99] cover what the
+perfect-ground anchor leaves out: corona, lossy and dispersive ground,
+inclined channels, grounding, sag and terrain. Several printed equations in
+these papers are wrong; the verified forms are used below and the errata are
+listed at the end of §4.6.5.
 
 #### 4.6.1 Fields of the channel
 
@@ -842,11 +860,15 @@ $$\frac{\partial u^s}{\partial x} + L'\frac{\partial i}{\partial t} = E^i_x(x,h,
 \qquad
 \frac{\partial i}{\partial x} + C'\frac{\partial u^s}{\partial t} = 0,$$
 
-the Agrawal–Price–Gurbaxani pair [77, 75]. The horizontal incident field at
+the Agrawal–Price–Gurbaxani pair [82; 77, 75]. Agrawal et al. derived it for
+nuclear-EMP excitation of a multiconductor line, not for lightning [82]. The
+horizontal incident field at
 the wire height is a distributed voltage source. The vertical field enters
 through the incident voltage $u^i$ and through the boundary conditions. Rachidi's
 form, in which only $B$ appears explicitly, is a third algebraic rearrangement;
-all three are equivalent within the transmission-line approximation.
+all three are equivalent within the transmission-line approximation. Rachidi
+[85] derives all three from the thin-wire integral equations, which is
+also the starting point of the HEM.
 
 *Terminations.* A termination $R_A$ at $x = 0$ and $R_B$ at $x = l$ is reached
 through a vertical wire (a **riser**) of height $h$, which is itself exposed
@@ -894,6 +916,18 @@ alternative [77] is unusable because lines are many wavelengths long, and the
 rigorous alternative, antenna theory, was dismissed in 1995 as computationally
 prohibitive for km-long lines [77]. The HEM is antenna theory with a
 circuit closure, and §4.6.3 shows what that gives.
+
+*Field evidence.* Rubinstein et al. [83] made the first field test of the
+Agrawal model on a power line: 450 m of three-phase line, distant strokes, and
+the measured vertical field driving the computation. The waveshapes matched,
+the 2ℓ/c oscillation came from the horizontal field, and the amplitudes were
+uneven (−37 % and +19 % on the first peak in the two records shown). Barker
+et al. [84] triggered strokes 145 m from a 682 m test line. The induced
+peaks were linear in the stroke current and about 63 % above Rusck's
+simplified peak formula. The telegrapher-equation coupling itself was
+consistent with the measured fields. The shortfall lay in the return-stroke
+part of the simple formula, which is the same split that §4.6.1 and §4.6.5
+make between the channel model and the coupling.
 
 #### 4.6.3 The HEM line model
 
@@ -978,11 +1012,41 @@ line ends: Silveira et al. [45, 46] compare it with NEC-4 for a 1 km, 8 m
 high line and an 1800 m channel with the same 12 kA, 40 kA/µs current, and
 with Ishii's reduced-scale experiment.
 
+Three effects that the TL codes have to add as separate models are native
+here, although none of them is validated yet:
+
+- *Conductive coupling through the grounding.* Napolitano et al. [92] add to
+  LIOV-EMTP the current that a nearby stroke drives through the soil into the
+  line's grounding rods. Against the 2003 ICLRT data, that current lifts the
+  neutral and lowers the phase-to-neutral voltage near a grounding point, and
+  field-only models overestimate the voltage there. Natsui [91] shows the same
+  absorption by a low-resistance pole ground in FDTD. In TUPÃ this coupling
+  is the soil-to-soil mutual impedance of §5, which is kept. It needs the
+  strike point as a buried injection and the line grounded through
+  electrodes rather than lumped resistors. The air channel's own coupling to
+  buried segments is still neglected (§5; ROADMAP Phase 14 item 2).
+- *Inclined channels.* With the channel tilted (`incidence`, `azimuth`,
+  §4.5) the channel–line $Z_\ell$ term no longer vanishes, and the vector
+  potential drives the line directly. Natsui [91] finds that tilting the
+  channel towards the line raises the peak to about 1.5–2 times the
+  vertical value, while tilting it along the line mainly skews the profile.
+  Rusck's equivalence with Agrawal (§4.6.2) no longer holds for such a
+  channel.
+- *Sag and multi-element networks.* See §4.4 and [96] for sag. Arresters,
+  transformers and ground wires are what LIOV's EMT interfaces add [94, 95]
+  and what the São Paulo reduced-scale model measures [93]. In the HEM they
+  are segments plus lumped branches (§6), apart from the nonlinear arrester.
+
 *What it leaves out.* Corona and nonlinear terminations (linearity premise,
-§10); the lossy-ground horizontal field and ground return beyond the
-quasi-static $\Gamma(\omega)$ images (§4.6.4); and a channel top finite
-height, which is irrelevant for fast observations (the channel above
-$vt$ carries no current at time $t$).
+§10). Corona is not a second-order effect for induced voltages: it *raises*
+the peak of severe, close strokes by an amount comparable to the finite
+ground conductivity [86, 85]. Also left out are the lossy-ground horizontal
+field and the ground return beyond the quasi-static $\Gamma(\omega)$ images
+(§4.6.4), and non-flat terrain. FDTD studies find that a hill beside the line
+raises the induced voltage and a hill between stroke and line shields it
+[97], with increases of several times over steep or irregular ground [98, 99].
+The finite height of the channel top is irrelevant for fast observations (the
+channel above $vt$ carries no current at time $t$).
 
 *Size.* Segment length follows the $\lambda/10$ rule of §4.1 at the highest
 frequency of interest. For a 10 m high line that is about 3 MHz, i.e. 10 m
@@ -1012,7 +1076,12 @@ for grazing incidence, i.e. several kilometres out, and the perfect-ground
 value is acceptable only within a few hundred metres and for
 $\sigma_g \gtrsim 10^{-2}$ S/m. Norton's approximation to the Sommerfeld
 integrals is the heavier alternative that the HEM literature uses [45, 46].
-The time factor of [78] is $\exp(+j\omega t)$, the same as §2, so the formulas
+The exact route is the Sommerfeld integrals themselves. Evaluated efficiently
+inside a TL code and checked against FEM, they show that Cooray–Rubinstein
+distorts and over-attenuates the waveform only for a very poor ground, and
+that the statistical flashover rate of a distribution line hardly changes
+[89]. Yutthagowith et al. [87] use the same formula in a circuit model and
+confirm it against FDTD and field data. The time factor of [78] is $\exp(+j\omega t)$, the same as §2, so the formulas
 carry over unchanged.
 
 *The line parameters.* The telegrapher equations gain the ground impedance
@@ -1036,7 +1105,9 @@ distance $r_{ij}$, is [79]
 
 $$Z'_{g,ij} \simeq \frac{j\omega\mu_0}{4\pi}\ln\frac{(1 + \gamma_g H)^2 + (\gamma_g r_{ij}/2)^2}{(\gamma_g H)^2 + (\gamma_g r_{ij}/2)^2},$$
 
-checked here from the complex-height identity. In the time domain it becomes
+checked here from the complex-height identity. ([85] eq. (46) prints the
+prefactor of the corresponding inductance as $\mu_0/2\pi$, which is twice this
+value.) In the time domain it becomes
 the convolution of Timotin's ground transient resistance [78, 79].
 
 *How much it matters.* For $\sigma_g = 0.001$ S/m, $\varepsilon_{rg} = 10$, the
@@ -1045,7 +1116,17 @@ polarity. The field mechanism dominates, and the ground impedance can be
 dropped for lines shorter than the inverse attenuation constant at 1 MHz,
 about 1.5 km for 0.001 S/m and 4.2 km for 0.01 S/m [78]. The other
 conductors of a three-wire line shield a given one by about 20 % of the peak
-[79].
+[79]. Keeping the ground impedance in the line equations raises the induced
+peak by a few per cent (3–8 % for 6–10 m lines with the stroke 100 m away)
+[90], most at low return-stroke speeds.
+
+*Dispersive ground.* With frequency-dependent soil (§7) the horizontal field
+is again the only component that changes appreciably. Akbari et al. [88]
+(full-wave FEM, Longmire–Smith soil) find an induced voltage about 15 % lower
+at 10⁻³ S/m and unchanged at 10⁻² S/m. Faisal et al. [90] see little
+difference between constant, Alipio–Visacro and Longmire–Smith soils.
+Dispersion is therefore a smaller correction than the lossy-ground field
+itself.
 
 *TUPÃ.* The $\Gamma(\omega)$ images of §5 give the line a quasi-static ground
 return, which plays the part of $Z'_g$ approximately. The wave effect that
@@ -1181,7 +1262,17 @@ used above):
 
 - the radiation term of $E_r$ must carry a **plus** sign: [76] eq. (13) prints a
   minus; [78] eqs. (4) and (7) exchange the radiation terms of $E_z$ and $E_r$
-  (each has the other's geometric factor); [75] eq. (5) and [80] are right;
+  (each has the other's geometric factor); [75] eq. (5), [80] and [87] are
+  right;
+- [82] eq. (31) gives the per-unit-length conductance of a line in a
+  conducting medium as $G = -(\sigma/\varepsilon)C$; it is $+(\sigma/\varepsilon)C$.
+  The last term of its difference eq. (41) also subtracts the old voltage
+  from itself;
+- [85] eq. (46): the mutual ground inductance with $\mu_0/2\pi$ (twice too
+  large, see §4.6.4); eq. (64) has a stray time derivative and eq. (67) the
+  wrong sign on $R_B$;
+- [87] eq. (1) lacks $\mu_0$ under the square root, eq. (7) has $(h-z)$ in
+  both terms and eq. (C1) a stray $j$;
 - [78] eq. (11) has a stray $\varepsilon_0$ and is missing a minus sign relative to
   eq. (13), and its eq. (40) mixes two meanings of $\gamma$; the 1997 erratum
   probably fixes some of these (its text is not held);
@@ -1192,8 +1283,9 @@ used above):
 - [75] §IV-A: "50 kA/µs" against 40.1 kA/µs everywhere else (above);
 - the subsequent-stroke $\tau_{22}$: 230 µs ([75, 76], [38]) against 280 µs
   (Table 11.1 of [74]);
-- [77] gives the 1985 Florida line as 448 m in the text and 488 m in its
-  reference list; the 448 m of the original record is taken.
+- the 1985 Florida line: [77] gives 448 m in its text and 488 m in its
+  reference list. The original record [83] gives 450 m, and that value is
+  taken.
 
 
 ---
@@ -1524,7 +1616,14 @@ mean curve.
 The effect is not confined to grounding: Alipio, Duarte & De Conti [28] show
 it materially changes underground-cable transients for $\rho > 1000$ Ω m
 — dispersive soil should be the default, not the exception, in any transient
-study.
+study. The same holds at the system level. Dispersion cuts the backflashover
+rate of a 138 kV line by 29–55 % for realistic resistivity distributions
+[105]. A full-wave layered-media MoM finds the GPR of a *struck* electrode
+lowered, strongly in resistive soils [104]. The time-domain BEM of [103]
+finds the same for multilayer soil with ionisation. One case is an exception:
+the GPR that a *nearby* channel induces in an electrode is almost insensitive
+to dispersion and follows distance and current instead [104]. The induced
+voltages of §4.6.4 behave the same way.
 
 ---
 
@@ -1812,6 +1911,10 @@ Every implementation must reproduce, within stated tolerance:
    different return-stroke model from MTL. Run 2026-10-12: met by the
    like-for-like variant (§4.6.5); results in
    [validation/induced-validation.md](validation/induced-validation.md).
+   Candidates for a measured anchor, not yet digitised: the Florida records
+   of Rubinstein et al. [83] (distant strokes, wave-tilt field), the
+   triggered-stroke data of Barker et al. [84] (145 m, 63 strokes) and the
+   São Paulo reduced-scale networks [93].
 
 ---
 
@@ -1881,14 +1984,15 @@ relative to each:
 | HEM-TD | Time | HEM physics solved directly in time; dispersive soil via rational (pole–residue) models; time delays computed in time domain | Same physics, other domain; needed only for nonlinear phenomena (soil ionisation, arresters, corona) that TUPÃ excludes by design; benchmarked against frequency-domain HEM | [47,21] |
 | HEM + complex images | Frequency | Earth replaced by perfect conductor at complex depth instead of quasi-static images | Extends the §5 image treatment beyond the few-MHz ceiling; the refinement step after $\Gamma_t(\omega)$ | [20] |
 | HF circuit models | Frequency / EMT | Lumped RLC (with or without mutual coupling) derived from the MoM equations by successive approximations | Degenerate limit of §4–§6; [23] maps their error vs. a full-wave reference over length, resistivity and frequency — mutual coupling is the decisive HF ingredient (which HEM keeps in full) | [23] |
-| PEEC | Frequency / time | Partial-element equivalent circuits from the volume EFIE: separate current and potential cells (R, L, P matrices, MNA solve), no thin-wire restriction | Same MoM roots, more general discretisation; on grounding electrodes agrees with HEM to negligible differences (harmonic-impedance MAPE < 0.01 %), while HEM's unified segments + symmetry reuse are far cheaper for wire-like geometries; higher-order (piecewise-linear/sinusoidal) bases trade that efficiency for per-segment accuracy | [36,49] |
+| PEEC | Frequency / time | Partial-element equivalent circuits from the volume EFIE: separate current and potential cells (R, L, P matrices, MNA solve), no thin-wire restriction | Same MoM roots, more general discretisation; on grounding electrodes agrees with HEM to negligible differences (harmonic-impedance MAPE < 0.01 %), while HEM's unified segments + symmetry reuse are far cheaper for wire-like geometries; higher-order (piecewise-linear/sinusoidal) bases trade that efficiency for per-segment accuracy; a quasi-static (retardation-free) PEEC in state space reduces to an EMT multiport companion network to which nonlinear elements attach, at the cost of delays and of a perfect ground [102] | [36,49,102] |
 | Antenna theory (Pocklington) | Frequency | Thin-wire Pocklington EFIE, sub-segment current expansion, boundary-element solve; interface via a Fresnel reflection coefficient in the kernel | The reflection-coefficient kernel is the antenna-theory analogue of §5's $\Gamma(\omega)$ images — accuracy between quasi-static images and full Sommerfeld treatment at a fraction of the Sommerfeld cost | [35] |
-| Multilayer-soil hybrid | Frequency + time | Layered-earth Green's functions via quasi-static complex images (matrix pencil); soil ionisation via conductor-radius adjustment | Lifts §5's single-interface premise; TUPÃ assumes a uniform soil half-space by design — the reference route if stratified soil is ever required | [33] |
+| Multilayer-soil hybrid | Frequency + time | Layered-earth Green's functions via quasi-static complex images (matrix pencil); soil ionisation via conductor-radius adjustment | Lifts §5's single-interface premise; TUPÃ assumes a uniform soil half-space by design — the reference route if stratified soil is ever required; a time-domain Galerkin BEM with closed-form complex-image Green's functions adds ionisation and dispersion to the same multilayer setting [103], and a full-wave layered-media MoM covers direct and nearby strikes [104] | [33,103,104] |
 | TL-model + FDTD | Time | Per-unit-length parameters (frequency-dependent Z, Y via vector fitting), 1-D FDTD over the wire mesh; soil ionisation representable | Cheaper thin-wire route solved directly in time; route originated by the nonuniform-TL model [57] (space-dependent per-unit-length parameters from summed segment couplings — predicts effective length where uniform-TL fits fail), with an earlier finite-element/TL precedent [60] (frequency-dependent Voltage Distribution Functions per segment, pre-HEM); ≤5 % deviation from a full EM model on parallel counterpoises (effective length independent of wire separation); scales to grids and wind-farm grounding networks; Grcev's empirical impulse-efficiency formulas [63] quantify the same effective-length behaviour under fast-fronted pulses from the full-wave side | [24,48,57,60,63] |
-| LEMP + transmission-line coupling (MTL/TCS fields, Agrawal/Taylor/Rusck equations) | Time (or frequency + FFT) | Return-stroke model gives the field from the channel-base current, and a telegrapher equation with a distributed source gives the line voltage | The reference procedure of the induced-voltage literature [75–79]; a HEM line (§4.6.3) solves the same problem as a thin-wire structure, with the line–channel reaction and any 3-D wire layout, at the price of segments instead of a 1-D grid; the perfect-ground base case is the validation anchor | [75–79] |
+| LEMP + transmission-line coupling (MTL/TCS fields, Agrawal/Taylor/Rusck equations) | Time (or frequency + FFT) | Return-stroke model gives the field from the channel-base current, and a telegrapher equation with a distributed source gives the line voltage | The reference procedure of the induced-voltage literature [75–79, 82, 85]; network codes (LIOV-EMTP, LIV-ATP) extend it to arresters, transformers and grounding [92, 94, 95]; a HEM line (§4.6.3) solves the same problem as a thin-wire structure, with the line–channel reaction, conductive coupling through the grounding and any 3-D wire layout (sag included [96]), at the price of segments instead of a 1-D grid; the perfect-ground base case is the validation anchor | [75–79, 82, 85, 92, 94–96] |
 | FDTD–PEEC hybrid | Time | 1-D FDTD for the line + PEEC for tower and lightning channel | Models the lightning-channel↔tower coupling that HEM-class tools (TUPÃ included) neglect; relevant for tower-surge, not grounding, accuracy | [25] |
+| PEEC–MTL hybrid | Time | PEEC near the strike and the towers, MTL along the weakly coupled middle of the line, joined by a mixed-potential (scalar + vector potential) scattering source | The induced-voltage counterpart of the row above; within 5 % of triggered-lightning peaks on a distribution line. TUPÃ treats the whole line with segments instead, which costs more and needs no interface between two models | [101] |
 | Full-wave MoM (NEC-4 class) | Frequency | Sommerfeld-integral treatment of the interface, sub-segment current expansion | The accuracy oracle above HEM: [20] and [23] use it as reference; no geometry-factor shortcut, so far costlier; NEC-2 tower studies [50] show the non-TEM effects (transient footing impedance, sub-TEM shield-wire coupling) EMT models compress | [20,23,50] |
-| EMT line-level analysis (multistory towers, LEMP-corrected) | Time (EMT programs) | Towers as TL/multistory circuit models calibrated from full-wave analyses [50]; grounding as macromodels; LEMP field-to-line coupling addable [52] | The consumer layer above TUPÃ for line lightning performance: component-coupling neglect is validated (< a few % on peaks, less than soil-parameter uncertainty [51]), but frequency-dependent grounding [51] and LEMP-induced voltages [52] must be represented — plain EMT underestimates insulator voltages by up to ~58 %; model choices swing outage rates by up to ~70 % [54]; nonuniform spans (wide river crossings, tall towers) break the cascaded-uniform-line recipe, which can go numerically unstable — HEM segments over the catenary handle them natively [58] | [50,51,52,54,58] |
+| EMT line-level analysis (multistory towers, LEMP-corrected) | Time (EMT programs) | Towers as TL/multistory circuit models calibrated from full-wave analyses [50]; grounding as macromodels; LEMP field-to-line coupling addable [52] | The consumer layer above TUPÃ for line lightning performance: component-coupling neglect is validated (< a few % on peaks, less than soil-parameter uncertainty [51]), but frequency-dependent grounding [51] and LEMP-induced voltages [52] must be represented — plain EMT underestimates insulator voltages by up to ~58 %; model choices swing outage rates by up to ~70 % [54]; nonuniform spans (wide river crossings, tall towers) break the cascaded-uniform-line recipe, which can go numerically unstable — HEM segments over the catenary handle them natively [58]; frequency-dependent ground in the line model itself is now available in free EMT through the ULM in ATP [106], and a wideband footing model with dispersive soil cuts computed outage rates by 29–55 % [105] | [50,51,52,54,58,105,106] |
 | Rational models / FDNE for EMT | s-domain → time | Vector fitting / matrix-pencil approximation of $Z_g(\omega)$, passivity-enforced, plugged into ATP/EMTP/PSCAD | A *consumer* of TUPÃ's output, not a competitor; effective length drives realization order and robustness; the route dates back to Heimbach & Grcev's rational-function EMTP incorporation [64], ~25–30 years before [26,27]; the fitting and passivity machinery is vector fitting [69] and its textbook extension [70] | [26,27,64,69,70] |
 
 Grcev & Arnautovski-Toseva [56] give the fundamental statement of the
@@ -1905,7 +2009,10 @@ full-wave methods take over. In the time domain the oracle role passes to
 3-D FDTD, which handles inhomogeneous soil, nonlinearities and non-thin-wire
 structures directly — it validates the LEMP-corrected EMT method [52] and
 carries substation grid-plus-shielded-cable problems [53] that sit outside
-HEM scope altogether. CIGRE TB 543 [72] gives the working rule for this
+HEM scope altogether. The same holds for induced voltages beyond the HEM
+premises: the earth-current field of a nearby strike, which couples the
+channel to buried conductors [91], and hills or irregular ground under the
+line [97–99]. CIGRE TB 543 [72] gives the working rule for this
 layering. EMTP-type tools fail on non-TEM propagation, and the full-wave
 codes are too costly for whole networks. Numerical EM analysis is therefore
 best used to compute the impedances that circuit-theory tools need, and to

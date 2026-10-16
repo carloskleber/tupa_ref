@@ -17,6 +17,12 @@ numerics, which move result files.
   (`sources_checks.py`, `phase11_checks.py`, `phase9_transient_checks.py`) run on
   any solver executable through `run_checks.sh`. Root README: repository layout
   and the full case list.
+- **Induced-voltage literature, second pass** (references.md [82]–[106]): the
+  original Agrawal derivation, field data (Rubinstein, Barker), the Rachidi
+  review, and corona, dispersive and lossy ground, inclined channels,
+  grounding coupling, sag and terrain. theory.md §4.4, §4.5, §4.6, §7, §9 and
+  §10.1 gain the matching notes and errata. The 1985 Florida line is now
+  taken as 450 m. ROADMAP Phase 10d lists the candidate follow-up cases.
 
 ### Added
 

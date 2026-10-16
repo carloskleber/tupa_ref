@@ -751,6 +751,235 @@ listed at the end of theory.md §4.6.5; the corrected forms are the ones used.
     transmission-line (TL) return-stroke model: ground-level magnetic flux
     density for four first-stroke and three subsequent-stroke current models.
 
+## Lightning-induced voltages (addendum): coupling origins, measurements, ground and terrain
+
+Library additions of 2026-10-12 to 2026-10-15 that extend the §4.6 source set:
+the original coupling derivation and its first field test, the coupling review,
+measurements, and the effects (lossy and dispersive ground, corona, channel
+inclination, grounding, terrain, sag) that §4.6.3–§4.6.4 list as outside the
+perfect-ground anchor.
+
+82. **Agrawal, A. K.; Price, H. J.; Gurbaxani, S. H.** — "Transient Response
+    of Multiconductor Transmission Lines Excited by a Nonuniform
+    Electromagnetic Field", *IEEE Trans. Electromagnetic Compatibility*,
+    vol. EMC-22, no. 2, pp. 119–129, May 1980. DOI: 10.1109/TEMC.1980.303824.
+    The original derivation of the coupling equations named after the first
+    author, for an $(n+1)$-conductor line in a conducting medium (nuclear EMP;
+    no lightning): the scattered-voltage pair, with the horizontal incident
+    field as the only distributed source, and the equivalent but costlier
+    total-voltage pair; a finite-difference scheme checked against analytic
+    solutions. Printed errors: the sign of $G$ in eq. (31) (it must be
+    $+(\sigma/\varepsilon)C$) and the last term of the difference eq. (41).
+83. **Rubinstein, M.; Tzeng, A. Y.; Uman, M. A.; Medelius, P. J.; Thomson,
+    E. M.** — "An Experimental Test of a Theory of Lightning-Induced Voltages
+    on an Overhead Wire", *IEEE Trans. Electromagnetic Compatibility*,
+    vol. 31, no. 4, pp. 376–383, Nov. 1989. DOI: 10.1109/15.43631. The first
+    field test of the Agrawal model on a power line: a 450 m, 9.5 m high
+    three-phase line at Kennedy Space Center (1985), strokes beyond 5 km,
+    measured vertical field and a wave-tilt horizontal field. Waveshapes agree
+    and the horizontal field drives the 2ℓ/c oscillation; amplitudes are
+    uneven (first peak −37 % and +19 % in the two cases shown). Settles the
+    test-line length at 450 m (§4.6.5 errata).
+84. **Barker, P. P.; Short, T. A.; Eybert-Bérard, A. R.; Berlandis, J. P.** —
+    "Induced Voltage Measurements on an Experimental Distribution Line During
+    Nearby Rocket Triggered Lightning Flashes", *IEEE Trans. Power Delivery*,
+    vol. 11, no. 2, pp. 980–995, Apr. 1996. DOI: 10.1109/61.489360.
+    Triggered strokes 145 m from a 682 m, two-conductor test line (Camp
+    Blanding): 63 strokes, induced peaks 8–100 kV for currents up to 44 kA,
+    linear in the stroke current, about 63 % above Rusck's simplified formula
+    but consistent with telegrapher-equation coupling driven by the measured
+    fields. Short, spike-shaped waveforms (rise ≈ 1.5 µs). A full-scale data
+    set for the induced-voltage problem.
+85. **Rachidi, F.** — "A Review of Field-to-Transmission Line Coupling
+    Models With Special Emphasis to Lightning-Induced Voltages on Overhead
+    Lines", *IEEE Trans. Electromagnetic Compatibility*, vol. 54, no. 4,
+    pp. 898–911, Aug. 2012. DOI: 10.1109/TEMC.2011.2181519. The modern
+    theory reference for §4.6.2: the thin-wire integral equations reduced to
+    the Agrawal pair under the TL approximation, the Taylor and Rachidi forms
+    and their equivalence, ground and wire losses (Sunde), multiconductor
+    matrices, BLT and time-domain solution. Shows that ground losses and
+    corona attenuate direct-strike surges but can *raise* induced voltages.
+    Printed errors: eq. (46) gives the mutual ground inductance with
+    $\mu_0/2\pi$ (twice the correct $\mu_0/4\pi$ of theory.md §4.6.4), eq. (64)
+    a stray time derivative, eq. (67) the sign of $R_B$.
+86. **Nucci, C. A.; Guerrieri, S.; Correia de Barros, M. T.; Rachidi, F.** —
+    "Influence of Corona on the Voltages Induced by Nearby Lightning on
+    Overhead Distribution Lines", *IEEE Trans. Power Delivery*, vol. 15,
+    no. 4, pp. 1265–1273, Oct. 2000. DOI: 10.1109/61.891513. A dynamic
+    (charge-dependent) capacitance in the lossy-ground Agrawal model: corona
+    *raises* the induced peak for severe, close strokes (tens of kA at about
+    50 m), by an amount comparable to the finite ground conductivity. Most of
+    the inline numbers are lost in the library copy's text layer and were
+    read from the page images.
+87. **Yutthagowith, P.; Ametani, A.; Nagaoka, N.; Baba, Y.** —
+    "Lightning-Induced Voltage Over Lossy Ground by a Hybrid Electromagnetic
+    Circuit Model Method With Cooray–Rubinstein Formula", *IEEE Trans.
+    Electromagnetic Compatibility*, vol. 51, no. 4, pp. 975–985, Nov. 2009.
+    DOI: 10.1109/TEMC.2009.2029702. A partial-element circuit model of
+    channel and line with the Cooray–Rubinstein correction, checked against
+    FDTD, Camp Blanding, a reduced-scale model and a tower measurement. It
+    carries the plus sign on the $E_r$ radiation term (agreeing with §4.6.1).
+    Printed errors: eq. (1) lacks $\mu_0$ under the root, eq. (7) repeats
+    $(h-z)$, eq. (C1) has a stray $j$.
+88. **Akbari, M.; Sheshyekani, K.; Pirayesh, A.; Rachidi, F.; Paolone, M.;
+    Borghetti, A.; Nucci, C. A.** — "Evaluation of Lightning Electromagnetic
+    Fields and Their Induced Voltages on Overhead Lines Considering the
+    Frequency Dependence of Soil Electrical Parameters", *IEEE Trans.
+    Electromagnetic Compatibility*, vol. 55, no. 6, pp. 1210–1219, Dec. 2013.
+    DOI: 10.1109/TEMC.2013.2258674. Full-wave FEM with the Longmire–Smith
+    soil [15,16]: only the horizontal field changes appreciably; the induced
+    voltage falls by roughly 15 % at 10⁻³ S/m and not at all at 10⁻² S/m.
+    Its text and its Table V disagree on where the effect stops.
+89. **Tossani, F.; Napolitano, F.; Borghetti, A.; Nucci, C. A.** —
+    "Calculation of Lightning Electromagnetic Fields Above a Lossy Ground for
+    Statistical Appraisal of Induced Overvoltages", conference paper,
+    c. 2019 (venue not identified in the library copy; the same group's
+    journal treatment is *IEEE Trans. EMC*, vol. 61, no. 3, pp. 637–643,
+    2019, DOI: 10.1109/TEMC.2019.2899656). Sommerfeld integrals by a
+    log-spaced trapezoidal rule inside LIOV-EMTP, against FEM and the
+    Cooray–Rubinstein formula: Cooray–Rubinstein distorts and attenuates the
+    waveform only for very poor ground, and the statistical (Monte Carlo)
+    flashover performance barely changes, so it stays the practical choice.
+90. **Faisal, T.; Kaddah, S. S.; Said, T.; Rizk, M. E. M.** — "The Impact
+    of Ground Losses on Estimations of Lightning-Induced Voltage with
+    Dispersive Soil Parameters", *Scientific Reports*, vol. 15, 2025. DOI:
+    10.1038/s41598-025-08379-3. Agrawal coupling in the frequency domain
+    with Cooray–Rubinstein fields, with constant and dispersive
+    (Alipio–Visacro [14], Smith–Longmire [16]) soils: including the ground
+    impedance in the line raises the induced peak by a few per cent (3–8 %
+    for 6–10 m lines at 100 m), more at low return-stroke speed; the soil
+    model choice matters little.
+91. **Natsui, M.** — *Lightning Induced Overvoltages Caused by Non-Vertical
+    Lightning and Earth Current Behavior*, PhD thesis, Polytechnique
+    Montréal, July 2020
+    (journal versions DOI: 10.1016/j.epsr.2018.03.022,
+    10.1109/TEMC.2019.2893314, 10.1109/TEMC.2019.2954719). 3-D FDTD with a
+    travelling-current-source channel: inclining the channel towards the line
+    raises the peak to about 1.5–2 times the vertical-channel value; along the
+    line it mainly skews the profile. A low-resistance pole ground absorbs
+    current from a nearby strike (Camp Blanding data reproduced). The only
+    source in this set that drops the vertical-channel premise of §4.6.
+92. **Napolitano, F.; Paolone, M.; Borghetti, A.; Nucci, C. A.; Rachidi, F.;
+    Rakov, V. A.; Schoene, J.; Uman, M. A.** — "Interaction Between Grounding
+    Systems and Nearby Lightning for the Calculation of Overvoltages in
+    Overhead Distribution Lines", *2011 IEEE Trondheim PowerTech*, pp. 1–7.
+    DOI: 10.1109/PTC.2011.6019438. Adds to LIOV-EMTP the *conductive*
+    coupling between the stroke current in the soil and the line's grounding
+    rods, against the 2003 ICLRT triggered-lightning data: the coupled current
+    lifts the neutral and so lowers phase-to-neutral voltages near a grounding
+    point, which field-only models overestimate.
+93. **Piantini, A.; Janiszewski, J. M.; Borghetti, A.; Nucci, C. A.;
+    Paolone, M.** — "A Scale Model for the Study of the LEMP Response of
+    Complex Power Distribution Networks", *IEEE Trans. Power Delivery*,
+    vol. 22, no. 1, pp. 710–720, Jan. 2007. DOI: 10.1109/TPWRD.2006.881410.
+    The São Paulo reduced-scale model (terminations, grounding, ground wires,
+    transformers, arresters, nearby buildings) and its agreement with
+    LIOV-EMTP. A source of measured multi-element network cases.
+94. **Borghetti, A.; Gutierrez, J. A.; Nucci, C. A.; Paolone, M.; Petrache,
+    E.; Rachidi, F.** — "Lightning-Induced Voltages on Complex Distribution
+    Systems: Models, Advanced Software Tools and Experimental Validation",
+    *Journal of Electrostatics*, vol. 60, no. 2–4, pp. 163–174, 2004. DOI:
+    10.1016/j.elstat.2004.01.001. The LIOV code (multiconductor Agrawal line
+    over lossy ground) and its interfaces to EMTP96 and Simulink, which take
+    the method from one line to networks with arresters and transformers.
+95. **Paolone, M.; Pérez, E.; Borghetti, A.; Nucci, C. A.; Rachidi, F.;
+    Torres, H.** — "Comparison of Two Computational Programs for the
+    Calculation of Lightning-Induced Voltages on Distribution Systems",
+    *Proc. IPST 2005*, Montréal, paper IPST05-250. No DOI. LIV-ATP against
+    LIOV-EMTP on single lines and distribution networks: a code-to-code
+    benchmark of the two-step procedure.
+96. **Stracqualursi, E.; Araneo, R.; Ravichandran, N.; Andreotti, A.;
+    Celozzi, S.** — "Modeling of Conductors Catenary in Power Lines: Effects
+    on the Surge Propagation Due to Direct and Indirect Lightning", *IEEE
+    Trans. Electromagnetic Compatibility*, vol. 65, no. 5, pp. 1464–1475,
+    Oct. 2023. DOI: 10.1109/TEMC.2023.3288029. Agrawal coupling on a
+    nonuniform line with parabolic sag (implicit FDTD, piecewise-linear
+    heights) against EMTP-RV/LIOV (piecewise-constant): sag changes
+    direct-strike surges by under 1 % but induced voltages by over 20 % (27–35 %
+    on the phases of a realistic line); a uniform average height
+    underestimates the peak.
+97. **Niu, J.; Zhang, J.; Tao, Y.; Zou, J.; Zhang, Q.; Xie, Z.; Wang, Y.;
+    Li, X.** — "Lightning-Induced Voltages over Gaussian-Shaped Terrain
+    Considering Different Lightning Strike Locations", *Applied Sciences*,
+    vol. 15, no. 12, 6428, 2025. DOI: 10.3390/app15126428. 3-D FDTD: a hill
+    beside the line raises the induced voltage (reflections), a hill between
+    stroke and line shields it; height matters more than width.
+98. **Soto Ríos, E. A.** — *Lightning Induced Voltages Study on Overhead
+    Distribution Networks Placed over Non-Flat Terrains*, PhD thesis,
+    Universidad Nacional de Colombia, Manizales (year not printed in the
+    library copy; after 2013). No DOI. 2-D and 3-D FDTD (TL and full-wave)
+    with a reduced-scale validation: induced voltages rise markedly on
+    mountains, more with steeper slopes and poorer ground.
+99. **Jiménez Mejía, R. E.** — *Lightning Induced Voltages on Overhead Lines
+    above Non-Uniform and Non-Homogeneous Ground*, MSc dissertation,
+    Universidad Nacional de Colombia, Medellín, Nov. 2014. No DOI.
+    Non-uniform-mesh FDTD for mixed propagation paths and irregular ground:
+    the horizontal field is the component most affected, and irregular
+    ground under the line gave induced voltages up to about five times the
+    flat-ground value.
+
+## Neighbouring methods and channel physics (addendum)
+
+100. **Baba, Y.; Rakov, V. A.** — "On the Mechanism of Attenuation of
+     Current Waves Propagating Along a Vertical Perfectly Conducting Wire
+     Above Ground: Application to Lightning", *IEEE Trans. Electromagnetic
+     Compatibility*, vol. 47, no. 3, pp. 521–532, Aug. 2005. DOI:
+     10.1109/TEMC.2005.850690. The current on a lossless vertical wire
+     attenuates with height because the incident field is scattered by a
+     conductor of nonzero thickness (non-TEM structure); a nonuniform line
+     whose $Z_c$ rises with height reproduces it; the charge transfer does
+     not change with height. The physics behind the unloaded-channel anchor
+     of theory.md §4.5.
+101. **Chen, X.; Hao, Y.; Li, L.; He, X.; Yeung, C.; Ding, Y.; Jia, L.;
+     Zhao, X.; Du, Y.; Liao, M.** — "A Hybrid PEEC and Transmission
+     Line Model for Stable and Accurate Transient Electromagnetic Coupling
+     Simulations Based on Mixed-Potential Scattering", *Electric Power
+     Systems Research*, vol. 257, 112926, 2026. DOI:
+     10.1016/j.epsr.2026.112926. PEEC near the strike and towers, MTL in the
+     weakly coupled middle of the line, joined by a mixed-potential
+     (scalar + vector potential) scattering source; within 5 % of
+     rocket-triggered peak overvoltages on a distribution line.
+102. **Wang, S.; He, J.; Zhang, B.; Zeng, R.; Yu, Z.** — "A Time-Domain
+     Multiport Model of Thin-Wire System for Lightning Transient
+     Simulation", *IEEE Trans. Electromagnetic Compatibility*, vol. 52,
+     no. 1, pp. 128–135, Feb. 2010. DOI: 10.1109/TEMC.2009.2035815. A
+     quasi-static (no retardation) PEEC thin-wire system written in state
+     space and reduced to a multiport companion network for EMT programs, so
+     nonlinear elements can be attached; perfect ground only.
+103. **Fan, J.-B.; Li, Z.-X.** — "Lightning Transient Impulse Problem of
+     Substation Grounding Grid in Multilayer Horizontal Layered Soil
+     Considering Soil Ionization Effect and Frequency Characteristics",
+     *IEEE Trans. Electromagnetic Compatibility*, vol. 66, no. 6,
+     pp. 1848–1857, Dec. 2024. DOI: 10.1109/TEMC.2024.3452419. Time-domain
+     Galerkin BEM with closed-form quasi-static complex-image Green's
+     functions for multilayer soil, with ionisation and dispersive soil; both
+     effects lower the grid's response. The time-domain counterpart of the
+     multilayer route of [33].
+104. **Nazari, M.; Moini, R.; Fortin, S.; Dawalibi, F. P.; Rachidi, F.** —
+     "Impact of Frequency-Dependent Soil Models on Grounding System
+     Performance for Direct and Indirect Lightning Strikes", *IEEE Trans.
+     Electromagnetic Compatibility*, vol. 63, no. 1, pp. 134–144, Feb. 2021.
+     DOI: 10.1109/TEMC.2020.2986646. Full-wave MoM (layered media): soil
+     dispersion lowers the GPR of a struck electrode, strongly for resistive
+     soils, but changes the GPR induced by a *nearby* channel negligibly; the
+     wind-turbine case shows the above-ground structure dominating the
+     early response.
+105. **Vasconcellos, F.; Alipio, R.; Moreira, F.** — "The Influence of the
+     Frequency-Dependent Behavior of Ground Electrical Parameters on the
+     Lightning Performance of Transmission Lines", *14th IEEE INDUSCON*,
+     2021, pp. 1408–1414. DOI: 10.1109/INDUSCON51756.2021.9529544. A wideband
+     tower-footing model in ATP with the disruptive-effect criterion:
+     dispersive soil cuts the backflashover rate of a 138 kV line by 29–55 %
+     for realistic resistivity distributions. The FDNE consumer chain of
+     [26,27] applied to outage rates.
+106. **Zanon, F. O. S.; Leal, O. E. S.; De Conti, A.** — "Implementation of
+     the Universal Line Model in the Alternative Transients Program",
+     *Electric Power Systems Research*, vol. 197, 107311, 2021. DOI:
+     10.1016/j.epsr.2021.107311. The phase-domain ULM in ATP via foreign
+     models, validated against EMTP-RV, then used with frequency-dependent
+     ground impedance *and* admittance. The free-EMT line model on the
+     consumer side of TUPÃ's output.
+
 ## Related open-source implementations
 
 Companion codes of the same model family, useful as executable cross-checks

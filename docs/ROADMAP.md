@@ -743,7 +743,16 @@ the Phase 11–15 cross-references in ADRs and READMEs stay valid.
 4. **Open remainder**: a total-voltage option for harmonic output and for
    incident sources other than the loaded channel; the lossy-ground horizontal-field
    correction (Norton / Cooray–Rubinstein, Phase 14 item 2 territory); a
-   branch-current output; the follow-along ports.
+   branch-current output; the follow-along ports. On the field correction,
+   Tossani et al. [89] find Cooray–Rubinstein adequate for statistical
+   performance and the Sommerfeld integrals needed only for a very poor
+   ground. That makes Cooray–Rubinstein the first target.
+5. **Candidates, unscheduled** (2026-10-15 library review, theory.md §4.6.3,
+   §9 item 9): a measured anchor from field or scale-model data (Rubinstein
+   [83], Barker [84], Piantini [93]); conductive coupling through the line's
+   grounding against Napolitano [92], which needs buried electrodes but no
+   Phase 14 work; an inclined-channel case against Natsui [91]; a sagged-line
+   induced-voltage case against Stracqualursi [96].
 
 ### Phase 10c — Independent transient signals — **done 2026-10-01**
 
@@ -887,6 +896,8 @@ pulled forward if a tower-footing case needs shield wires.
    the §5 single-interface premise; route: layered-earth Green's
    functions via quasi-static complex images (Li, Chen & Wang [33]; Sunde
    [41] background). Explicitly out of MVP scope (theory.md §5, §10.1).
+   Time-domain and full-wave counterparts for cross-checking: Fan & Li [103]
+   and Nazari et al. [104].
 
 ### Legacy element inventory
 
