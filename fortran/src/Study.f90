@@ -79,6 +79,9 @@ module mStudy
     !! Image reflection model (`IMAGE_FREQ_DEPENDENT` / `IMAGE_IDEAL` of
     !! mMesh; ROADMAP Phase 10 item 2). 0 = the process default
     !! (`mMesh%getDefaultImageModel`, frequency-dependent unless `--image-model`).
+    logical :: crossMedium = .false.
+    !! Air-soil cross-coupling (ROADMAP Phase 14 item 1, ADR 0029); set from
+    !! `numerics.crossMedium: "transmission"`, off by default
     integer :: geometryKernel = 0
     !! Geometry-factor quadrature (`GEOM_KERNEL_SINGLE`/`_DOUBLE` of
     !! mGeometry; ROADMAP Phase 10 item 1). 0 = the process default
@@ -175,7 +178,7 @@ contains
     if (this%geometryKernel /= 0) call setGeometryKernel(this%geometryKernel)
     call buildGeometryMatrices(p1, p2, this%geomRadius, nseg, &
       this%geomG, this%geomGi, this%geomRbar, this%geomRbari, &
-      this%geomCosTheta, this%geomCosThetaI, pos=this%geomPos)
+      this%geomCosTheta, this%geomCosThetaI, pos=this%geomPos, crossMedium=this%crossMedium)
     if (this%geometryKernel /= 0) call setGeometryKernel(kernelDefault)
 
     if (verbosityLevel() .eq. VERB_VERBOSE) then
@@ -502,6 +505,7 @@ contains
     ! dispersive soil (ROADMAP Phase 4, ADR 0007) works here without a
     ! type-specific branch.
     mesh%imageModel = this%imageModel
+    mesh%crossMedium = this%crossMedium
     if (laplace) then
       call calcParamLaplace(mesh, sLap, muAir, this%structure%air%admittanceLaplace(sLap), &
                              muSoil, this%structure%soil%admittanceLaplace(sLap))

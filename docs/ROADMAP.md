@@ -34,7 +34,7 @@ implementation**; usability as an engineering tool is secondary.
 | Materials | `tLinear`, `tPortelaSoil` (ADR 0007), `tVisacroAlipioSoil` (mean set, theory.md §7); air hardcoded to vacuum (ADR 0019) |
 | Sweep & results | `runSweep` (OpenMP over frequencies) + `tResult` storage, `inputImpedance`/`maxVoltageMagnitude`; CSV/JSON writers (ADR 0012) with `outputs` filtering; surface potentials, GPR, touch and step voltage from the solved currents (`observation` block, `mPotentials`, `<case>_potentials.*`, Phase 11, ADR 0027) |
 | Time domain | `mSignal` (Heidler — legacy 6-term [38] and standard parametrised form [37, 39]; double-exp ± Jones; Portela concave front; switched-on sine), tail taper, in-repo FFT (ADR 0014), transfer-function transient driver (`mTransient`) with opt-in scan-fed (pchip-interpolated) transfer function, half-Hann window (spectral or time placement), multiple injections and Numerical Laplace Transform (Phase 9, ADR 0015 amendment 2026-09-30) |
-| JSON I/O | json-fortran parser (ADR 0006, superseded-in-place 2026-08-01); schema v1: structure + `sources`/`frequencies`/`outputs` (ADR 0013) + `signal` (ADR 0015) + voltage sources/Heidler terms (ADR 0016/0015 amendment) + `mesh` composite element (ADR 0020) + optional `signal.antialiasStart` (ADR 0021) + optional `observation` block (ADR 0027) + `catenary` element and `portela` waveform (ADR 0023) + `signal.sources`/`window`/`transferFunction`/`transform`/`nltDamping` and the `sine` waveform (ADR 0015 amendment 2026-09-30); the optional `numerics` block (`kernel`, `imageModel`, `maxSegmentLength`) and optional `segments` (ADR 0024); pre-run reference validation (`validateStudyReferences`) and CLI verbosity levels |
+| JSON I/O | json-fortran parser (ADR 0006, superseded-in-place 2026-08-01); schema v1: structure + `sources`/`frequencies`/`outputs` (ADR 0013) + `signal` (ADR 0015) + voltage sources/Heidler terms (ADR 0016/0015 amendment) + `mesh` composite element (ADR 0020) + optional `signal.antialiasStart` (ADR 0021) + optional `observation` block (ADR 0027) + `catenary` element and `portela` waveform (ADR 0023) + `signal.sources`/`window`/`transferFunction`/`transform`/`nltDamping` and the `sine` waveform (ADR 0015 amendment 2026-09-30); the optional `numerics` block (`kernel`, `imageModel`, `maxSegmentLength`, `crossMedium` — ADR 0029) and optional `segments` (ADR 0024); pre-run reference validation (`validateStudyReferences`) and CLI verbosity levels |
 | Cases & tests | `common/` regression fixtures (golden; four harmonic — `portela1997`, `rod`, `grid`, `portela1997_ideal` — five transient since Phase 9, and the 32 × 32 m `portelaMesh` harmonic + scan-fed transient since Phase 10; **all regenerated once for Phase 10**; `grid_safety` harmonic + observation since Phase 11) plus ten cases imported from the legacy Matlab case library (`linha*.json`, `torre*.json`, ADR 0023), 19 test programs under `fpm test --profile release` — all green except `test_common_cases` on the `channel_loaded` fixture, which predates the case's later change to 2048 samples and fails in Fortran and Rust alike until regenerated (re-run 2026-10-01, gfortran 13; `test_impedance`'s coincident-segment divergence check is defeated by `-ffast-math`, as before). Plain `fpm test` needs `-ffree-line-length-none` and, on shared LAPACK, `--no-as-needed -llapack -lblas` (fortran/README.md) |
 | Validation | [`docs/validation/`](validation/README.md): digitized published-curve comparisons — Grcev et al. 2018 Fig. 12 (6 cases), Lima et al. 2020 Figs. 6/7, Poljak & Doric 2006 Fig. 4, Silva et al. 2025 Figs. 3/4 (harmonic + transient) — accepted as the release-bar oracle (§4) |; since Phase 10 also the cross-code check against TAGS ([`validation/tags-xval.md`](validation/tags-xval.md): ≤ 0.3 % below 1 MHz on six cases) and the effect of the `Γ(ω)` default on every comparison ([`phase10-image-model.md`](validation/phase10-image-model.md))
 | GUI | Python/PySide6 view-only module (`gui/`, ADR 0011): study tree, 3-D view, results/transient plots |
@@ -204,7 +204,7 @@ Where the former Phase 7 items went:
 | Generic internal impedance models (OPGW) | Phase 13 item 2 |
 | Insulated conductor | Phase 13 item 3 |
 | Multipolar cables | Phase 13 item 4 |
-| Mutual impedance between segments in different media | Phase 14 item 1 |
+| Mutual impedance between segments in different media | Phase 14 item 1 — done 2026-10-19 (Fortran, opt-in) |
 | Lightning discharge channel | Phase 10b (in air) — done 2026-10-01; coupling to buried electrodes: Phase 14 item 2 |
 | Multi-layer soil and reflection-coefficient images | Phase 15 item 1 |
 
@@ -873,22 +873,31 @@ pulled forward if a tower-footing case needs shield wires.
    element); refs: Ametani cable constants [43], Schelkunoff [40];
    PRTL-mHEM's tubular bundles are a partial analogue.
 
-### Phase 14 — Air–soil coupling
+### Phase 14 — Air–soil coupling — **Fortran done 2026-10-19 (opt-in)**
 
-1. **Mutual impedance between segments in different media** — **L**.
+1. **Mutual impedance between segments in different media** — **L**
+   — **done 2026-10-19 (Fortran, opt-in `numerics.crossMedium`,
+   [ADR 0029](adr/0029-cross-medium-coupling.md), theory.md §5.1)**.
    No legacy implementation to port (unfinished body, ADR 0017); the
    candidate quasi-static transmission-coefficient route is in theory.md
    §5 [35], worked out for cross-medium potentials in Salari [66]
    App. B; validate on `rod_air`-class cases. *Decided (2026-07-17 Q&A):
    strictly after P2 (Phase 10 item 2) — both touch the same interface
    machinery and P2 restores reference behaviour first.*
-2. **Channel coupling to buried electrodes** — **M**. The channel
+2. **Channel coupling to buried electrodes** — **M** — **done
+   2026-10-19 (Fortran; follows from item 1 plus the transmitted term in the
+   observation potentials; `channel_tower_cross`)**. The channel
    itself moved to Phase 10b (2026-10-01). What remains is its
    interaction with electrodes in soil, which needs item 1: a channel
    above buried electrodes then affects GPR, touch and step voltages
    beyond the injected current. Also the post-MVP routes the channel
    opens: induced voltages ([45,46]; lossy-ground coupling via Norton's
    approximation) and the LEMP term plain EMT analysis misses [52].
+
+   *Left open:* Rust and Julia ports (their loaders refuse the switch);
+   flipping the default after review; a published reference to validate
+   against (the checks so far are analytic limits and continuity, not
+   literature curves); lossy-ground induced voltages and LEMP.
 
 ### Phase 15 — Multi-layer soil
 

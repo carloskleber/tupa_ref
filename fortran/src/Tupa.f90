@@ -335,6 +335,19 @@ contains
           return
         end select
       end if
+      if (json_has(numerics_obj, "crossMedium")) then
+        elem_type = json_str(numerics_obj, "crossMedium")
+        select case (trim(elem_type))
+        case ("none")
+          study%crossMedium = .false.
+        case ("transmission")
+          study%crossMedium = .true.
+        case default
+          call raiseError("mTupa: unknown numerics.crossMedium '" // trim(elem_type) // &
+                          "' (expected none or transmission)")
+          return
+        end select
+      end if
       if (json_has(numerics_obj, "maxSegmentLength")) then
         study%maxSegmentLength = json_real(numerics_obj, "maxSegmentLength")
         if (study%maxSegmentLength <= 0.0d0) then

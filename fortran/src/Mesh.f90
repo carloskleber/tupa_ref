@@ -94,6 +94,12 @@ module mMesh
     !! Propagation constant for air: γ = sqrt(jωμ(σ+jωε)), Re γ ≥ 0 (theory.md §2)
     complex(8) :: propSoil
     !! Propagation constant for soil
+    logical :: crossMedium = .false.
+    !! Air-soil cross-coupling on (ROADMAP Phase 14 item 1); default off
+    complex(8) :: cEMixed
+    !! Electric constant of a mixed pair, 1/(2π(W_air + W_soil)) (theory.md §5.1)
+    complex(8) :: cMMixed
+    !! Magnetic constant of a mixed pair: mean of cMAir and cMSoil
 
     ! Image reflection coefficients (theory.md §5), set by calcParamW /
     ! calcParamLaplace from the media immittances
@@ -282,6 +288,8 @@ contains
     ! theory.md §2: gamma = sqrt(j*omega*mu*W), Re(gamma) >= 0
     mesh%propAir  = sqrt(cmplx(0.0d0, omega, kind=8) * muAir  * Wair)
     mesh%propSoil = sqrt(cmplx(0.0d0, omega, kind=8) * muSoil * Wsoil)
+    mesh%cEMixed = 1.0d0 / (0.5d0 * FOUR_PI * (Wair + Wsoil))
+    mesh%cMMixed = 0.5d0 * (mesh%cMAir + mesh%cMSoil)
     call calcImageCoefficients(mesh)
   end subroutine calcParamW
 
@@ -303,6 +311,8 @@ contains
     mesh%cMSoil = s * (muSoil / FOUR_PI)
     mesh%propAir  = sqrt(s * muAir  * Wair)
     mesh%propSoil = sqrt(s * muSoil * Wsoil)
+    mesh%cEMixed = 1.0d0 / (0.5d0 * FOUR_PI * (Wair + Wsoil))
+    mesh%cMMixed = 0.5d0 * (mesh%cMAir + mesh%cMSoil)
     call calcImageCoefficients(mesh)
   end subroutine calcParamLaplace
 
@@ -392,8 +402,10 @@ contains
     !! All theory factors (propagation at the mean distances, direction
     !! cosines, 1/(la·lb) length normalisation) are applied HERE; callers pass
     !! the raw outputs of mGeometry%buildGeometryMatrices. Image factor
-    !! Γ = `gammaAir` both in air, `gammaSoil` both in soil (ideal limits −1/+1); mixed-media pairs are neglected (zero),
-    !! per theory.md §5 / ADR 0005.
+    !! Γ = `gammaAir` both in air, `gammaSoil` both in soil (ideal limits −1/+1). Mixed-media
+    !! pairs are neglected (zero, theory.md §5 / ADR 0005) unless `mesh%crossMedium`
+    !! is set (theory.md §5.1, ADR 0029): then `d` is the full distance and `di` the
+    !! part of the ray in air.
     integer(4), intent(in), value :: i, j, pos1, pos2
     !! 1-based segment indices, positions (1 = air, 2 = soil)
     real(8), intent(in), value :: d, di
@@ -417,6 +429,13 @@ contains
       fpropi = exp(-di * prop)
       zt = cE * (fprop * g + s * fpropi * gi) / (la * lb)
       zl = cM * (cosTheta * fprop * g + s * cosThetaI * fpropi * gi)
+    else if (mesh%crossMedium) then
+      ! Mixed media, transmitted field (theory.md §5.1): direct term only,
+      ! cE -> 1/(2π(W_a+W_s)), retardation along the straight ray split at
+      ! z = 0 (`d` = full distance, `di` = its length in air)
+      fprop = exp(-di * mesh%propAir - (d - di) * mesh%propSoil)
+      zt = mesh%cEMixed * fprop * g / (la * lb)
+      zl = mesh%cMMixed * cosTheta * fprop * g
     else
       ! Mixed media: coupling neglected (theory.md §5)
       zt = ZERO_CPLX

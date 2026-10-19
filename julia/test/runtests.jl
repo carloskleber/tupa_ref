@@ -28,6 +28,11 @@ const PHASE11_LAG_FIXTURES = ["grid_safety", "grid_safety_potentials"]
 # ported: the loader refuses the `branch` element. No golden fixtures.
 const PHASE10D_LAG_CASES = ["induced_nucci1993", "induced_nucci1993_risers"]
 
+# ROADMAP Phase 14 (ADR 0029, air-soil cross-medium coupling), not ported: the loader refuses
+# `numerics.crossMedium: "transmission"`.
+const PHASE14_LAG_CASES = ["rod_air_cross", "channel_tower_cross"]
+const PHASE14_LAG_FIXTURES = ["rod_air_cross"]
+
 set_verbosity(VERB_QUIET)
 
 @testset "Tupa" begin

@@ -26,6 +26,13 @@ numerics, which move result files.
 
 ### Added
 
+- **Air–soil cross-medium coupling** (`numerics.crossMedium: "transmission"`,
+  default `"none"`; ADR 0029, theory.md §5.1, ROADMAP Phase 14). Segments in air
+  and in soil couple through the transmitted field (`1/(2π(Wₐ+Wₛ))`, no image term,
+  straight-ray retardation) in `Zt`, `Zℓ` and the observation potentials, so a
+  lightning channel or tower now acts on buried electrodes. Off by default: no
+  existing result moves. Fortran only; the Rust and Julia loaders refuse
+  the switch. New cases `rod_air_cross`, `channel_tower_cross`.
 - **Total voltage along an overhead line** (`signal.totalVoltage`, ADR 0028
   amendment, theory.md §4.6.3): the observed node voltages of a transient run can be
   reported as the total voltage `φ + s∫A_z^i dz` of the lightning channel's incident

@@ -103,6 +103,8 @@ program test_common_cases
   ! Ideal images (numerics.imageModel "ideal", ROADMAP Phase 10 item 2): the
   ! low-frequency-limit pin; the cases above run the Γ(ω) default
   call compareCase("../common/portela1997_ideal.json", "../common/portela1997_ideal_expected.csv", "Node_1")
+  ! Air-soil cross-medium coupling (numerics.crossMedium, ROADMAP Phase 14 item 1)
+  call compareCase("../common/rod_air_cross.json", "../common/rod_air_cross_expected.csv", "Node_1")
 
   ! Transient fixtures, one per ROADMAP Phase 9 option
   call compareTransientCase("portela1997_transient_interpolated")

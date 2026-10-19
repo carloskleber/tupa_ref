@@ -415,7 +415,9 @@ fn every_expected_fixture_has_a_test() {
             "portela1997_transient_signals",
             "portelaMesh",
             "portelaMesh_transient",
-            "rod"
+            "rod",
+            // ROADMAP Phase 14 (ADR 0029), not ported: the loader refuses the case
+            "rod_air_cross"
         ],
         "new golden fixture in common/: add a check_case() test for it"
     );

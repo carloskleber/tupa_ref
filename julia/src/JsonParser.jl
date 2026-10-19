@@ -224,6 +224,11 @@ function load_numerics(num)
         model == "ideal" ? (image_model = :ideal) :
         raise_error("mTupa: unknown numerics.imageModel '$model' (expected frequency-dependent or ideal)")
     end
+    cross = field(num, "crossMedium") === nothing ? "none" : json_str(num, "crossMedium")
+    cross == "none" ||
+        (cross == "transmission" ?
+         raise_error("mTupa: numerics.crossMedium \"transmission\" (ROADMAP Phase 14, ADR 0029) is not implemented in the Julia port") :
+         raise_error("mTupa: unknown numerics.crossMedium '$cross' (expected none or transmission)"))
     max_len = 0.0
     if field(num, "maxSegmentLength") !== nothing
         max_len = json_real(num, "maxSegmentLength")

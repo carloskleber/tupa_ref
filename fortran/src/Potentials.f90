@@ -39,9 +39,9 @@ contains
 
     integer :: nf, nseg, nM, k, b, m, med
     real(8), allocatable :: omega(:), p1(:,:), p2(:,:), q1(:,:), q2(:,:), mid(:,:), midi(:,:)
-    complex(8), allocatable :: cE(:,:), gam(:,:), gImg(:,:), it(:,:), acc(:)
+    complex(8), allocatable :: cE(:,:), gam(:,:), gImg(:,:), it(:,:), acc(:), cEMix(:)
     type(tMesh) :: mesh
-    real(8) :: muAir, muSoil, g, gi, r, ri, pt(3)
+    real(8) :: muAir, muSoil, g, gi, r, ri, pt(3), zA, zS, rAir
     complex(8) :: w
 
     nf   = study%voltageResults%frequencyCount()
@@ -50,7 +50,7 @@ contains
     allocate(psi(nM, nf))
     psi = (0.0d0, 0.0d0)
 
-    allocate(omega(nf), cE(2, nf), gam(2, nf), gImg(2, nf), it(nseg, nf))
+    allocate(cEMix(nf), omega(nf), cE(2, nf), gam(2, nf), gImg(2, nf), it(nseg, nf))
     muAir  = study%structure%air%mur * MU0
     muSoil = study%structure%soil%mur * MU0
     mesh%imageModel = study%imageModel
@@ -61,6 +61,7 @@ contains
       cE(1, k)   = mesh%cEAir;     cE(2, k)   = mesh%cESoil
       gam(1, k)  = mesh%propAir;   gam(2, k)  = mesh%propSoil
       gImg(1, k) = mesh%gammaAir;  gImg(2, k) = mesh%gammaSoil
+      cEMix(k)   = mesh%cEMixed
       do b = 1, nseg
         it(b, k) = study%longCurrentResults%get(b, k) + study%transCurrentResults%get(b, k)
       end do
@@ -76,7 +77,7 @@ contains
       midi(:, b) = 0.5d0 * (q1(:, b) + q2(:, b))
     end do
 
-    !$omp parallel default(shared) private(m, b, k, med, g, gi, r, ri, pt, w, acc)
+    !$omp parallel default(shared) private(m, b, k, med, g, gi, r, ri, pt, w, acc, zA, zS, rAir)
     allocate(acc(nf))
     !$omp do schedule(dynamic)
     do m = 1, nM
@@ -85,7 +86,23 @@ contains
       if (pt(3) > 0.0d0) med = 1
       acc = (0.0d0, 0.0d0)
       do b = 1, nseg
-        if (study%geomPos(b) /= med) cycle
+        if (study%geomPos(b) /= med) then
+          ! Other medium: transmitted field only (theory.md §5.1), when enabled
+          if (.not. study%crossMedium) cycle
+          g = segmentPotentialFactor(p1(:, b), p2(:, b), pt, study%geomRadius(b))
+          r = norm2(pt - mid(:, b))
+          if (med == 1) then
+            zA = pt(3);       zS = mid(3, b)
+          else
+            zA = mid(3, b);   zS = pt(3)
+          end if
+          rAir = r * zA / (zA - zS)
+          do k = 1, nf
+            w = exp(-gam(1, k) * rAir - gam(2, k) * (r - rAir)) * g
+            acc(k) = acc(k) + cEMix(k) * it(b, k) * w / study%geomLength(b)
+          end do
+          cycle
+        end if
         g  = segmentPotentialFactor(p1(:, b), p2(:, b), pt, study%geomRadius(b))
         gi = segmentPotentialFactor(q1(:, b), q2(:, b), pt, study%geomRadius(b))
         r  = norm2(pt - mid(:, b))

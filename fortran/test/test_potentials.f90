@@ -21,6 +21,7 @@ program test_potentials
   call testGeometryFactor()
   call testRodFarField()
   call testRodNearSurface()
+  call testCrossMediumContinuity()
   call testSafetyCase()
 
   call test_summary()
@@ -134,6 +135,36 @@ contains
     call test_ok("10 Hz: ψ at the middle of a segment within 10 % of its mean node voltage", &
                  abs(psi(1, 1) - uMean) < 0.10d0 * abs(uMean), "surface potential")
   end subroutine testRodNearSurface
+
+  subroutine testCrossMediumContinuity()
+    !! Cross-medium coupling (ROADMAP Phase 14, theory.md §5.1): the scalar
+    !! potential is continuous across z = 0, which holds for the transmitted
+    !! term (cE.tau is symmetric in the media) and fails when the other
+    !! medium's segments are ignored.
+    type(tStudy) :: study
+    complex(8), allocatable :: psi(:,:)
+    real(8) :: pts(3, 2), worst, worstOff
+    integer :: k
+
+    call test_init("Cross-medium: potential continuous across the air-soil interface")
+    call solveCase("../common/rod_air_cross.json", study)
+    pts(:, 1) = [0.5d0, 0.0d0, -1.0d-6]
+    pts(:, 2) = [0.5d0, 0.0d0,  1.0d-6]
+    call potentialsAt(study, pts, psi)
+    worst = 0.0d0
+    do k = 1, size(psi, 2)
+      worst = max(worst, abs(psi(1, k) - psi(2, k)) / abs(psi(1, k)))
+    end do
+    call test_ok("coupling on: soil/air potentials agree within 1e-5", worst < 1.0d-5, "continuity")
+
+    study%crossMedium = .false.
+    call potentialsAt(study, pts, psi)
+    worstOff = 0.0d0
+    do k = 1, size(psi, 2)
+      worstOff = max(worstOff, abs(psi(1, k) - psi(2, k)) / abs(psi(1, k)))
+    end do
+    call test_ok("coupling off: the same points disagree (> 1e-2)", worstOff > 1.0d-2, "neglect breaks continuity")
+  end subroutine testCrossMediumContinuity
 
   subroutine testSafetyCase()
     type(tStudy) :: study

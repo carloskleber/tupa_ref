@@ -1324,7 +1324,7 @@ give the sign rules, where "add"/"subtract" is the sign of $\Gamma$ itself:
 | --- | --- | --- |
 | Both segments in **soil** | `+` (add)        | `+` (add)          |
 | Both segments in **air**  | `−` (subtract)   | `−` (subtract)     |
-| Segments in different media | coupling neglected (set to 0) | idem |
+| Segments in different media | coupling neglected (set to 0); transmitted-field model opt-in, §5.1 | idem |
 
 Rationale: for buried conductors the air above is (nearly) non-conducting, so
 the leakage current sees a "current mirror" of equal sign; for conductors in
@@ -1423,6 +1423,46 @@ replace the single image by layered-earth Green's functions, made affordable
 by quasi-static complex images (matrix-pencil fitted), as in the multilayer
 hybrid of Li, Chen & Wang [33]. TUPÃ assumes a uniform half-space by design;
 stratification is out of scope (§10.1).
+
+### 5.1 Cross-medium coupling (opt-in transmitted-field model)
+
+`numerics.crossMedium: "transmission"` (default `"none"`, the neglect above)
+couples a segment in air to one in soil through the field that crosses the
+interface. For a point charge in medium 1 observed in medium 2 the static
+boundary-value problem has a closed solution, a single transmitted term
+(Stratton; Salari [66] App. B reaches the same $\tau$ as the quasi-static limit
+of the Fresnel coefficients):
+
+$$\phi_2 = \frac{q}{2\pi\,(W_1 + W_2)}\,\frac{1}{R}, \qquad W = \sigma + j\omega\varepsilon .$$
+
+There is **no image term** in the other medium. Carrying it through the
+segment integrals of §4.1 and attaching retardation, the mixed-pair entries are
+
+$$Z_t(a,b) = \frac{c_E^{\times}}{l_a\,l_b}\, e^{-\gamma_a R_a - \gamma_s R_s}\, g,
+\qquad Z_\ell(a,b) = c_M^{\times}\,\cos\theta\; e^{-\gamma_a R_a - \gamma_s R_s}\, g,$$
+
+with $c_E^{\times} = 1/(2\pi(W_a + W_s)) = 2\,c_E^{a} c_E^{s}/(c_E^{a} + c_E^{s})$
+(symmetric in the two media, so the mixed block stays reciprocal, §9 item 4),
+$c_M^{\times}$ the mean of the two $c_M$ (the model assumes equal permeabilities),
+$g$ the ordinary direct geometry factor of the pair, and $R = R_a + R_s$ the
+midpoint distance split at the point where the straight midpoint-to-midpoint
+ray crosses $z = 0$. $Z_\ell$ has no image parcel either: with equal $\mu$ the
+vector potential is continuous across the interface to the quasi-static level,
+so only its reflection (a higher-order effect) is dropped.
+
+Checks built into the test suite ([ADR 0029](adr/0029-cross-medium-coupling.md)):
+for identical media the mixed kernel equals the homogeneous direct term
+and $\Gamma = 0$; the scalar potential is continuous across $z = 0$ with the
+coupling on and visibly discontinuous with it off; and the same
+transmitted term is applied to the observation potentials of §3.1, so GPR,
+touch and step voltages feel air-side sources (the lightning channel
+included, ROADMAP Phase 14 item 2). **Limits.** The retardation factor is the
+straight-ray heuristic, not a Sommerfeld solution; the model is a
+low-frequency one and the neglected lateral-wave terms grow with frequency
+(§10.1). On `rod_air` the input voltage moves by 3.6e-6 at 10 Hz, 3.6e-4 at
+1 kHz, 3.1e-2 at 100 kHz and 5.7e-2 at 1 MHz; for the tower–channel–rod
+case (`channel_tower_cross`) the tower-top voltage moves by 0.2 % at
+10 kHz and 9.5 % at 1 MHz.
 
 ---
 
