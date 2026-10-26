@@ -69,7 +69,7 @@ module tupa
   use mChannelCalibration, only: calibrateChannels
   use mJsonParser
   use mSignal, only: tSignal, tSignalSlot, newHeidlerSignal, newHeidlerSignalTerms, newDoubleExpSignal, &
-                     newPortelaSignal, newSineSignal
+                     newPortelaSignal, newSineSignal, newStepSignal, newBranchNortonSignal
   use mTransient, only: transientResponseSources, transientResponseSignals, tTransientOptions
   use mResultsWriter, only: writeResultsCsv, writeResultsJson, &
                              writeTransientResultsCsv, writeTransientResultsJson, &
@@ -401,6 +401,7 @@ contains
           mat_id  = json_str(elem_obj, "material")
           elem = newElementLine(trim(id), trim(from_id), trim(to_id), &
                                 radius, nseg, trim(mat_id))
+          if (json_has(elem_obj, "lumped")) call setLineLumped(elem, json_child(elem_obj, "lumped"), nseg)
           call study%structure%addElement(elem)
         case ("catenary")
           id      = json_str(elem_obj, "id")
@@ -990,6 +991,36 @@ contains
     end if
   end subroutine parseSlotTerminals
 
+  subroutine setLineLumped(elem, lumped, nseg)
+    !! Embed a lumped series R-L-C in one segment of a `line` element
+    !! ("lumped": {segment, resistance, inductance, capacitance}); `segment`
+    !! is 1-based and defaults to the middle one.
+    class(tElement), intent(inout) :: elem
+    type(tJsonValue), pointer, intent(in) :: lumped
+    integer, intent(in) :: nseg
+    integer :: seg
+    character(len=16) :: buf
+
+    seg = (nseg + 1) / 2
+    if (json_has(lumped, "segment")) seg = json_int(lumped, "segment")
+    if (seg < 1 .or. seg > nseg) then
+      write(buf, '(I0)') nseg
+      call raiseError("mTupa: lumped.segment must lie in 1.." // trim(buf) // " for line '" // trim(elem%id) // "'")
+      return
+    end if
+    select type (elem)
+    type is (tLine)
+      elem%lumpSegment = seg
+      if (json_has(lumped, "resistance"))  elem%lumpResistance  = json_real(lumped, "resistance")
+      if (json_has(lumped, "inductance"))  elem%lumpInductance  = json_real(lumped, "inductance")
+      if (json_has(lumped, "capacitance")) elem%lumpCapacitance = json_real(lumped, "capacitance")
+      if (elem%lumpResistance < 0.0d0 .or. elem%lumpInductance < 0.0d0 .or. elem%lumpCapacitance < 0.0d0) then
+        call raiseError("mTupa: lumped resistance, inductance and capacitance of line '" // trim(elem%id) // &
+                        "' must be non-negative")
+      end if
+    end select
+  end subroutine setLineLumped
+
   subroutine parseSignalWaveform(obj, sig)
     !! Build one excitation waveform from a JSON object carrying
     !! "waveform" and its fields (ADR 0015 and amendments): the "signal"
@@ -1041,9 +1072,16 @@ contains
       phaseDeg = 0.0d0
       if (json_has(obj, "phaseDeg")) phaseDeg = json_real(obj, "phaseDeg")
       allocate(sig, source=newSineSignal(imax, json_real(obj, "frequencyHz"), phaseDeg))
+    case ("step")
+      allocate(sig, source=newStepSignal(imax))
+    case ("branchNorton")
+      ! Charged capacitor behind a series R-L-C branch ("imax" = V0 in V):
+      ! the Norton current of a Marx stage free response
+      allocate(sig, source=newBranchNortonSignal(imax, json_real(obj, "resistance"), &
+        json_real(obj, "inductance"), json_real(obj, "capacitance")))
     case default
       call raiseError("mTupa: unknown signal.waveform '" // trim(waveformType) // &
-                       "' (expected heidler, doubleExp, portela or sine)")
+                       "' (expected heidler, doubleExp, portela, sine, step or branchNorton)")
     end select
   end subroutine parseSignalWaveform
 

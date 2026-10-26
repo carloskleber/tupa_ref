@@ -7,6 +7,16 @@ numerics, which move result files.
 
 ## Unreleased
 
+### Added
+
+- **Marx impulse generator support** ([docs/marx_generator.md](docs/marx_generator.md)):
+  `step` and `branchNorton` signal waveforms (a capacitor charged to V0
+  discharging through a series R-L-C `branch`, as its Norton current source),
+  a `lumped` R-L-C embedded in one segment of a `line` element (keeps the
+  segment's geometry and coupling), and branch-current output in
+  `transientResponseSignals` (API only). Case `common/marx_single_stage.json`;
+  tests `test_marx`, `test_lumped_segment`.
+
 ### Documentation
 
 - **Validation writeups for the newer features** ([docs/validation/](docs/validation/README.md)):

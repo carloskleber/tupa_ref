@@ -14,6 +14,7 @@ module mStudy
   !! 5. I/O writes results to CSV or JSON
   use mMesh
   use mBranch, only: tBranch
+  use mElectrode, only: lumpedImpedance
   use mIncident, only: tIncidentPath, buildIncidentPath, incidentDrop
   use mStructure
   use mElement
@@ -227,6 +228,17 @@ contains
     integer(4), intent(in) :: i
     real(8), intent(in) :: omega
 
+    zint = segmentConductorImpedance(this, i, omega) + &
+           lumpedImpedance(this%structure%electrodes(i), cmplx(0.0d0, omega, kind=8))
+  end function segmentInternalImpedance
+
+  complex(8) function segmentConductorImpedance(this, i, omega) result(zint)
+    !! Conductor part of `segmentInternalImpedance`, without the embedded
+    !! lumped element.
+    class(tStudy), intent(in) :: this
+    integer(4), intent(in) :: i
+    real(8), intent(in) :: omega
+
     if (this%structure%electrodes(i)%loaded) then
       zint = cmplx(this%structure%electrodes(i)%loadResistance, &
                    omega * this%structure%electrodes(i)%loadInductance, kind=8) * this%geomLength(i)
@@ -239,10 +251,19 @@ contains
       call raiseError("tStudy%run: internal impedance requires a tLinear conductor material")
       zint = ZERO_CPLX
     end select
-  end function segmentInternalImpedance
+  end function segmentConductorImpedance
 
   complex(8) function segmentInternalImpedanceLaplace(this, i, sLap) result(zint)
     !! `segmentInternalImpedance` at a complex frequency s = c + jω.
+    class(tStudy), intent(in) :: this
+    integer(4), intent(in) :: i
+    complex(8), intent(in) :: sLap
+
+    zint = segmentConductorImpedanceLaplace(this, i, sLap) + lumpedImpedance(this%structure%electrodes(i), sLap)
+  end function segmentInternalImpedanceLaplace
+
+  complex(8) function segmentConductorImpedanceLaplace(this, i, sLap) result(zint)
+    !! Conductor part of `segmentInternalImpedanceLaplace`.
     class(tStudy), intent(in) :: this
     integer(4), intent(in) :: i
     complex(8), intent(in) :: sLap
@@ -259,7 +280,7 @@ contains
       call raiseError("tStudy%run: internal impedance requires a tLinear conductor material")
       zint = ZERO_CPLX
     end select
-  end function segmentInternalImpedanceLaplace
+  end function segmentConductorImpedanceLaplace
 
   ! =====================================================================
   ! Study execution and reporting

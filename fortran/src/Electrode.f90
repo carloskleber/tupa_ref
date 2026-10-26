@@ -11,7 +11,7 @@ module mElectrode
   implicit none
   private
 
-  public :: newElectrode
+  public :: newElectrode, lumpedImpedance
 
   type, public :: tElectrode
     !! Cylindrical conductor segment between two nodes.
@@ -36,6 +36,15 @@ module mElectrode
     !! Series loading resistance per unit length R' (Ω/m), `loaded` only
     real(8) :: loadInductance = 0.0d0
     !! Series loading inductance per unit length L' (H/m), `loaded` only
+    real(8) :: lumpResistance = 0.0d0
+    !! Lumped series resistance R embedded in this segment (Ω); with
+    !! `lumpInductance`/`lumpCapacitance` the total series impedance
+    !! R + sL + 1/(sC) is added to the segment's internal impedance (the
+    !! NEC "LD card"), so the segment keeps its geometry and coupling
+    real(8) :: lumpInductance = 0.0d0
+    !! Lumped series inductance L embedded in this segment (H)
+    real(8) :: lumpCapacitance = 0.0d0
+    !! Lumped series capacitance C embedded in this segment (F); 0 = none
     complex(8) :: il
     !! Longitudinal current through the electrode (A)
     complex(8) :: it
@@ -43,6 +52,18 @@ module mElectrode
   end type tElectrode
 
 contains
+
+  complex(8) function lumpedImpedance(this, s) result(z)
+    !! Embedded lumped series impedance `R + sL + 1/(sC)` of the segment at
+    !! the complex frequency `s` (`jω`, or `c + jω` for the NLT); zero when
+    !! the segment carries none. A capacitor needs `s /= 0`, which neither
+    !! the harmonic sweep nor the NLT bins ever use.
+    type(tElectrode), intent(in) :: this
+    complex(8), intent(in) :: s
+
+    z = cmplx(this%lumpResistance, 0.0d0, kind=8) + s * this%lumpInductance
+    if (this%lumpCapacitance > 0.0d0) z = z + 1.0d0 / (s * this%lumpCapacitance)
+  end function lumpedImpedance
 
   function newElectrode(id, nodeIndex1, nodeIndex2) result(this)
     !! Construct a tElectrode connecting two nodes by their array indices.
