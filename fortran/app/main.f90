@@ -7,7 +7,7 @@ program main
   !!
   !! **Usage:**
   !!   fpm run -- [-h|--help] [--version] [-v|--verbose] [-q|--quiet] [--epsrel <value>] [--kernel single|double]
-  !!              [--image-model frequency-dependent|ideal] [--threads <n>] [--no-cache] <study.json>
+  !!              [--image-model frequency-dependent|ideal] [--threads <n>] [--no-cache] [--output-dir <dir>] <study.json>
   !!   ./tupa [same options] <study.json>
   !!
   !! **Input:**
@@ -80,6 +80,8 @@ program main
   !! Parsed --threads value
   logical :: threadsGiven = .false.
   !! Whether --threads was passed
+  character(len=512) :: outputDir = "results"
+  !! Parsed --output-dir value
 
   filename = ""
   nargs = command_argument_count()
@@ -141,6 +143,10 @@ program main
       if (ios /= 0 .or. iosVal /= 0 .or. nThreads < 1) &
         call raiseError("--threads: invalid value '" // trim(arg) // "' (must be a positive integer)")
       threadsGiven = .true.
+    case ("--output-dir")
+      i = i + 1
+      if (i > nargs) call raiseError("--output-dir requires a directory, e.g. --output-dir results")
+      call get_command_argument(i, outputDir)
     case ("--no-cache")
       call geomCacheSetEnabled(.false.)
     case default
@@ -162,7 +168,7 @@ program main
     if (threadsGiven) print *, "tupa: --threads ignored (built without OpenMP; the frequency loop runs serially)"
   end if
 
-  call runFromFile(trim(filename))
+  call runFromFile(trim(filename), outputDir=trim(outputDir))
 
 contains
 
@@ -188,6 +194,7 @@ contains
     print '(a)', "      --threads N            threads for the frequency loop (OpenMP builds;"
     print '(a)', "                             default OMP_NUM_THREADS)"
     print '(a)', "      --no-cache             disable the geometry-factor quadrature memo table"
+    print '(a)', "      --output-dir DIR       directory for the result files (default: results/)"
     print '(a)', "  -h, --help                 display this help and exit"
     print '(a)', "      --version              output version information and exit"
   end subroutine printUsage

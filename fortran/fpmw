@@ -1,0 +1,6 @@
+#!/bin/bash
+# fpm wrapper: sets the compiler flags the SLATEC (F77) sources need, then
+# forwards everything to fpm, e.g.  ./fpmw run -- ../common/marx_single_stage.json
+# (fpm applies the flags to all packages; for an optimised install use build.sh.)
+export FPM_FFLAGS="${FPM_FFLAGS:--std=legacy -Wno-argument-mismatch -fallow-invalid-boz -ffree-line-length-none -fno-range-check -fopenmp}"
+exec fpm "$@"

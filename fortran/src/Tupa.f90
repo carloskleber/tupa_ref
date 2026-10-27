@@ -1251,7 +1251,7 @@ contains
   ! Convenience entry point
   ! =====================================================================
 
-  subroutine runFromFile(filename)
+  subroutine runFromFile(filename, outputDir)
     !! CLI entry point (`app/main.f90`): load a JSON case file, run it end
     !! to end, and report.
     !!
@@ -1265,7 +1265,8 @@ contains
     !! neither may be present. Each that is writes its own results
     !! (`<basename>_results.csv/.json` for the sweep,
     !! `<basename>_transient_results.csv/.json` for the transient run,
-    !! `mResultsWriter`) to the current directory, honouring an `outputs`
+    !! `mResultsWriter`) to `outputDir` (default the current directory),
+    !! honouring an `outputs`
     !! selection if present. The sweep's results are written before
     !! `transientResponse` runs, since `transientResponse` calls
     !! `study%runSweep` internally (its own unit-current, FFT-sample
@@ -1275,6 +1276,8 @@ contains
     !! nothing to solve.
     character(len=*), intent(in) :: filename
     !! Path to the JSON study file
+    character(len=*), intent(in), optional :: outputDir
+    !! Directory the result files are written to (created if missing)
     type(tStudy) :: study
     !! Local study object (created, reported, then destroyed)
     character(len=256), allocatable :: sourceNodeIds(:), sourceReturnNodeIds(:)
@@ -1335,6 +1338,12 @@ contains
     ranSweep     = allocated(sourceNodeIds) .and. allocated(freqHz)
     ranTransient = allocated(signal)
     base = basenameNoExt(filename)
+    if (present(outputDir)) then
+      if (len_trim(outputDir) > 0 .and. (ranSweep .or. ranTransient)) then
+        call execute_command_line("mkdir -p '" // trim(outputDir) // "'")
+        base = trim(outputDir) // "/" // trim(base)
+      end if
+    end if
 
     if (ranSweep) then
       call study%runSweep(freqHz, sourceNodeIds, sourceCurrents, sourceIsVoltage=sourceIsVoltage, &
