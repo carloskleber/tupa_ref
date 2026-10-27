@@ -42,6 +42,11 @@ module tupa
   !!   `growth` (graded from the foot). Plants `<id>-base` (separate from
   !!   the strike node), `<id>_n<k>` and `<id>-top`.
   !!
+  !! - `"plane"` — wire-grid rectangle of any orientation
+  !!   (`mElementPlane`, docs/marx_generator.md): `id`, `origin`, `u`, `v`
+  !!   (edge vectors, 3D), `cellsU`, `cellsV`, `radius`, `material`. Reuses
+  !!   nodes and bars already present, so planes join along shared edges.
+  !!
   !! - `"branch"` — lumped series R-L-C branch (`mElementBranch`, ADR 0028,
   !!   theory.md §6): `id`, `from` (node), optional `to` (node; absent =
   !!   remote earth), and `resistance` (Ω), `inductance` (H),
@@ -63,6 +68,7 @@ module tupa
   use mMaterial
   use mElementLine
   use mElementMesh
+  use mElementPlane
   use mElementCatenary
   use mElementChannel
   use mElementBranch
@@ -535,6 +541,18 @@ contains
           elem = newElementMesh(trim(id), [x, y, z], lengthX, lengthY, rowsX, rowsY, &
                                 radius, nseg, trim(mat_id))
           call study%structure%addElement(elem)
+        case ("plane")
+          block
+            real(8) :: pOrigin(3), pU(3), pV(3)
+            id = json_str(elem_obj, "id")
+            pOrigin = jsonVec3(elem_obj, "origin")
+            pU = jsonVec3(elem_obj, "u")
+            pV = jsonVec3(elem_obj, "v")
+            mat_id = json_str(elem_obj, "material")
+            elem = newElementPlane(trim(id), pOrigin, pU, pV, json_int(elem_obj, "cellsU"), &
+                                   json_int(elem_obj, "cellsV"), json_real(elem_obj, "radius"), trim(mat_id))
+            call study%structure%addElement(elem)
+          end block
         case default
           print *, "mTupa: unknown element type '", trim(elem_type), "' — skipped"
         end select
@@ -990,6 +1008,21 @@ contains
       end select
     end if
   end subroutine parseSlotTerminals
+
+  function jsonVec3(obj, key) result(v)
+    !! Read a 3-vector from the JSON array `key` of `obj`.
+    type(tJsonValue), pointer, intent(in) :: obj
+    character(len=*), intent(in) :: key
+    real(8) :: v(3)
+    type(tJsonValue), pointer :: arr, item
+    integer :: k
+
+    arr => json_child(obj, key)
+    do k = 1, 3
+      item => json_item(arr, k)
+      v(k) = json_value_real(item)
+    end do
+  end function jsonVec3
 
   subroutine setLineLumped(elem, lumped, nseg)
     !! Embed a lumped series R-L-C in one segment of a `line` element

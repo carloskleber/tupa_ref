@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from tupa_gui.data import LineElement, MeshElement, StudyLoadError, load_study
+from tupa_gui.data import LineElement, MeshElement, PlaneElement, StudyLoadError, load_study
 
 COMMON = Path(__file__).resolve().parents[2] / "common"
 
@@ -248,3 +248,15 @@ def test_channel_element_loads_and_plants_its_end_nodes():
     free = load_study(COMMON / "channel_unloaded.json")
     ch = next(e for e in free.elements if e.id == "ch")
     assert ch.strike is None and ch.position == (0.0, 0.0, 0.0) and ch.segments == 200
+
+
+def test_load_plane_elements():
+    study = load_study(COMMON / "marx_lab_2MV.json")
+    planes = [e for e in study.elements if isinstance(e, PlaneElement)]
+    assert planes
+    wall = next(p for p in planes if p.id == "WallS")
+    assert wall.origin == (0.0, 0.0, 0.5)
+    assert wall.u == (40.0, 0.0, 0.0)
+    # bar count mirrors Plane.f90: cu*(cv+1) + (cu+1)*cv
+    assert len(wall.bars()) == wall.cells_u * (wall.cells_v + 1) + (wall.cells_u + 1) * wall.cells_v
+    assert wall.point(wall.cells_u, wall.cells_v) == pytest.approx(tuple(o + a + b for o, a, b in zip(wall.origin, wall.u, wall.v)))
