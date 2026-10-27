@@ -1,0 +1,948 @@
+{
+ "title": "Marx generator 2 MV, divider, 500 kV tower mockup with 50 m phase cable, 40 m hall",
+ "soil": {
+  "conductivity": 0.01,
+  "permittivity": 10.0,
+  "permeability": 1.0
+ },
+ "nodes": [
+  {
+   "id": "G0",
+   "position": [
+    0,
+    0,
+    0.5
+   ]
+  },
+  {
+   "id": "R0",
+   "position": [
+    0,
+    0,
+    -3.0
+   ]
+  },
+  {
+   "id": "G1",
+   "position": [
+    20.0,
+    0,
+    0.5
+   ]
+  },
+  {
+   "id": "R1",
+   "position": [
+    20.0,
+    0,
+    -3.0
+   ]
+  },
+  {
+   "id": "G2",
+   "position": [
+    40.0,
+    0,
+    0.5
+   ]
+  },
+  {
+   "id": "R2",
+   "position": [
+    40.0,
+    0,
+    -3.0
+   ]
+  },
+  {
+   "id": "G3",
+   "position": [
+    40.0,
+    20.0,
+    0.5
+   ]
+  },
+  {
+   "id": "R3",
+   "position": [
+    40.0,
+    20.0,
+    -3.0
+   ]
+  },
+  {
+   "id": "G4",
+   "position": [
+    40.0,
+    40.0,
+    0.5
+   ]
+  },
+  {
+   "id": "R4",
+   "position": [
+    40.0,
+    40.0,
+    -3.0
+   ]
+  },
+  {
+   "id": "G5",
+   "position": [
+    20.0,
+    40.0,
+    0.5
+   ]
+  },
+  {
+   "id": "R5",
+   "position": [
+    20.0,
+    40.0,
+    -3.0
+   ]
+  },
+  {
+   "id": "G6",
+   "position": [
+    0,
+    40.0,
+    0.5
+   ]
+  },
+  {
+   "id": "R6",
+   "position": [
+    0,
+    40.0,
+    -3.0
+   ]
+  },
+  {
+   "id": "G7",
+   "position": [
+    0,
+    20.0,
+    0.5
+   ]
+  },
+  {
+   "id": "R7",
+   "position": [
+    0,
+    20.0,
+    -3.0
+   ]
+  },
+  {
+   "id": "N0",
+   "position": [
+    10.0,
+    28.0,
+    0.3
+   ]
+  },
+  {
+   "id": "A1",
+   "position": [
+    10.0,
+    28.0,
+    0.3
+   ]
+  },
+  {
+   "id": "N1",
+   "position": [
+    10.0,
+    28.0,
+    1.0
+   ]
+  },
+  {
+   "id": "A2",
+   "position": [
+    10.0,
+    28.0,
+    1.0
+   ]
+  },
+  {
+   "id": "N2",
+   "position": [
+    10.0,
+    28.0,
+    1.7
+   ]
+  },
+  {
+   "id": "A3",
+   "position": [
+    10.0,
+    28.0,
+    1.7
+   ]
+  },
+  {
+   "id": "N3",
+   "position": [
+    10.0,
+    28.0,
+    2.4
+   ]
+  },
+  {
+   "id": "A4",
+   "position": [
+    10.0,
+    28.0,
+    2.4
+   ]
+  },
+  {
+   "id": "N4",
+   "position": [
+    10.0,
+    28.0,
+    3.1
+   ]
+  },
+  {
+   "id": "A5",
+   "position": [
+    10.0,
+    28.0,
+    3.1
+   ]
+  },
+  {
+   "id": "N5",
+   "position": [
+    10.0,
+    28.0,
+    3.8
+   ]
+  },
+  {
+   "id": "A6",
+   "position": [
+    10.0,
+    28.0,
+    3.8
+   ]
+  },
+  {
+   "id": "N6",
+   "position": [
+    10.0,
+    28.0,
+    4.5
+   ]
+  },
+  {
+   "id": "A7",
+   "position": [
+    10.0,
+    28.0,
+    4.5
+   ]
+  },
+  {
+   "id": "N7",
+   "position": [
+    10.0,
+    28.0,
+    5.2
+   ]
+  },
+  {
+   "id": "A8",
+   "position": [
+    10.0,
+    28.0,
+    5.2
+   ]
+  },
+  {
+   "id": "N8",
+   "position": [
+    10.0,
+    28.0,
+    5.9
+   ]
+  },
+  {
+   "id": "A9",
+   "position": [
+    10.0,
+    28.0,
+    5.9
+   ]
+  },
+  {
+   "id": "N9",
+   "position": [
+    10.0,
+    28.0,
+    6.6
+   ]
+  },
+  {
+   "id": "A10",
+   "position": [
+    10.0,
+    28.0,
+    6.6
+   ]
+  },
+  {
+   "id": "N10",
+   "position": [
+    10.0,
+    28.0,
+    7.3
+   ]
+  },
+  {
+   "id": "Dtop",
+   "position": [
+    14.0,
+    24.0,
+    7.3
+   ]
+  },
+  {
+   "id": "Dlv",
+   "position": [
+    14.0,
+    24.0,
+    0.3
+   ]
+  },
+  {
+   "id": "TowerFoot",
+   "position": [
+    9.0,
+    38.0,
+    -2.5
+   ]
+  },
+  {
+   "id": "TowerBase",
+   "position": [
+    9.0,
+    38.0,
+    0.5
+   ]
+  },
+  {
+   "id": "TowerTop",
+   "position": [
+    9.0,
+    38.0,
+    14.0
+   ]
+  },
+  {
+   "id": "Xarm",
+   "position": [
+    3.0,
+    37.0,
+    14.0
+   ]
+  },
+  {
+   "id": "P",
+   "position": [
+    3.0,
+    37.0,
+    10.0
+   ]
+  },
+  {
+   "id": "F",
+   "position": [
+    38.355339,
+    1.644661,
+    10.0
+   ]
+  }
+ ],
+ "materials": [
+  {
+   "id": "steel",
+   "epsilonr": 1.0,
+   "mur": 1.0,
+   "sigma": 10000000.0
+  },
+  {
+   "id": "copper",
+   "epsilonr": 1.0,
+   "mur": 1.0,
+   "sigma": 59600000.0
+  }
+ ],
+ "elements": [
+  {
+   "type": "line",
+   "id": "Earth0",
+   "from": "R0",
+   "to": "G0",
+   "radius": 0.015,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "Earth1",
+   "from": "R1",
+   "to": "G1",
+   "radius": 0.015,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "Earth2",
+   "from": "R2",
+   "to": "G2",
+   "radius": 0.015,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "Earth3",
+   "from": "R3",
+   "to": "G3",
+   "radius": 0.015,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "Earth4",
+   "from": "R4",
+   "to": "G4",
+   "radius": 0.015,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "Earth5",
+   "from": "R5",
+   "to": "G5",
+   "radius": 0.015,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "Earth6",
+   "from": "R6",
+   "to": "G6",
+   "radius": 0.015,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "Earth7",
+   "from": "R7",
+   "to": "G7",
+   "radius": 0.015,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "plane",
+   "id": "WallS",
+   "origin": [
+    0,
+    0,
+    0.5
+   ],
+   "u": [
+    40.0,
+    0,
+    0
+   ],
+   "v": [
+    0,
+    0,
+    39.5
+   ],
+   "cellsU": 8,
+   "cellsV": 8,
+   "radius": 0.7957747154594768,
+   "material": "steel"
+  },
+  {
+   "type": "plane",
+   "id": "WallE",
+   "origin": [
+    40.0,
+    0,
+    0.5
+   ],
+   "u": [
+    0,
+    40.0,
+    0
+   ],
+   "v": [
+    0,
+    0,
+    39.5
+   ],
+   "cellsU": 8,
+   "cellsV": 8,
+   "radius": 0.7957747154594768,
+   "material": "steel"
+  },
+  {
+   "type": "plane",
+   "id": "WallN",
+   "origin": [
+    40.0,
+    40.0,
+    0.5
+   ],
+   "u": [
+    -40.0,
+    0,
+    0
+   ],
+   "v": [
+    0,
+    0,
+    39.5
+   ],
+   "cellsU": 8,
+   "cellsV": 8,
+   "radius": 0.7957747154594768,
+   "material": "steel"
+  },
+  {
+   "type": "plane",
+   "id": "WallW",
+   "origin": [
+    0,
+    40.0,
+    0.5
+   ],
+   "u": [
+    0,
+    -40.0,
+    0
+   ],
+   "v": [
+    0,
+    0,
+    39.5
+   ],
+   "cellsU": 8,
+   "cellsV": 8,
+   "radius": 0.7957747154594768,
+   "material": "steel"
+  },
+  {
+   "type": "plane",
+   "id": "Ceiling",
+   "origin": [
+    0,
+    0,
+    40.0
+   ],
+   "u": [
+    40.0,
+    0,
+    0
+   ],
+   "v": [
+    0,
+    40.0,
+    0
+   ],
+   "cellsU": 8,
+   "cellsV": 8,
+   "radius": 0.7957747154594768,
+   "material": "steel"
+  },
+  {
+   "type": "branch",
+   "id": "MarxBase",
+   "from": "N0",
+   "resistance": 0.05
+  },
+  {
+   "type": "branch",
+   "id": "Stage1",
+   "from": "A1",
+   "to": "N0",
+   "resistance": 40.2,
+   "capacitance": 5e-07
+  },
+  {
+   "type": "line",
+   "id": "Body1",
+   "from": "A1",
+   "to": "N1",
+   "radius": 0.1,
+   "segments": 1,
+   "material": "steel"
+  },
+  {
+   "type": "branch",
+   "id": "Stage2",
+   "from": "A2",
+   "to": "N1",
+   "resistance": 40.2,
+   "capacitance": 5e-07
+  },
+  {
+   "type": "line",
+   "id": "Body2",
+   "from": "A2",
+   "to": "N2",
+   "radius": 0.1,
+   "segments": 1,
+   "material": "steel"
+  },
+  {
+   "type": "branch",
+   "id": "Stage3",
+   "from": "A3",
+   "to": "N2",
+   "resistance": 40.2,
+   "capacitance": 5e-07
+  },
+  {
+   "type": "line",
+   "id": "Body3",
+   "from": "A3",
+   "to": "N3",
+   "radius": 0.1,
+   "segments": 1,
+   "material": "steel"
+  },
+  {
+   "type": "branch",
+   "id": "Stage4",
+   "from": "A4",
+   "to": "N3",
+   "resistance": 40.2,
+   "capacitance": 5e-07
+  },
+  {
+   "type": "line",
+   "id": "Body4",
+   "from": "A4",
+   "to": "N4",
+   "radius": 0.1,
+   "segments": 1,
+   "material": "steel"
+  },
+  {
+   "type": "branch",
+   "id": "Stage5",
+   "from": "A5",
+   "to": "N4",
+   "resistance": 40.2,
+   "capacitance": 5e-07
+  },
+  {
+   "type": "line",
+   "id": "Body5",
+   "from": "A5",
+   "to": "N5",
+   "radius": 0.1,
+   "segments": 1,
+   "material": "steel"
+  },
+  {
+   "type": "branch",
+   "id": "Stage6",
+   "from": "A6",
+   "to": "N5",
+   "resistance": 40.2,
+   "capacitance": 5e-07
+  },
+  {
+   "type": "line",
+   "id": "Body6",
+   "from": "A6",
+   "to": "N6",
+   "radius": 0.1,
+   "segments": 1,
+   "material": "steel"
+  },
+  {
+   "type": "branch",
+   "id": "Stage7",
+   "from": "A7",
+   "to": "N6",
+   "resistance": 40.2,
+   "capacitance": 5e-07
+  },
+  {
+   "type": "line",
+   "id": "Body7",
+   "from": "A7",
+   "to": "N7",
+   "radius": 0.1,
+   "segments": 1,
+   "material": "steel"
+  },
+  {
+   "type": "branch",
+   "id": "Stage8",
+   "from": "A8",
+   "to": "N7",
+   "resistance": 40.2,
+   "capacitance": 5e-07
+  },
+  {
+   "type": "line",
+   "id": "Body8",
+   "from": "A8",
+   "to": "N8",
+   "radius": 0.1,
+   "segments": 1,
+   "material": "steel"
+  },
+  {
+   "type": "branch",
+   "id": "Stage9",
+   "from": "A9",
+   "to": "N8",
+   "resistance": 40.2,
+   "capacitance": 5e-07
+  },
+  {
+   "type": "line",
+   "id": "Body9",
+   "from": "A9",
+   "to": "N9",
+   "radius": 0.1,
+   "segments": 1,
+   "material": "steel"
+  },
+  {
+   "type": "branch",
+   "id": "Stage10",
+   "from": "A10",
+   "to": "N9",
+   "resistance": 40.2,
+   "capacitance": 5e-07
+  },
+  {
+   "type": "line",
+   "id": "Body10",
+   "from": "A10",
+   "to": "N10",
+   "radius": 0.1,
+   "segments": 1,
+   "material": "steel"
+  },
+  {
+   "type": "branch",
+   "id": "TailR",
+   "from": "N10",
+   "resistance": 1400.0
+  },
+  {
+   "type": "line",
+   "id": "DivLead",
+   "from": "N10",
+   "to": "Dtop",
+   "radius": 0.01,
+   "segments": 3,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "Divider",
+   "from": "Dtop",
+   "to": "Dlv",
+   "radius": 0.15,
+   "segments": 7,
+   "material": "steel",
+   "lumped": {
+    "segment": 4,
+    "resistance": 300.0,
+    "capacitance": 6e-10
+   }
+  },
+  {
+   "type": "branch",
+   "id": "DivC2",
+   "from": "Dlv",
+   "capacitance": 3e-07,
+   "resistance": 0.02
+  },
+  {
+   "type": "line",
+   "id": "Footing",
+   "from": "TowerFoot",
+   "to": "TowerBase",
+   "radius": 0.02,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "Mast",
+   "from": "TowerBase",
+   "to": "TowerTop",
+   "radius": 0.5,
+   "segments": 3,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "Crossarm",
+   "from": "TowerTop",
+   "to": "Xarm",
+   "radius": 0.3,
+   "segments": 3,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "String",
+   "from": "Xarm",
+   "to": "P",
+   "radius": 0.1,
+   "segments": 2,
+   "material": "steel",
+   "lumped": {
+    "segment": 1,
+    "capacitance": 1e-10
+   }
+  },
+  {
+   "type": "line",
+   "id": "Lead",
+   "from": "N10",
+   "to": "P",
+   "radius": 0.01,
+   "segments": 5,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "Cable",
+   "from": "P",
+   "to": "F",
+   "radius": 0.015,
+   "segments": 20,
+   "material": "copper"
+  }
+ ],
+ "signal": {
+  "sources": [
+   {
+    "node": "A1",
+    "returnNode": "N0",
+    "waveform": "branchNorton",
+    "imax": 200000.0,
+    "resistance": 40.2,
+    "inductance": 0.0,
+    "capacitance": 5e-07
+   },
+   {
+    "node": "A2",
+    "returnNode": "N1",
+    "waveform": "branchNorton",
+    "imax": 200000.0,
+    "resistance": 40.2,
+    "inductance": 0.0,
+    "capacitance": 5e-07
+   },
+   {
+    "node": "A3",
+    "returnNode": "N2",
+    "waveform": "branchNorton",
+    "imax": 200000.0,
+    "resistance": 40.2,
+    "inductance": 0.0,
+    "capacitance": 5e-07
+   },
+   {
+    "node": "A4",
+    "returnNode": "N3",
+    "waveform": "branchNorton",
+    "imax": 200000.0,
+    "resistance": 40.2,
+    "inductance": 0.0,
+    "capacitance": 5e-07
+   },
+   {
+    "node": "A5",
+    "returnNode": "N4",
+    "waveform": "branchNorton",
+    "imax": 200000.0,
+    "resistance": 40.2,
+    "inductance": 0.0,
+    "capacitance": 5e-07
+   },
+   {
+    "node": "A6",
+    "returnNode": "N5",
+    "waveform": "branchNorton",
+    "imax": 200000.0,
+    "resistance": 40.2,
+    "inductance": 0.0,
+    "capacitance": 5e-07
+   },
+   {
+    "node": "A7",
+    "returnNode": "N6",
+    "waveform": "branchNorton",
+    "imax": 200000.0,
+    "resistance": 40.2,
+    "inductance": 0.0,
+    "capacitance": 5e-07
+   },
+   {
+    "node": "A8",
+    "returnNode": "N7",
+    "waveform": "branchNorton",
+    "imax": 200000.0,
+    "resistance": 40.2,
+    "inductance": 0.0,
+    "capacitance": 5e-07
+   },
+   {
+    "node": "A9",
+    "returnNode": "N8",
+    "waveform": "branchNorton",
+    "imax": 200000.0,
+    "resistance": 40.2,
+    "inductance": 0.0,
+    "capacitance": 5e-07
+   },
+   {
+    "node": "A10",
+    "returnNode": "N9",
+    "waveform": "branchNorton",
+    "imax": 200000.0,
+    "resistance": 40.2,
+    "inductance": 0.0,
+    "capacitance": 5e-07
+   }
+  ],
+  "observeNodes": [
+   "N10",
+   "Dtop",
+   "Dlv",
+   "Xarm",
+   "P",
+   "F"
+  ],
+  "nyquistHz": 4000000.0,
+  "fftPoints": 1024,
+  "transform": "nlt"
+ }
+}

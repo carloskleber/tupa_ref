@@ -9,6 +9,13 @@ numerics, which move result files.
 
 ### Added
 
+- **`plane` element and 2 MV laboratory case** ([docs/marx_generator.md](docs/marx_generator.md)):
+  a wire-grid rectangle of any orientation that reuses shared nodes and bars
+  (walls, ceiling), `tools/gen_marx_lab.py` generating
+  `common/marx_lab_2MV*.json` (Marx generator, divider, tower mockup with
+  500 kV string, 50 m phase cable, 40 m hall) and `tools/impulse_params.py`
+  (IEC 60060-1 peak, T1, T2).
+
 - **Marx impulse generator support** ([docs/marx_generator.md](docs/marx_generator.md)):
   `step` and `branchNorton` signal waveforms (a capacitor charged to V0
   discharging through a series R-L-C `branch`, as its Norton current source),
