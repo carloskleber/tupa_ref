@@ -943,6 +943,8 @@
   ],
   "nyquistHz": 4000000.0,
   "fftPoints": 1024,
-  "transform": "nlt"
+  "transform": "nlt",
+  "window": { "type": "hann", "placement": "spectral" },
+  "antialiasStart": 0.8
  }
 }

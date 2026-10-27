@@ -9,6 +9,10 @@ numerics, which move result files.
 
 ### Added
 
+- **GUI: `plane` element** — the viewer and element tree load `plane` elements,
+  drawing the same wire grid the solver builds (bars shared between adjacent
+  planes drawn once) plus a translucent sheet over each rectangle.
+
 - **`plane` element and 2 MV laboratory case** ([docs/marx_generator.md](docs/marx_generator.md)):
   a wire-grid rectangle of any orientation that reuses shared nodes and bars
   (walls, ceiling), `tools/gen_marx_lab.py` generating

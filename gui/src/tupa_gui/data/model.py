@@ -135,6 +135,44 @@ class MeshElement:
 
 
 @dataclass(frozen=True)
+class PlaneElement:
+    """Wire-grid rectangle of any orientation (`"type": "plane"`,
+    `fortran/src/element/Plane.f90`): spans `origin`, `origin + u` and
+    `origin + v`, cut into `cells_u x cells_v` cells with one bar along every
+    cell edge. The solver reuses nodes and bars that already exist, so the
+    grid is shared with neighbouring planes; the GUI draws the same bars
+    (deduplicated by position) plus a translucent sheet over the rectangle."""
+
+    id: str
+    origin: tuple[float, float, float]
+    u: tuple[float, float, float]
+    v: tuple[float, float, float]
+    cells_u: int
+    cells_v: int
+    radius: float
+    material: str
+
+    def point(self, i: int, j: int) -> tuple[float, float, float]:
+        """Grid-node position at (i, j), 0 <= i <= cells_u, 0 <= j <= cells_v."""
+        fu, fv = i / self.cells_u, j / self.cells_v
+        return tuple(o + a * fu + b * fv for o, a, b in zip(self.origin, self.u, self.v))
+
+    def bars(self) -> list[tuple[tuple[float, float, float], tuple[float, float, float]]]:
+        """Position pairs, one per cell edge — same set as `buildPlane`'s double loop."""
+        pairs = []
+        for j in range(self.cells_v + 1):
+            for i in range(self.cells_u + 1):
+                if i < self.cells_u:
+                    pairs.append((self.point(i, j), self.point(i + 1, j)))
+                if j < self.cells_v:
+                    pairs.append((self.point(i, j), self.point(i, j + 1)))
+        return pairs
+
+    def center(self) -> tuple[float, float, float]:
+        return tuple(o + 0.5 * (a + b) for o, a, b in zip(self.origin, self.u, self.v))
+
+
+@dataclass(frozen=True)
 class Source:
     """One excitation source per driven node: a current injection (ADR
     0010), or an ideal voltage source (ADR 0016) when `is_voltage` is
@@ -332,7 +370,7 @@ class Study:
     soil: Soil
     nodes: list[Node] = field(default_factory=list)
     materials: list[Material] = field(default_factory=list)
-    elements: list[LineElement | CatenaryElement | MeshElement | ChannelElement] = field(default_factory=list)
+    elements: list[LineElement | CatenaryElement | MeshElement | PlaneElement | ChannelElement] = field(default_factory=list)
     sources: list[Source] = field(default_factory=list)
     frequencies: FrequencySweep | None = None
     outputs: Outputs | None = None
