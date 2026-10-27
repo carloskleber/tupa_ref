@@ -148,24 +148,19 @@ bash build.sh                          # fetch+build SLATEC, optimised build
 ```
 
 The solver takes one argument, the path to a study JSON, and writes
-`<case>_results.csv` and `<case>_results.json` into the **current directory**
-(git-ignored under `fortran/`). The commands above assume you are in `fortran/`:
+`<case>_results.csv` and `<case>_results.json` into `results/`
+(git-ignored; `--output-dir DIR` overrides). The commands above assume you are in `fortran/`:
 both the `./build/...` binary path and the `../common/` case path are relative to
 it. From another directory, give the full path to both.
 
 `build.sh` installs the optimised binary at the stable path `fortran/bin/Tupa`
-(SLATEC is an fpm path dependency, compiled together with the project). A bare
-`fpm run` / `fpm test` uses fpm's default (debug) profile; for the same flags
-as `build.sh` see [fortran/README.md](fortran/README.md#building-and-testing-without-buildsh):
+(SLATEC is an fpm path dependency, compiled together with the project). A bare `fpm run` fails on the SLATEC sources; use `./fpmw`, which is `fpm` with
+the needed flags preset (see [fortran/README.md](fortran/README.md)):
 
 ```bash
-fpm run --profile release \
-  --flag "-std=legacy -Wno-argument-mismatch -fallow-invalid-boz -ffree-line-length-none -fno-range-check -fopenmp" \
-  -- ../common/portela1997.json
+./fpmw run --profile release -- ../common/portela1997.json
+./fpmw test --profile release
 ```
-
-For `fpm test` (fast/slow split in docs/ROADMAP.md §5) use the same flags; see
-[fortran/README.md](fortran/README.md#building-and-testing-without-buildsh).
 
 `build.sh` enables OpenMP: the frequency sweep runs on all cores (results are
 bit-identical for any thread count; `OMP_NUM_THREADS` or `--threads <n>`

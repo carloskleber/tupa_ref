@@ -79,6 +79,7 @@ module mStructure
     procedure :: findNodeIndex     => findNodeIndexInStructure
     !! Look up a node's 1-based index by its user-assigned ID (0 if not found)
     procedure :: findElectrodeIndex => findElectrodeIndexInStructure
+    procedure :: findBranchIndex    => findBranchIndexInStructure
     !! Look up an electrode's 1-based index by its (discretised segment)
     !! ID (0 if not found)
     procedure :: addElectrode      => addElectrodeToStructure
@@ -191,6 +192,22 @@ contains
       end if
     end do
   end function findElectrodeIndexInStructure
+
+  function findBranchIndexInStructure(this, id) result(idx)
+    !! 1-based index of the lumped branch element `id`; 0 if there is none.
+    class(tStructure), intent(in) :: this
+    character(len=*), intent(in) :: id
+    integer :: idx
+    integer :: i
+
+    idx = 0
+    do i = 1, this%branchCount
+      if (trim(this%branches(i)%id) == trim(id)) then
+        idx = i
+        return
+      end if
+    end do
+  end function findBranchIndexInStructure
 
   ! =====================================================================
   ! Electrode management (dynamic array)
