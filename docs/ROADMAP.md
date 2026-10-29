@@ -251,7 +251,7 @@ schema v1 + `common/` cases, ADR 0002/0018) that reproduces every golden
 fixture at the same 1e-6 relative tolerance as Fortran. Fortran stays the
 implementation of record; Rust is the conformance cross-check and a
 second, Fortran-toolchain-free distribution route (`cargo build` instead
-of fpm + LAPACK/BLAS + the SLATEC clone, [DISTRIBUTION.md](DISTRIBUTION.md)).
+of fpm + LAPACK/BLAS, [DISTRIBUTION.md](DISTRIBUTION.md)).
 Originally Python was proposed, but Python is dedicated to the GUI side
 (ADR 0011); Rust gives compiled speed on the same cases, memory safety and
 a single static binary.

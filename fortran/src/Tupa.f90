@@ -66,6 +66,7 @@ module tupa
   use mGeometry, only: GEOM_KERNEL_SINGLE, GEOM_KERNEL_DOUBLE
   use mNode
   use mMaterial
+  use mCrossSection, only: tCrossSection, newCrossSectionFromJson, withConductivity, loadCrossSectionFile
   use mElementLine
   use mElementMesh
   use mElementPlane
@@ -406,6 +407,11 @@ contains
       end do
     end if
 
+    if (json_has(root, "crossSections")) then
+      call loadCrossSections(study, json_child(root, "crossSections"), filename)
+      if (errorRaised()) return
+    end if
+
     if (json_has(root, "elements")) then
       elems_arr => json_child(root, "elements")
       n = json_size(elems_arr)
@@ -417,9 +423,9 @@ contains
           id      = json_str(elem_obj, "id")
           from_id = json_str(elem_obj, "from")
           to_id   = json_str(elem_obj, "to")
-          radius  = json_real(elem_obj, "radius")
+          call readConductor(study, elem_obj, radius, mat_id)
+          if (errorRaised()) return
           nseg    = readSegments(elem_obj, study%maxSegmentLength, nodeDistance(study, from_id, to_id))
-          mat_id  = json_str(elem_obj, "material")
           elem = newElementLine(trim(id), trim(from_id), trim(to_id), &
                                 radius, nseg, trim(mat_id))
           if (json_has(elem_obj, "lumped")) call setLineLumped(elem, json_child(elem_obj, "lumped"), nseg)
@@ -428,13 +434,13 @@ contains
           id      = json_str(elem_obj, "id")
           from_id = json_str(elem_obj, "from")
           to_id   = json_str(elem_obj, "to")
-          radius  = json_real(elem_obj, "radius")
+          call readConductor(study, elem_obj, radius, mat_id)
+          if (errorRaised()) return
           sag     = json_real(elem_obj, "sag")
           segLen  = nodeDistance(study, from_id, to_id)
           ! parabolic arc length: c + 8 s² / (3 c) (theory.md §4.4)
           if (segLen > 0.0d0) segLen = segLen + 8.0d0 * sag * sag / (3.0d0 * segLen)
           nseg    = readSegments(elem_obj, study%maxSegmentLength, segLen)
-          mat_id  = json_str(elem_obj, "material")
           elem = newElementCatenary(trim(id), trim(from_id), trim(to_id), &
                                     sag, radius, nseg, trim(mat_id))
           call study%structure%addElement(elem)
@@ -552,11 +558,11 @@ contains
           lengthY  = json_real(elem_obj, "lengthY")
           rowsX    = json_int(elem_obj, "rowsX")
           rowsY    = json_int(elem_obj, "rowsY")
-          radius   = json_real(elem_obj, "radius")
+          call readConductor(study, elem_obj, radius, mat_id)
+          if (errorRaised()) return
           ! One count serves every bar, so the longest bar sets the target
           nseg     = readSegments(elem_obj, study%maxSegmentLength, &
                                   max(lengthX / real(max(rowsX, 1), kind=8), lengthY / real(max(rowsY, 1), kind=8)))
-          mat_id   = json_str(elem_obj, "material")
           elem = newElementMesh(trim(id), [x, y, z], lengthX, lengthY, rowsX, rowsY, &
                                 radius, nseg, trim(mat_id))
           call study%structure%addElement(elem)
@@ -879,6 +885,127 @@ contains
       end block
     end if
   end subroutine loadStudy
+
+  subroutine readConductor(study, elemObj, radius, matId)
+    !! Radius and material id of a conductor element (`line`, `catenary`,
+    !! `mesh`): either `radius` + `material`, or `crossSection` (ADR 0030),
+    !! optionally with `material` supplying the conductivity. A cross-section
+    !! element takes its radius from the entry (equivalent radius).
+    type(tStudy), intent(inout) :: study
+    type(tJsonValue), intent(in) :: elemObj
+    real(8), intent(out) :: radius
+    character(len=256), intent(out) :: matId
+    character(len=256) :: csId, derivedId
+    class(tMaterial), pointer :: p, q
+    class(tMaterial), allocatable :: copy
+
+    if (.not. json_has(elemObj, "crossSection")) then
+      radius = json_real(elemObj, "radius")
+      matId  = json_str(elemObj, "material")
+      return
+    end if
+
+    radius = 0.0d0
+    matId = ''
+    csId = json_str(elemObj, "crossSection")
+    if (json_has(elemObj, "radius")) then
+      call raiseError("mTupa: element '" // trim(json_str(elemObj, "id")) // &
+                      "' has both radius and crossSection; the radius is the entry's equivalent radius")
+      return
+    end if
+    p => study%structure%findMaterial(trim(csId))
+    if (.not. associated(p)) then
+      call raiseError("mTupa: element '" // trim(json_str(elemObj, "id")) // "': cross-section '" // &
+                      trim(csId) // "' not found")
+      return
+    end if
+    select type (p)
+    type is (tCrossSection)
+      radius = p%equivalentRadius
+      matId = csId
+      if (json_has(elemObj, "material")) then
+        q => study%structure%findMaterial(trim(json_str(elemObj, "material")))
+        if (.not. associated(q)) then
+          call raiseError("mTupa: element '" // trim(json_str(elemObj, "id")) // "': material '" // &
+                          trim(json_str(elemObj, "material")) // "' not found")
+          return
+        end if
+        select type (q)
+        type is (tLinear)
+          if (abs(q%mur - p%mur) > 1.0d-9 * p%mur) then
+            call raiseError("mTupa: element '" // trim(json_str(elemObj, "id")) // "': material '" // &
+                            trim(q%id) // "' has a different mur than cross-section '" // trim(csId) // "'")
+            return
+          end if
+          derivedId = trim(csId) // "@" // trim(q%id)
+          if (.not. associated(study%structure%findMaterial(trim(derivedId)))) then
+            allocate(copy, source=withConductivity(p, q%sigma, trim(derivedId)))
+            call study%structure%addMaterial(copy)
+          end if
+          matId = derivedId
+        class default
+          call raiseError("mTupa: element '" // trim(json_str(elemObj, "id")) // &
+                          "': a cross-section element needs a linear conductor material for its conductivity")
+        end select
+      end if
+    class default
+      call raiseError("mTupa: element '" // trim(json_str(elemObj, "id")) // "': '" // trim(csId) // &
+                      "' is not a cross-section")
+    end select
+  end subroutine readConductor
+
+  subroutine loadCrossSections(study, arr, caseFile)
+    !! Parse the `crossSections` array (ADR 0030 §4): each item is an inline
+    !! entry or `{ "file": "<path>" }` (relative to the case file).
+    type(tStudy), intent(inout) :: study
+    type(tJsonValue), pointer, intent(in) :: arr
+    character(len=*), intent(in) :: caseFile
+    type(tJsonValue), pointer :: item
+    type(tCrossSection) :: cs
+    type(tCrossSection), allocatable :: entries(:)
+    integer :: i, j, n, slash
+    character(len=1024) :: path
+
+    n = json_size(arr)
+    do i = 1, n
+      item => json_item(arr, i)
+      if (json_has(item, "file")) then
+        path = json_str(item, "file")
+        slash = max(index(caseFile, "/", back=.true.), index(caseFile, "\", back=.true.))
+        if (slash > 0 .and. .not. isAbsolutePath(trim(path))) path = caseFile(1:slash) // trim(path)
+        call loadCrossSectionFile(trim(path), entries)
+        if (errorRaised()) return
+        do j = 1, size(entries)
+          call registerCrossSection(study, entries(j))
+          if (errorRaised()) return
+        end do
+      else
+        call newCrossSectionFromJson(item, cs)
+        if (errorRaised()) return
+        call registerCrossSection(study, cs)
+        if (errorRaised()) return
+      end if
+    end do
+  end subroutine loadCrossSections
+
+  logical function isAbsolutePath(path)
+    character(len=*), intent(in) :: path
+    isAbsolutePath = len(path) > 0 .and. (path(1:1) == "/" .or. path(1:1) == "\")
+    if (len(path) > 1) isAbsolutePath = isAbsolutePath .or. path(2:2) == ":"
+  end function isAbsolutePath
+
+  subroutine registerCrossSection(study, cs)
+    type(tStudy), intent(inout) :: study
+    type(tCrossSection), intent(in) :: cs
+    class(tMaterial), allocatable :: copy
+
+    if (associated(study%structure%findMaterial(trim(cs%id)))) then
+      call raiseError("mTupa: cross-section id '" // trim(cs%id) // "' is already used by a material or cross-section")
+      return
+    end if
+    allocate(copy, source=cs)
+    call study%structure%addMaterial(copy)
+  end subroutine registerCrossSection
 
   subroutine readVec3(parent, key, v, ok)
     !! Read a JSON `[x, y, z]` array member `key` of `parent` into `v`;

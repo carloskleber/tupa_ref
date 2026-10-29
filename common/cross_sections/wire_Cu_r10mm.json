@@ -1,0 +1,78 @@
+{
+  "schema": "tupa.crossSection/0-draft",
+  "id": "wire_Cu_r10mm",
+  "description": "Solid copper round wire, radius 10 mm (validation vs Bessel)",
+  "kind": "poleResidue",
+  "perUnitLength": true,
+  "geometry": {
+    "type": "circle",
+    "radius": 0.01
+  },
+  "equivalentRadius": 0.01,
+  "reference": {
+    "sigma": 59979298.44644495,
+    "mur": 1.0
+  },
+  "band": {
+    "fMin": 1.0,
+    "fMax": 25118864.315095823
+  },
+  "model": {
+    "d": 0.041161562882572715,
+    "e": 4.3968381248193566e-11,
+    "poles": [
+      -1966.1362046307727,
+      -7501.202996993912,
+      -23599.18890484866,
+      -74733.48858001998,
+      -237128.62018504177,
+      -750539.6504822507,
+      -2383444.597072004,
+      -7494988.9425050495,
+      -22789659.951761782,
+      -72176109.44828454,
+      -304456391.4382483
+    ],
+    "residues": [
+      -0.10700956453164606,
+      -0.5500982251528794,
+      -3.04426780707887,
+      -17.301775128680177,
+      -97.59529616750427,
+      -549.8462523546656,
+      -3116.642885319074,
+      -16945.232869605614,
+      -89050.32791214506,
+      -544677.4317603607,
+      -7445041.851701615
+    ]
+  },
+  "dc": {
+    "resistance": 5.306995820699822e-05,
+    "internalInductance": 4.9984669487976837e-08
+  },
+  "fit": {
+    "nPoles": 11,
+    "maxRelError": 0.0005510514255839662,
+    "rmsRelError": 0.00030271876274380453,
+    "passive": true,
+    "tolerance": 0.001
+  },
+  "checks": {
+    "edgeCrowdingPEC": 1.0,
+    "dcInductanceData": 4.999970792516907e-08,
+    "dcInductanceTheory": 5.0000000000000004e-08,
+    "highFreqXoverR": 0.9993270738065563
+  },
+  "besselCheck": {
+    "dataMaxRelError": 0.0004123144073211727,
+    "fitMaxRelError": 0.0006838493325414215,
+    "dataMaxRelErrorBelow1MHz": 0.00040845526878526277
+  },
+  "provenance": {
+    "source": "COMSOL 6.4 2D, zint solido.mph, 2026-10-29: conductor + air minus j*omega*mu0*eps0/C' (round-wire validation)",
+    "tool": "mom/tools/import_comsol_zint.py",
+    "definition": "Z_int = Z(air domain) - j*omega*mu0*eps0/C', relative to equivalent radius"
+  },
+  "scaling": "Z(f; sigma) = (sigma_ref/sigma) * Z(f*sigma/sigma_ref; sigma_ref), fixed mur"
+}

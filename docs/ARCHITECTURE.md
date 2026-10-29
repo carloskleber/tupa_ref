@@ -79,7 +79,7 @@ oracle kept, the geometry cache, the threaded sweep — [ADR 0024](adr/0024-phas
 | `mGeometry` | `fortran/src/Geometry.f90` | Frequency-independent geometry matrices (ADR 0004); kernel selectable (`setGeometryKernel`) | working, tested |
 | `mGeometryCache` | `fortran/src/GeometryCache.f90` | Memo table for quadrature geometry factors, keyed by segment-pair congruence (6 rounded distances, 8-fold canonicalised) | working; not thread-safe (§7) |
 | `mMesh` | `fortran/src/Mesh.f90` | Topology A–D, medium constants (real ω and Laplace s), image reflection coefficients Γ, impedance entries (ADR 0009), `Zeq` assembly, `ZGESV` solve with one or several right-hand sides (ADR 0003, 0016) | working, tested |
-| `mImpedance` | `fortran/src/Impedance.f90` | Adaptive Gauss–Kronrod quadrature (mHEM single integral `geometryFactor1D`; nested 2-D `geometryFactor2D` as oracle); Bessel internal impedance (SLATEC `ZBESI`) | working; 2-D path non-reentrant (§7) |
+| `mImpedance` | `fortran/src/Impedance.f90` | Adaptive Gauss–Kronrod quadrature (mHEM single integral `geometryFactor1D`; nested 2-D `geometryFactor2D` as oracle); Bessel internal impedance (`mBessel`, ADR 0031; was SLATEC `ZBESI`) | working; 2-D path non-reentrant (§7) |
 | `mSignal` | `fortran/src/Signal.f90` | Excitation waveforms `tSignal` → `tHeidlerSignal`, `tDoubleExpSignal`, `tPortelaSignal`, `tSineSignal`; `tSignalSlot` (terminal, return node, quantity, waveform); tail taper | working |
 | `mFft` | `fortran/src/Fft.f90` | Double-precision radix-2 FFT (ADR 0014) | working |
 | `mTransient` | `fortran/src/Transient.f90` | Transfer-function transient driver: `transientResponse` (one source), `transientResponseSources` (superposed), `transientResponseSignals` (independent signals, ADR 0026); scan-fed pchip H(f), Hann window, anti-alias filter (ADR 0021), NLT | working |
@@ -280,10 +280,8 @@ Tracked, deliberate, and safe at the current scale:
 - `mGeometryCache` shares one hash table across all callers and mutates it on
   lookup/insert: not thread-safe, also the reason the geometry build is
   serial.
-- SLATEC's `D1MACH` fills its constant table lazily and not race-free (it
-  raises its flag before filling the table): `warmUpMachineConstants` calls
-  it once before the threaded sweep. Any new threaded entry point that can
-  reach `ZBESI` first must do the same.
+- (Historical) SLATEC's `D1MACH` lazy table race and its `warmUpMachineConstants`
+  workaround are gone with SLATEC (ADR 0031): `mBessel` is pure and stateless.
 - `mJsonParser` (a json-fortran wrapper, ADR 0006) keeps one module-level
   `json_core` instance — non-reentrant, fine for this project's
   one-file-at-a-time usage but would need revisiting for a hypothetical

@@ -9,6 +9,21 @@ numerics, which move result files.
 
 ### Added
 
+- **Cross-section internal-impedance entries** ([ADR 0030](docs/adr/0030-cross-section-internal-impedance.md),
+  ROADMAP Phase 13 item 2): a top-level `crossSections` array (inline entries or
+  `{"file": ...}` database files) and an element field `crossSection` (instead of
+  `radius`; optional `material` rescales to its conductivity) replace the solid
+  cylinder's internal impedance by a declared per-metre `Z_int(s)` — a
+  `poleResidue` model (exact at the NLT's complex frequency) or a `table`.
+  `Z_int` is defined relative to the entry's equivalent radius, which becomes the
+  thin-wire radius. Warnings for use outside the fitted band and for segments
+  shorter than 4 equivalent radii; a `table` entry is refused under the NLT.
+  Fortran only. Fixture `common/cross_sections/wire_Cu_r10mm.json`, test
+  `test_cross_section`.
+- **Native `mBessel`** ([ADR 0031](docs/adr/0031-remove-slatec-native-bessel.md)):
+  the solid-cylinder internal impedance no longer calls SLATEC `ZBESI`; SLATEC is
+  unlinked from the Fortran build (legacy compiler flags and the `D1MACH` warm-up
+  are gone). Results agree to ≤ 3e-14 (reference table `test/data`).
 - **Hooks for embedding the solver in another program** (a GUI or language
   binding that cannot be halted by an input error; no change for the CLI): `mError` library mode — `setLibraryMode(.true.)` makes
   `raiseError` record the message and return instead of halting, and the input

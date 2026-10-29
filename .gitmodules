@@ -4,6 +4,3 @@
 [submodule "benchmarks/prtl-mhem"]
 	path = benchmarks/prtl-mhem
 	url = https://github.com/VitorLima1990/PRTL-mHEM
-[submodule "fortran/slatec"]
-	path = fortran/slatec
-	url = https://github.com/carloskleber/slatec

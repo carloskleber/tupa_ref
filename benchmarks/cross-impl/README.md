@@ -30,7 +30,7 @@ Change the set with `--cases` (any name in `common/`, without `.json`).
 | --- | --- | --- |
 | Python ≥ 3.9 | driver | plots also need `pip install numpy matplotlib` (without them you still get `timings.csv` and `summary.md`; re-plot later with `--plots-only`) |
 | Rust (`cargo`, https://rustup.rs) | Rust | built by the script (`cargo build --release`) |
-| `gfortran`, `fpm` ≥ 0.10, LAPACK/BLAS, git | Fortran | the script calls `fortran/build.sh`, which fetches the SLATEC submodule and builds everything — see [fortran/README.md](../../fortran/README.md) |
+| `gfortran`, `fpm` ≥ 0.10, LAPACK/BLAS, git | Fortran | the script calls `fortran/build.sh`, which builds everything — see [fortran/README.md](../../fortran/README.md) |
 | Julia ≥ 1.10 (https://julialang.org/downloads) | Julia | the script runs `Pkg.instantiate()` for `julia/` (first run downloads its few packages) |
 
 Any implementation that is missing is skipped with a message; the others run.
@@ -40,7 +40,7 @@ Any implementation that is missing is skipped with a message; the others run.
 From the repository root (Linux, macOS, WSL):
 
 ```bash
-git submodule update --init            # once, for the Fortran/SLATEC build
+git submodule update --init            # once, for the benchmark oracles
 python3 -m pip install numpy matplotlib
 
 python3 benchmarks/cross-impl/bench.py                       # all cases, all tools, 3 repeats

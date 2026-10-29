@@ -16,9 +16,8 @@ cd fortran
 bash build.sh                                    # optimised binary -> bin/Tupa
 ```
 
-Results go to `results/` (change with `--output-dir DIR`). Plain `fpm run`
-fails: the SLATEC F77 sources need legacy flags, which `fpmw` sets (via
-`FPM_FFLAGS`) before calling `fpm`. Needs `gfortran` and `fpm`
+Results go to `results/` (change with `--output-dir DIR`). `./fpmw` is `fpm`
+with the project flags preset (`FPM_FFLAGS`). Needs `gfortran` and `fpm`
 ([setup](#recommended-setup)).
 
 ## Recommended setup
@@ -43,7 +42,6 @@ uv tool install fortls
 * `code .`;
 * Install the recommended "VS Code Server for Linux";
 * run `build.sh` (assuming Gfortran) to:
-  * get and compile the [SLATEC lib](https://github.com/carloskleber/slatec);
   * Compile the main project with full optimization.
 * Run the provided examples with `fpm run --example`.
 
@@ -57,25 +55,19 @@ Look for `gcc-fortran`
 
 ## Building and testing without build.sh
 
-SLATEC is a path dependency of `fpm.toml`, so no library path setup is needed.
-Its F77 sources need legacy flags, which fpm applies to all packages. `./fpmw`
-is `fpm` with those flags preset (`FPM_FFLAGS`); the equivalent explicit form is:
+There is no SLATEC dependency (ADR 0031), so no library path setup is needed.
+`./fpmw` is `fpm` with the project flags preset (`FPM_FFLAGS`); the equivalent explicit form is:
 
 ```bash
-fpm build --flag "-std=legacy -Wno-argument-mismatch -fallow-invalid-boz -ffree-line-length-none -fno-range-check -fopenmp"
+fpm build --flag "-ffree-line-length-none -fno-range-check -fopenmp"
 ```
 
-(Without them, `fpm run`/`build` stop with a "Rank mismatch" error in
-`slatec/src/defcmn.f`.) `bash build.sh` does an optimised `fpm install` to
-`fortran/bin/Tupa`.
-
-The SLATEC checkout that `build.sh` clones into `fortran/slatec/` is the
-canonical copy (author's fork) and may be fine-tuned in place.
+`bash build.sh` does an optimised `fpm install` to `fortran/bin/Tupa`.
 
 On a toolchain where the plain command does not build or link (verified
 2026-10-01 with gfortran 13, fpm 0.12, Ubuntu, shared LAPACK), the tests need
 long source lines allowed, OpenMP for the threaded sweep, and LAPACK kept on
-the link line after SLATEC (`D1MACH` calls `DLAMCH`):
+the link line:
 
 ```bash
 fpm test --profile release \

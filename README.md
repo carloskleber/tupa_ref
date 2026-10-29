@@ -114,13 +114,12 @@ tupa_ref/
 │   └── figures/              comparison plots (SVG) written by the validation scripts
 ├── common/                 shared JSON study cases + golden `*_expected.csv` files:
 │                           the public contract every implementation must reproduce
-├── fortran/                reference implementation (fpm; OpenMP, LAPACK, SLATEC)
+├── fortran/                reference implementation (fpm; OpenMP, LAPACK)
 │   ├── src/                  solver modules (Mesh, Impedance, Study, Transient, Potentials, …)
 │   │   └── element/            Line, Mesh (grid), Catenary, Channel
 │   ├── app/                  command-line driver (builds the `Tupa` executable)
 │   ├── test/                 unit tests and the `common/` conformance test
-│   ├── example/              small demo programs
-│   └── slatec/               SLATEC special functions (submodule)
+│   └── example/              small demo programs
 ├── rust/                   conformance port (cargo; `src/`, `tests/`), reproduces every golden fixture
 ├── julia/                  lag-guarded Julia port (`src/`, `bin/tupa.jl`, `test/`, `comparison/`)
 ├── gui/                    solver-agnostic viewer (Python, Qt; `src/tupa_gui/`, `tests/`)
@@ -143,7 +142,7 @@ Fortran 2008+, built with FPM — based in the original numerical core ([ADR 000
 
 ```bash
 cd fortran
-bash build.sh                          # fetch+build SLATEC, optimised build
+bash build.sh                          # optimised build
 ./bin/Tupa ../common/portela1997.json   # run the solver on a JSON case
 ```
 
@@ -154,8 +153,8 @@ both the `./build/...` binary path and the `../common/` case path are relative t
 it. From another directory, give the full path to both.
 
 `build.sh` installs the optimised binary at the stable path `fortran/bin/Tupa`
-(SLATEC is an fpm path dependency, compiled together with the project). A bare `fpm run` fails on the SLATEC sources; use `./fpmw`, which is `fpm` with
-the needed flags preset (see [fortran/README.md](fortran/README.md)):
+(the Bessel functions of the internal impedance are the in-repo `mBessel`, ADR 0031; there is no SLATEC dependency). `./fpmw` is `fpm` with
+the project flags preset (see [fortran/README.md](fortran/README.md)):
 
 ```bash
 ./fpmw run --profile release -- ../common/portela1997.json

@@ -1,6 +1,6 @@
 # ADR 0030 — Cross-section internal-impedance entries (ROADMAP Phase 13 item 2)
 
-- **Status**: Proposed
+- **Status**: Accepted — Fortran implemented 2026-10-29 (uncommitted); Rust and Julia open
 - **Date**: 2026-10-29
 - **Amends**: [ADR 0013](0013-input-schema-sources-frequencies-outputs.md)
   (element schema), [ADR 0012](0012-results-json-schema.md) (additive
@@ -86,12 +86,12 @@ the solver reads `id`, `kind`, `equivalentRadius`, `reference`, `band`,
   on a log grid over `band`. It is evaluated exactly at any `s`, including
   the NLT's `c + jω`.
 - **`table`**: `"model": { "f": [...], "R": [...], "X": [...] }` (Ω/m),
-  interpolated log-linearly in `f` with a monotone cubic (`pchip`, as the
-  transient driver already does for H(f)). Valid on the `jω` axis only:
+  interpolated linearly in `log f` (the transient driver's `pchip` lives in
+  a module that depends on the study, so it cannot be reused here). Valid on the `jω` axis only:
   evaluating it at complex `s` is an error (`Z_int` of a `table` entry needs
   `transient.method` ≠ `nlt`; the loader says so). Below `fMin` the entry is
   held at its lowest point as `R = R(fMin)`, `L = X(fMin)/ω(fMin)`; above
-  `fMax` it continues as `Z ∝ √f · e^{jπ/4}` from the last point.
+  `fMax` it continues as `Z_last·√(f/fMax)` (phase kept).
 
 ### 3. Conductivity scaling
 
@@ -123,10 +123,14 @@ the bars of `mesh`. A `channel` element never takes a cross-section (ADR 0025).
 
 ### 5. Object model and dispatch
 
-`tElectrode` gains `class(tCrossSection), pointer :: crossSection => null()`
-(Rust: `Option<Arc<CrossSection>>`); `radius` is set to `r_eq`.
-`segmentInternalImpedance[Laplace]` dispatch order: `loaded` (channel) →
-`crossSection` → `tLinear` cylinder. The profile contributes `l · Z_int`
+`tCrossSection` **extends `tMaterial`** (`fortran/src/CrossSection.f90`) and is
+stored in the structure's material list under its id, so elements reach it
+through the existing material lookup and `tElectrode` needs no new field; the
+loader (`readConductor`) sets the element radius to `r_eq`. A cross-section
+element that also names a `material` gets a derived copy registered as
+`<entry>@<material>` carrying that material's σ. (Rust: an enum variant of the
+conductor model.) `segmentInternalImpedance[Laplace]` dispatch order:
+`loaded` (channel) → `tCrossSection` → `tLinear` cylinder. The profile contributes `l · Z_int`
 exactly where the cylinder term does, so the self impedance
 `Zlong(i,i) = … + zint` is unchanged in form. `checkConductorMaterials`
 learns the third case, and a `table` entry under the NLT is rejected there,
@@ -140,10 +144,12 @@ before any parallel region.
   recorded once per run, in the log and in the results JSON `warnings` array
   (ADR 0012, additive). This replaces the "hard flag" wording of the July
   decision.
-- The thin-wire kernel needs a segment much longer than the radius. A segment
-  with `l < 4 r_eq` raises a warning (`r_eq ≈ 50 mm` for a 200 mm strip, so
-  segments below 0.2 m are flagged). This check applies to all radii, not
-  only cross-sections.
+- The thin-wire kernel needs a segment much longer than the radius. A
+  cross-section segment with `l < 4 r_eq` raises one aggregated warning per
+  entry (`r_eq ≈ 50 mm` for a 200 mm strip, so segments below 0.2 m are
+  flagged). Applied to cross-sections only: the same check on ordinary
+  cylinders would warn on existing cases (a 0.3 m tower member with 1 m
+  segments) whose results are pinned.
 
 ## Consequences
 
@@ -166,9 +172,11 @@ before any parallel region.
 
 1. A `poleResidue` entry fitted to the round-wire COMSOL solve (r0 = 10 mm,
    11 poles) must reproduce the `ZBESI` cylinder: 4.1e-4 (data) and 6.8e-4
-   (stored fit) maximum relative error over 1 Hz–25 MHz as measured by the
-   import tool. Release gate: the solver run with that entry must match the
-   cylinder run to 1e-3 over the band (harmonic) and 1e-3 (NLT transient).
+   (stored fit at the data points; 1.1e-3 on a dense grid) maximum relative
+   error over 1 Hz–25 MHz. Implemented as `test_cross_section`: `Z_int` within
+   1.5e-3, and a full sweep with a `crossSection` element within 1e-4 of the
+   `radius`+`material` case (the internal impedance is small against the
+   soil term). An NLT transient comparison is still to add.
 2. σ scaling: the same entry used at σ and 2σ must equal the entry fitted at
    2σ with frequencies halved (analytic round-wire entry, tolerance 1e-6).
 3. DC pin: `Re Z(s→0)·l` equals `l/(σA)`; `Im Z/ω → internalInductance`.
@@ -180,7 +188,8 @@ before any parallel region.
 
 ## Open points
 
-- Which COMSOL-derived entry ships as the public test fixture (the round-wire
-  entry is the natural one; the commercial catalog stays out of tupa_ref).
+- Public test fixture: `common/cross_sections/wire_Cu_r10mm.json` (round wire
+  from the COMSOL chain, validated against the cylinder); the strip catalog
+  stays in the commercial package.
 - Complex-pole extension and a matrix (multi-conductor) kind for bundles
   (ROADMAP §2 mom side) are not decided here.

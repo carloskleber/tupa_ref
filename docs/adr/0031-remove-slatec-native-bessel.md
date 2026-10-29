@@ -1,6 +1,6 @@
 # ADR 0031 — Remove SLATEC: native I₀/I₁ ratio for the internal impedance
 
-- **Status**: Accepted; steps 1–4 implemented 2026-10-29 (uncommitted)
+- **Status**: Accepted; steps 1–9 implemented 2026-10-29 (step 10, the cut-off, and the 40× parity run remain)
 - **Date**: 2026-10-29
 - **Supersedes**: the SLATEC row of [ADR 0018](0018-author-interview-decisions-2026-07.md)
   ("the cloned `fortran/slatec/` checkout is canonical") and the last sentence
@@ -176,7 +176,7 @@ where stated; steps 1–4 are enough to unblock the commercial `ifx` build.
       flags). `fortran/fpmw` (if present): same flags. Verify with a clean
       `fpm build` and `fpm test` (gfortran) **and** with `ifx` (commercial
       `build-ifx.ps1`).
-- [~] **5. Commercial package (link lists done 2026-10-29; vendor dir and staging still to delete) (`mom/`)** — delete
+- [x] **5. Commercial package (done 2026-10-29: vendor dir, staging and `slatec.lib` removed) (`mom/`)** — delete
       `fortran/vendor/slatec_zbesi/` and the `Build-SlatecVendor` /
       `slatec.lib` steps of `fortran/build-ifx.ps1` (keep the
       `lapack.lib`/`blas.lib` aliases); `fortran/fpm.toml`: remove
@@ -186,7 +186,7 @@ where stated; steps 1–4 are enough to unblock the commercial `ifx` build.
       `mMomVersion` rename made on 2026-10-29 stays.)
 - [~] **6. Parity** (ifx: tupa_ref suites + DLL tests pass, only the known stale `channel_loaded` fixture fails; gfortran and 40× `test_parallel` not run yet) — gfortran/ifx full test pass; `test_common_cases` and the
       GUI/DLL tests unchanged; 40× `test_parallel`.
-- [ ] **7. Docs** — `README.md` (tree and "fetch+build SLATEC", lines
+- [x] **7. Docs** (done 2026-10-29; historical ADR/ROADMAP/theory mentions left as history) — `README.md` (tree and "fetch+build SLATEC", lines
       117/123/146/157), `docs/ARCHITECTURE.md` (§2 table row of `mImpedance`,
       §7 `D1MACH` bullet, row of `rust/`), `docs/DISTRIBUTION.md` (rows 12–13,
       the "SLATEC canon" paragraph and row 40), `docs/CONVENTIONS.md` (add a
@@ -196,7 +196,7 @@ where stated; steps 1–4 are enough to unblock the commercial `ifx` build.
       (Unreleased: *Changed — SLATEC removed; native `mBessel`*; *Fixed — the
       `D1MACH` race can no longer occur*). Mark ADR 0018's SLATEC row and ADR
       0001's last sentence as superseded by this ADR.
-- [ ] **8. Efficiency refactor** — in `tStudy` add `conductorClass(nseg)`
+- [ ] **8. Efficiency refactor** (NOT done) — in `tStudy` add `conductorClass(nseg)`
       (index of the distinct `(radius, sigma, mur)` triple per segment, built
       once in `prepareStudy`; channel-loaded and cross-section segments
       (ADR 0030) get their own classes) and, in `fillAtFrequency`, a
@@ -204,7 +204,7 @@ where stated; steps 1–4 are enough to unblock the commercial `ifx` build.
       `omp parallel do` over classes) from which the loop does
       `zint = zIntPerMetre(class(i)) * geomLength(i)`. `segmentInternalImpedance[Laplace]`
       then return per-metre values. Compare `portelaMesh`/`grid` timings.
-- [ ] **9. Remove the dependency for good** — delete the transition comparison
+- [x] **9. Remove the dependency for good** (done 2026-10-29, no transition test was ever added) — delete the transition comparison
       test (§5.2), `git rm -r fortran/slatec`, delete the `[submodule
       "fortran/slatec"]` entry from `.gitmodules`, and the
       `slatec`-related lines of `.gitignore` if any.

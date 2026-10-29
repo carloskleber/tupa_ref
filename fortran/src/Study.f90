@@ -19,6 +19,7 @@ module mStudy
   use mStructure
   use mElement
   use mMaterial
+  use mCrossSection, only: tCrossSection, CS_TABLE
   use mResult
   use mObservation, only: tObservation, tObservationResults
   use mGeometry, only: buildGeometryMatrices, setGeometryKernel, getGeometryKernel
@@ -204,16 +205,61 @@ contains
   ! Per-segment internal (skin-effect) impedance
   ! =====================================================================
 
-  subroutine checkConductorMaterials(this)
+  subroutine checkConductorMaterials(this, freqHz, laplace)
     !! Raise the "requires a tLinear conductor material" error up front, so a
-    !! threaded sweep never has to raise it from inside a parallel region.
+    !! threaded sweep never has to raise it from inside a parallel region. Also
+    !! the cross-section checks of ADR 0030 §6: a `table` entry cannot be used
+    !! at a complex frequency (error), and warnings for a sweep outside an
+    !! entry's band and for segments shorter than 4 equivalent radii.
     class(tStudy), intent(in) :: this
-    integer(4) :: i
+    real(8), intent(in) :: freqHz(:)
+    logical, intent(in) :: laplace
+    integer(4) :: i, j, nShort
+    character(len=256), allocatable :: warned(:)
+    character(len=256) :: txt
+    real(8) :: fLo, fHi, fPosMin, fMax
+
+    fMax = maxval(freqHz)
+    fPosMin = huge(1.0d0)
+    do i = 1, size(freqHz)
+      if (freqHz(i) > 0.0d0) fPosMin = min(fPosMin, freqHz(i))
+    end do
+    allocate(warned(0))
 
     do i = 1, this%structure%getElectrodeCount()
       if (this%structure%electrodes(i)%loaded) cycle
       select type (mat => this%structure%electrodes(i)%material)
       type is (tLinear)
+      type is (tCrossSection)
+        if (laplace .and. mat%kind == CS_TABLE) then
+          call raiseError("tStudy%run: cross-section '" // trim(mat%id) // &
+                          "' is a table entry and cannot be used with the numerical Laplace transform (use a poleResidue entry)")
+          return
+        end if
+        if (any(warned == mat%id)) cycle
+        warned = [warned, mat%id]
+        call mat%effectiveBand(fLo, fHi)
+        if (fPosMin < huge(1.0d0) .and. (fPosMin < fLo .or. fMax > fHi)) then
+          write(txt, '(A,A,A,ES9.2,A,ES9.2,A,ES9.2,A,ES9.2,A)') "tStudy%run: cross-section '", trim(mat%id), &
+            "' used outside its band (applied ", fPosMin, "-", fMax, " Hz, band ", fLo, "-", fHi, &
+            " Hz); the model is still evaluated"
+          call emitMessage(MSG_WARNING, trim(txt))
+        end if
+        if (allocated(this%geomLength)) then
+          nShort = 0
+          do j = 1, size(this%geomLength)
+            if (this%structure%electrodes(j)%loaded) cycle
+            if (.not. associated(this%structure%electrodes(j)%material)) cycle
+            if (this%structure%electrodes(j)%material%id == mat%id .and. &
+                this%geomLength(j) < 4.0d0 * mat%equivalentRadius) nShort = nShort + 1
+          end do
+          if (nShort > 0) then
+            write(txt, '(A,A,A,I0,A,ES9.2,A)') "tStudy%run: cross-section '", trim(mat%id), "': ", nShort, &
+              " segment(s) shorter than 4 equivalent radii (", 4.0d0 * mat%equivalentRadius, &
+              " m); the thin-wire kernel is inaccurate there"
+            call emitMessage(MSG_WARNING, trim(txt))
+          end if
+        end if
       class default
         call raiseError("tStudy%run: internal impedance requires a tLinear conductor material")
       end select
@@ -249,6 +295,8 @@ contains
     select type (mat => this%structure%electrodes(i)%material)
     type is (tLinear)
       zint = internalImpedance(this%geomRadius(i), this%geomLength(i), omega, mat%sigma, mat%mur)
+    type is (tCrossSection)
+      zint = mat%perMetre(omega) * this%geomLength(i)
     class default
       call raiseError("tStudy%run: internal impedance requires a tLinear conductor material")
       zint = ZERO_CPLX
@@ -278,6 +326,8 @@ contains
     select type (mat => this%structure%electrodes(i)%material)
     type is (tLinear)
       zint = internalImpedanceLaplace(this%geomRadius(i), this%geomLength(i), sLap, mat%sigma, mat%mur)
+    type is (tCrossSection)
+      zint = mat%perMetreLaplace(sLap) * this%geomLength(i)
     class default
       call raiseError("tStudy%run: internal impedance requires a tLinear conductor material")
       zint = ZERO_CPLX
@@ -763,7 +813,7 @@ contains
     if (.not. allocated(sourcePos)) return
     laplace = .false.
     if (present(damping)) laplace = damping /= 0.0d0
-    call checkConductorMaterials(this)
+    call checkConductorMaterials(this, freqHz, laplace)
 
     ! Frequencies are independent solves of the same read-only geometry
     ! (ROADMAP Phase 10 item 4, P6), so the loop parallelises over k with one
@@ -880,7 +930,7 @@ contains
     if (.not. allocated(sourcePos)) return
     laplace = .false.
     if (present(damping)) laplace = damping /= 0.0d0
-    call checkConductorMaterials(this)
+    call checkConductorMaterials(this, freqHz, laplace)
 
     omegaAxis = 2.0d0 * PI * freqHz
     call injectionPatterns(sourcePos, retPos, injNodes, patterns)

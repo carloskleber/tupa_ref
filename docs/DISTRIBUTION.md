@@ -9,8 +9,8 @@ policy and the dependency inventory.
 
 | Step | Tool | Notes |
 | --- | --- | --- |
-| Dependency fetch + build | FPM (`fpm.toml`) | stdlib and feh fetched by fpm; LAPACK/BLAS/SLATEC linked as system/prebuilt libraries |
-| SLATEC provisioning | `fortran/build.sh` | checks out the SLATEC submodule (author's fork, an fpm path dependency) and `fpm install`s the optimised binary to `fortran/bin/Tupa` |
+| Dependency fetch + build | FPM (`fpm.toml`) | stdlib and feh fetched by fpm; LAPACK/BLAS linked as system/prebuilt libraries |
+| Install | `fortran/build.sh` | `fpm install`s the optimised binary to `fortran/bin/Tupa` (no SLATEC since ADR 0031) |
 | Optimised build | `fortran/build.sh` | `--profile release` plus `-O3 -march=native -fopenmp -ffast-math …` |
 | Development build/test | `fpm build` / `fpm test` | needs `--flag "-std=legacy -Wno-argument-mismatch -fallow-invalid-boz -ffree-line-length-none -fno-range-check -fopenmp"`; on shared LAPACK also `--link-flag "-Wl,--no-as-needed -llapack -lblas"` ([fortran/README.md](../fortran/README.md)) |
 | Threads | `OMP_NUM_THREADS`, `--threads <n>` | frequency loop of `runSweep` (needs a `-fopenmp` build, i.e. `build.sh`); with a threaded BLAS set `OPENBLAS_NUM_THREADS=1` (ADR 0024 §4) |
@@ -26,9 +26,8 @@ unreliable (the compiler may assume none occurs): the Phase 10 geometry
 kernel guards its singular end point without them (ADR 0024 §1), and
 new code should do the same.
 
-**SLATEC canon**: the **cloned checkout in `fortran/slatec/`** (from the
-author's fork) is the canonical copy and may be fine-tuned in place; it is
-not an untouchable vendored snapshot.
+**SLATEC** was removed in ADR 0031 (the only routine used, `ZBESI`, is replaced
+by `mBessel`); the author's fork repository is untouched.
 
 ## Dependency inventory
 
@@ -37,7 +36,6 @@ not an untouchable vendored snapshot.
 | stdlib | fpm package | fortran-lang | MIT | version string today; FFT candidate later (ROADMAP Phase 6) |
 | fortran-error-handler (feh) | fpm package, **git HEAD (unpinned)** | samharrison7 | BSD-3-Clause | all error raising (`mError`) |
 | LAPACK / BLAS | system libraries | distro | BSD-style | `ZGESV` dense complex solve |
-| SLATEC | cloned + locally installed | author's fork (github.com/carloskleber/slatec) | public domain | `ZBESI` complex Bessel (internal impedance) |
 | FORD, lxml | Python, docs only | PyPI | GPL/BSD | API documentation generation |
 
 Supply-chain note: `feh` is referenced by git URL without a tag or commit
