@@ -980,7 +980,132 @@ perfect-ground anchor.
      ground impedance *and* admittance. The free-EMT line model on the
      consumer side of TUPÃ's output.
 
-## Related open-source implementations
+## Cables, encased electrodes and wire-grid surfaces (ROADMAP Phases 12–13, 15)
+
+Added 2026-10-29 with the conductor and cable track (ROADMAP Phase 12 item 2,
+Phase 13 items 3–5, Phase 15 item 2). DOIs checked against Crossref on the
+same day.
+
+107. **Patel, U. R.; Gustavsen, B.; Triverio, P.** — "An Equivalent Surface
+     Current Approach for the Computation of the Series Impedance of Power
+     Cables with Inclusion of Skin and Proximity Effects", *IEEE Trans.
+     Power Delivery*, vol. 28, no. 4, pp. 2474–2482, Oct. 2013. DOI:
+     10.1109/TPWRD.2013.2267098. MoM-SO: the series-impedance matrix of an
+     arbitrary multiconductor cross-section from a surface integral
+     equation, which is much cheaper than FEM. A candidate generator for the
+     `matrix` entries of Phase 13 item 4, where cores are eccentric.
+108. **Patel, U. R.; Triverio, P.** — "Accurate Impedance Calculation for
+     Underground and Submarine Power Cables Using MoM-SO and a Multilayer
+     Ground Model", *IEEE Trans. Power Delivery*, vol. 31, no. 3,
+     pp. 1233–1241, Jun. 2016. DOI: 10.1109/TPWRD.2015.2469599. Extends
+     [107] to armoured cables in layered surroundings. A cross-check for the
+     armour and `z_T` terms.
+109. **Wedepohl, L. M.; Wilcox, D. J.** — "Transient Analysis of
+     Underground Power-Transmission Systems. System-Model and
+     Wave-Propagation Characteristics", *Proc. IEE*, vol. 120, no. 2,
+     pp. 253–260, 1973. DOI: 10.1049/piee.1973.0056. The loop formulation of
+     coaxial cable impedances (core–sheath and sheath–earth loops) and the
+     modal propagation of buried cables. With Ametani [43], the basis of the
+     interior equations of Phase 13 item 4.
+110. **Ametani, A.; Miyamoto, Y.; Nagaoka, N.** — "Semiconducting Layer
+     Impedance and its Effect on Cable Wave-Propagation and Transient
+     Characteristics", *IEEE Trans. Power Delivery*, vol. 19, no. 4,
+     pp. 1523–1531, Oct. 2004. DOI: 10.1109/TPWRD.2003.822502. How a
+     semiconducting screen modifies the shunt admittance and the
+     high-frequency attenuation. Covers the frequency-dependent `Y_in` and
+     the semiconducting case of the encasement layer (Phase 13 item 3).
+111. **Bianchi, G.; Luoni, G.** — "Induced Currents and Losses in
+     Single-Core Submarine Cables", *IEEE Trans. Power Apparatus and
+     Systems*, vol. PAS-95, no. 1, 1976. DOI: 10.1109/T-PAS.1976.32076.
+     Currents and losses in a steel-wire armour: the classical reference
+     for representing helical magnetic armour as an equivalent tube, and so
+     for the armour μr family of Phase 13 item 4.
+112. **Gustavsen, B.; Martinez, J. A.; Durbak, D.** — "Parameter
+     Determination for Modeling System Transients — Part II: Insulated
+     Cables", *IEEE Trans. Power Delivery*, vol. 20, no. 3, pp. 2045–2050,
+     Jul. 2005. DOI: 10.1109/TPWRD.2005.848774. Task-force guidance for
+     converting cable datasheets into EMT cable-constant inputs (layer radii,
+     stranding and semiconducting corrections). Supplies the data conventions
+     of the stage 4a validation.
+113. **Gustavsen, B.; Bruaset, A.; Bremnes, J.; Hassel, A.** — "A Finite
+     Element Approach for Calculating Electrical Parameters of Umbilical
+     Cables", *IEEE PES General Meeting*, 2010. DOI: 10.1109/PES.2010.5590107.
+     FEM extraction of the impedance matrices of complex multicore armoured
+     cables. The FEM route for `matrix` entries, beside MoM-SO [107] and
+     subdivision [73].
+114. **Vance, E. F.** — *Coupling to Shielded Cables*, Wiley-Interscience,
+     New York, 1978 (no DOI). Transfer impedance and admittance of cable
+     shields: how current on the outer shield induces voltages in the
+     interior. Defines `z_T` in Phase 13 item 4 for both solid and braided
+     or wire shields.
+115. **Ufer, H. G.** — "Investigation and Testing of Footing-Type Grounding
+     Electrodes for Electrical Installations", *IEEE Trans. Power Apparatus
+     and Systems*, vol. PAS-83, no. 10, pp. 1042–1048, Oct. 1964. DOI:
+     10.1109/TPAS.1964.4765938. The origin of the concrete-encased ("Ufer")
+     electrode, with long-term measurements in dry soil. A trend anchor for
+     Phase 13 item 3.
+116. **Fagan, E. J.; Lee, R. H.** — "The Use of Concrete-Enclosed Reinforcing
+     Rods as Grounding Electrodes", *IEEE Trans. Industry and General
+     Applications*, vol. IGA-6, no. 4, pp. 337–348, Jul. 1970. DOI:
+     10.1109/TIGA.1970.4181193. Measurements and a two-shell resistance
+     formula for rebar in concrete. The DC check of the encasement layer.
+117. **Androvitsaneas, V. P.; Gonos, I. F.; Stathopulos, I. A.** — "Transient
+     Impedance of Grounding Rods Encased in Ground Enhancing Compounds",
+     *Int. Conf. on Lightning Protection (ICLP)*, 2014, pp. 359–363. DOI:
+     10.1109/ICLP.2014.6973148. Impulse measurements on encased rods. The
+     transient counterpart of [115, 116] for the layer model.
+118. **Richmond, J. H.** — "A Wire-Grid Model for Scattering by Conducting
+     Bodies", *IEEE Trans. Antennas and Propagation*, vol. 14, no. 6,
+     pp. 782–786, Nov. 1966. DOI: 10.1109/TAP.1966.1138783. The wire-grid
+     surface model behind the `plane` element (Phase 10e).
+119. **Ludwig, A. C.** — "Wire Grid Modeling of Surfaces", *IEEE Trans.
+     Antennas and Propagation*, vol. 35, no. 9, pp. 1045–1048, Sep. 1987.
+     DOI: 10.1109/TAP.1987.1144220. Limits of wire-grid surfaces and the
+     equal-area radius rule. One of the two candidate bar radii of the
+     `sheet` kind (Phase 13 item 5).
+120. **Antonini, G.; Orlandi, A.; Paul, C. R.** — "Internal Impedance of
+     Conductors of Rectangular Cross Section", *IEEE Int. Symp. on
+     Electromagnetic Compatibility*, 1998, vol. 1, pp. 94–99. DOI:
+     10.1109/ISEMC.1998.750066. Edge crowding in rectangular conductors.
+     The independent check named in ADR 0030's validation item 4 for strip
+     entries, and the contrast case for the `sheet` kind, which has no edges.
+121. **Sargent, M. A.; Darveniza, M.** — "Tower Surge Impedance", *IEEE
+     Trans. Power Apparatus and Systems*, vol. PAS-88, no. 5, pp. 680–687,
+     May 1969. DOI: 10.1109/TPAS.1969.292357. Surge impedance of cylindrical
+     and conical towers. A closed-form cross-check for a steel pole built
+     from tube entries (Phase 12 item 2) and struck by the channel element.
+122. **Wiener, P.** — "A Comparison of Concrete Encased Grounding Electrodes
+     to Driven Ground Rods", *IEEE Trans. Industry and General Applications*,
+     vol. IGA-6, no. 3, pp. 282–287, May 1970. DOI:
+     10.1109/TIGA.1970.4181179. Field comparison of encased and driven
+     electrodes. A second trend anchor for [115, 116].
+
+**Leads for further research** (not yet cited in theory.md; to verify and
+number when a phase picks them up):
+
+- *Helical-armour anisotropy.* Steel wires laid at an angle carry both
+  longitudinal and circumferential magnetisation. An equivalent tube with
+  anisotropic, complex μ (the extended Bianchi–Luoni line [111] and its
+  MoM-SO/FEM successors [108, 113]) would replace the scalar μr family.
+- *Magnetic steel beyond linear μr.* Complex μ(f) of structural and pole
+  steels (hysteresis, eddy currents), and current-dependent saturation
+  under lightning currents. The latter needs a time-domain or
+  harmonic-balance treatment outside the linear solver (theory.md §8).
+- *Concrete electrical properties.* Moisture- and frequency-dependent
+  σ(f), ε(f) of concrete, as soil-dispersion models give for soil
+  (theory.md §7), so the encasement layer can use a dispersive material.
+  Also the soil–concrete interface under impulse (ionisation inside or
+  around the encasement).
+- *Rebar networks as grounding systems.* The reinforcement of a building or
+  tower foundation as a 3-D mesh in concrete. The `mesh` element with an
+  encasement layer is the first approximation; the finite-volume item
+  (Phase 15 item 2) is the next.
+- *Cable sheath and armour voltages under lightning.* Induced and
+  conducted surges on screens of buried cables near a struck tower: the
+  cable element coupled to the channel and to `crossMedium`.
+- *Wire-grid vs surface integral equation.* A plate MoM (RWG-type surface
+  currents) as the reference solve for the `sheet` bar-radius decision,
+  and as a possible later surface element.
 
 Companion codes of the same model family, useful as executable cross-checks
 (all inspected July 2026):

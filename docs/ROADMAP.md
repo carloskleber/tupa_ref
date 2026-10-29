@@ -28,10 +28,11 @@ implementation**; usability as an engineering tool is secondary.
 | --- | --- |
 | Object model | `tStudy → tStructure → tElement/tMaterial → tNode/tElectrode`, `tMesh`; FORD-documented |
 | Geometry layer | `Geometry.f90`: mean/image distances, direct+image geometry factors (`g`, closed-form `g_self`; mHEM single-integral quadrature by default since Phase 10, the nested 2-D path selectable as oracle), direction cosines; quadrature cache |
-| Impedance fill | ADR 0009 interface: `calcZSelf`/`calcZMutual` apply all theory factors internally — image parcels carry the frequency-dependent `Γ(ω)` by default since Phase 10 (ideal ±1 selectable); solid-conductor Bessel internal impedance (SLATEC `ZBESI`) |
+| Impedance fill | ADR 0009 interface: `calcZSelf`/`calcZMutual` apply all theory factors internally — image parcels carry the frequency-dependent `Γ(ω)` by default since Phase 10 (ideal ±1 selectable); solid-conductor Bessel internal impedance (native `mBessel` since 2026-10-29, ADR 0031) or a declared cross-section entry (`crossSections`, ADR 0030); embedded `lumped` R-L-C in a `line` segment (Phase 10e) |
 | Solver | Augmented `Zeq` assembly + `ZGESV` (ADR 0003); multi-RHS variant for superposition (ADR 0016); frequencies solved in parallel on thread-private meshes, bit-identical to serial (Phase 10 item 4) |
 | Sources | Current injections at named nodes (ADR 0010); ideal voltage sources via unit-injection superposition, mixable with current sources (ADR 0016); several simultaneous transient injections, each with its own waveform (Phase 9 item 4) |
-| Materials | `tLinear`, `tPortelaSoil` (ADR 0007), `tVisacroAlipioSoil` (mean set, theory.md §7); air hardcoded to vacuum (ADR 0019) |
+| Materials | `tLinear`, `tPortelaSoil` (ADR 0007), `tVisacroAlipioSoil` (mean set, theory.md §7); air hardcoded to vacuum (ADR 0019); `tCrossSection` (`poleResidue` / `table` internal-impedance entries, ADR 0030, Fortran only) |
+| Elements | `line`, `catenary`, `mesh` (ADR 0020), `channel` (ADR 0025), `branch` (ADR 0028), `plane` wire-grid rectangle (Phase 10e) |
 | Sweep & results | `runSweep` (OpenMP over frequencies) + `tResult` storage, `inputImpedance`/`maxVoltageMagnitude`; CSV/JSON writers (ADR 0012) with `outputs` filtering; surface potentials, GPR, touch and step voltage from the solved currents (`observation` block, `mPotentials`, `<case>_potentials.*`, Phase 11, ADR 0027) |
 | Time domain | `mSignal` (Heidler — legacy 6-term [38] and standard parametrised form [37, 39]; double-exp ± Jones; Portela concave front; switched-on sine), tail taper, in-repo FFT (ADR 0014), transfer-function transient driver (`mTransient`) with opt-in scan-fed (pchip-interpolated) transfer function, half-Hann window (spectral or time placement), multiple injections and Numerical Laplace Transform (Phase 9, ADR 0015 amendment 2026-09-30) |
 | JSON I/O | json-fortran parser (ADR 0006, superseded-in-place 2026-08-01); schema v1: structure + `sources`/`frequencies`/`outputs` (ADR 0013) + `signal` (ADR 0015) + voltage sources/Heidler terms (ADR 0016/0015 amendment) + `mesh` composite element (ADR 0020) + optional `signal.antialiasStart` (ADR 0021) + optional `observation` block (ADR 0027) + `catenary` element and `portela` waveform (ADR 0023) + `signal.sources`/`window`/`transferFunction`/`transform`/`nltDamping` and the `sine` waveform (ADR 0015 amendment 2026-09-30); the optional `numerics` block (`kernel`, `imageModel`, `maxSegmentLength`, `crossMedium` — ADR 0029) and optional `segments` (ADR 0024); pre-run reference validation (`validateStudyReferences`) and CLI verbosity levels |
@@ -198,7 +199,7 @@ Where the former Phase 7 items went:
 | Numerical Laplace Transform (§7 P4) | Phase 9 item 5 — done 2026-09-30 |
 | GPR, touch and step voltage (§7 P7) | Phase 11 items 1–2 — done 2026-10-01 (harmonic) |
 | `tCircumference` (grounding rings) | Phase 12 item 1 |
-| Tubular conductor | Phase 12 item 2 |
+| Tubular conductor | Phase 12 item 2 — re-scoped 2026-10-29 as cross-section entries (ADR 0030) |
 | Series RLC element | Phase 12 item 3 — pulled forward 2026-10-11 into Phase 10d (Fortran done) |
 | `tCatenary` | Phase 13 item 1 — done 2026-09-30 |
 | Generic internal impedance models (OPGW) | Phase 13 item 2 |
@@ -771,6 +772,34 @@ one waveform (`sources` superposes). [ADR 0026](adr/0026-independent-transient-s
    every `sinal`; `linha*` regenerated; `portela1997_transient_signals`
    fixture (Fortran golden, Rust 2.4e-13, Julia 1e-6).
 
+### Phase 10e — Impulse-laboratory support (Marx generator, embedded lumps, plane) — **Fortran done 2026-10-27**
+
+Recorded here on 2026-10-29. The work landed a roadmap entry (tupa_ref pull requests #5 and #6). Design and limits are in
+[marx_generator.md](marx_generator.md), and the requirements in
+[marx_generator_requirements.md](marx_generator_requirements.md). It is
+numbered 10e for the same reason as 10b and 10d.
+
+1. **Charged-capacitor sources** — **done**: `step` and `branchNorton`
+   waveforms (a charged C behind a series R-L-C `branch`, as its Norton
+   current); NLT path; `common/marx_single_stage.json`, `test_marx`.
+2. **`lumped` R-L-C embedded in a `line` segment** — **done**: it is added
+   to the segment's internal impedance, harmonic and Laplace, and keeps the
+   segment's coupling (`test_lumped_segment`). The same slot later takes a
+   cross-section entry (ADR 0030); a charged embedded capacitor (series EMF)
+   is open.
+3. **Branch current in the transient driver** — **API only**; the JSON and
+   the writers do not expose it yet (also the Phase 10d item 4 remainder).
+4. **`plane` element** — **done**: a wire-grid rectangle of any orientation
+   that reuses shared nodes and bars (Richmond [118], Ludwig [119]),
+   `test_plane`, and GUI display. The bars are round wires of an input
+   radius. Metal walls get a surface-impedance treatment in Phase 13 item 5.
+5. **2 MV laboratory case** — **done**: `tools/gen_marx_lab.py` →
+   `common/marx_lab_2MV*.json`, and `tools/impulse_params.py`
+   (IEC 60060-1 parameters).
+
+**Open:** no golden fixtures for the laboratory cases. Rust and Julia
+follow-along: their loaders refuse `plane`, `lumped` and the new waveforms.
+
 ### Phase 11 — Grounding-safety outputs — **done 2026-10-01 (harmonic)**
 
 The headline engineering output for the MVP application (tower-footing
@@ -825,10 +854,36 @@ geometries (rods, counterpoises, rings, lumped branches).
    circle in an arbitrary plane (centre + normal vector + rotation),
    ≥ 3 straight segments, closed loop (exercises loop topology);
    single-medium constraint enforced.
-2. **Tubular conductor** (metallic pipes) — **S**. Schelkunoff I/K
-   formula in theory.md §4.3 [40]; element = `tLine` + wall thickness
-   (legacy `Tubo.m`); extends `mImpedance` with SLATEC `ZBESK` alongside
-   `ZBESI` (scaled variants for large arguments).
+2. **Tubular conductor** (metallic pipes, steel poles) — **S**.
+   *Re-scoped 2026-10-29 (author): a tube is a **cross-section entry**
+   ([ADR 0030](adr/0030-cross-section-internal-impedance.md)), not a new
+   element and not a wall-thickness field on `tLine`.* A pipe or pole is a
+   `line`/`catenary` that names a tube entry in `crossSection`.
+   - **Entry.** A `poleResidue` fit of the Schelkunoff external-return
+     formula (theory.md §4.3 [40]) with `equivalentRadius = r₀`. The
+     internal impedance of a tube is a diffusion function, so the v0
+     real-pole Foster form is enough. Multi-sided (8/12/16-sided) poles use
+     the logarithmic capacity of the polygon as `r_eq` and a 2-D solve for
+     `Z_int` (ADR 0030 §1).
+   - **Magnetic steel.** Linear, with a constant μr per entry (ADR 0030 §3
+     forbids rescaling across μr). Entries come as a **μr family** (for
+     example μr = 1, 50, 200, 500, 1000), so a study can show the
+     sensitivity band. Saturation under lightning current is outside the
+     linear frequency-domain solver. It is stated as a limitation, and the
+     family brackets it.
+   - **Public scope.** `common/cross_sections/` ships a few example tubes
+     (one steel pole section across the μr family, one thin-wall pipe) as
+     fixtures, and a test against the closed form. The engineering pole
+     series is not part of the reference.
+   - **Code.** `mBessel` gains `K₀/K₁` (ADR 0031 open point 4). They are
+     needed for the test oracle (fit vs Schelkunoff), not on the solve path.
+   - **Tapered poles.** A chain of `line` elements, each with its own entry.
+     The short-segment check of ADR 0030 §6 applies: a Ø 600 mm section needs
+     segments ≥ 1.2 m.
+   - **Not covered.** Current *inside* the tube (a down-lead run inside a
+     hollow pole) breaks the external-return assumption. That is the
+     shielded case of Phase 13 item 4: the pole acts as the armour and the
+     down-lead as the inner conductor.
 3. **Series RLC element** — **M** — **done 2026-10-12 (Fortran), as Phase 10d item 1**. *Series form only first
    (R + jωL + 1/(jωC) two-terminal, Matlab-style non-coupling lumped
    element); parallel later if a case needs it.* Legacy mechanism (extra
@@ -863,15 +918,173 @@ pulled forward if a tower-footing case needs shield wires.
    data exists, conductor subdivision (de Arizon & Dommel [73]) can
    compute R(f), X(f) tables for stranded or non-circular cross-sections
    offline.
-3. **Insulated conductor** — **M–L**. The legacy branch is an
-   acknowledged placeholder (drops soil conduction, ignores the coating;
-   flagged TODO in the legacy code) — do **not** port it; implement
-   Sunde's coating admittance in series with the bare-conductor soil
-   leakage [41] (theory.md §4.3).
-4. **Multipolar cables** — **L**. Internal representation by
-   impedance/admittance matrix; object-model change (multi-conductor
-   element); refs: Ametani cable constants [43], Schelkunoff [40];
-   PRTL-mHEM's tubular bundles are a partial analogue.
+   **Status: Fortran done 2026-10-29**
+   ([ADR 0030](adr/0030-cross-section-internal-impedance.md)). The July
+   table-only decision is amended: a `poleResidue` kind sits beside the
+   `table` kind, because the NLT evaluates `Z_int` at complex `s`. Each
+   entry carries its equivalent radius `r_eq` and is scaled by conductivity
+   at fixed μr. Cases reference entries through a `crossSections` block,
+   inline or from files. The fixture is `common/cross_sections/wire_Cu_r10mm.json`
+   and the test is `test_cross_section`. **Open:**
+   - Rust and Julia parity;
+   - an NLT transient comparison test;
+   - complex pole pairs, for stranded and steel-cored conductors with
+     resonances;
+   - the **`matrix` kind** for multi-conductor sections, which item 4 needs;
+   - the **`sheet` kind**, which item 5 needs;
+   - tube entries (Phase 12 item 2).
+3. **Coaxial encasement layer — insulated, concrete-encased and
+   semiconducting coatings** — **M–L**. *Widened 2026-10-29 (author):
+   one mechanism covers an insulated wire, a steel bar inside concrete
+   (rebar, foundation cage, Ufer electrode) and a semiconducting layer.
+   It is staged as a thin coaxial layer here, and a finite volume later
+   (Phase 15 item 2).* The legacy insulated-cable branch is an acknowledged
+   placeholder (it drops soil conduction and ignores the coating; flagged
+   TODO in the legacy code), so do **not** port it.
+   - **Model.** A layer of outer radius `r_c` and medium (σ_c, ε_c) around a
+     conductor of radius `r₀` (or `r_eq`). Its radial admittance per metre,
+     `y_c = 2π(σ_c + sε_c)/ln(r_c/r₀)`, sits **in series** with the leakage
+     path (Sunde's coated buried wire [41], theory.md §4.3). The leakage
+     current of a segment crosses the layer before it enters the medium.
+     - Only the self term changes: `Z_t(a,a) += 1/(y_c·l)`, normalised as
+       in theory.md §6. This needs checking against the `Z_t` scaling there
+       before coding.
+     - The external transversal terms use `r_c`, because the leakage
+       emerges at the layer surface. `Z_ℓ` keeps `r₀`: the layer is μ₀ and
+       the current stays in the conductor.
+     - Mutual terms are unchanged. That is the thin-layer assumption
+       (`r_c ≪ l`, and `r_c` ≪ the distance to other segments).
+   - **Material.** Any `tMaterial` with an admittance, so a dispersive
+     model is accepted for concrete as for soil. The Laplace path follows.
+   - **Schema** (proposed). An element field
+     `coating: { "outerRadius": …, "material": "<id>" }` on `line`,
+     `catenary` and `mesh` bars. A concrete foundation with a rebar cage
+     takes the cage as an equivalent cylinder, `r_eq = (n·r·R^{n−1})^{1/n}`
+     (n bars of radius r on a circle of radius R, the bundle GMR), inside a
+     layer of the foundation radius.
+   - **Parameter ranges.**
+     - Insulation: σ_c ≈ 0, ε_r 2.3–4. Purely capacitive.
+     - Concrete: σ_c roughly 10⁻³–5·10⁻² S/m depending on moisture, ε_r
+       about 5–15, dispersive. Concrete is more conductive than resistive
+       soil, which is the reason encasement lowers footing resistance
+       (Ufer [115], Fagan & Lee [116], Wiener [122]).
+     - Semiconducting screens and ground-enhancing compounds [110, 117]
+       fall in between.
+   - **Validity.** Thin layer only. Warn when `r_c > l/4`, alongside the
+     ADR 0030 short-segment check. Pad and pile footings of 0.5–1.5 m
+     radius violate the assumption and belong to Phase 15 item 2.
+   - **Validation.**
+     1. Identity: a layer with the surrounding medium's own (σ, ε) must
+        reproduce the bare conductor, to O((r_c/l)²).
+     2. DC: an encased rod against the two-shell closed form
+        `ln(r_c/r₀)/(2πσ_c L) + R_rod(r_c, σ_soil)`.
+     3. Insulated wire: Sunde's propagation constant for a coated buried
+        wire [41].
+     4. Trend check against the measured encasement benefit [115, 116, 122].
+   - **Reuse.** The same layer forms the jacket on a cable armour (item 4).
+4. **Insulated and multipolar cables (armoured)** — **L**. *Elaborated
+   2026-10-29 (author).* Target types, all three in scope: single-core
+   with a metallic screen; three screened cores in a common steel-wire
+   armour (MV land and submarine); LV/control multicore cables with an
+   overall screen or armour (substation EMC, induced voltages). An
+   insulated wire with no metallic layer is item 3 alone.
+   - **Element.** A `cable` element follows a path (straight or catenary
+     chain) and names a cross-section entry of the **`matrix` kind**. The
+     entry lists the terminals (for example `core1…core3`, `screen1…screen3`,
+     `armour`) and carries:
+     - (a) the outer metallic layer's `r_eq` and outer-surface `Z_int`,
+       with external return (Schelkunoff tube [40]; helical steel-wire
+       armour as an equivalent tube in a μr family [111]);
+     - (b) the interior series matrix `Z_in(s)` (n×n, conductors referenced
+       to the armour, loop formulation [43, 109]), as a common-pole
+       pole–residue matrix;
+     - (c) the interior shunt matrix `Y_in(s) = G + sC` (constant in v0;
+       semiconducting screens later [110]);
+     - (d) the armour **transfer impedance** `z_T(s)`, the mutual surface
+       impedance between the armour's outer and inner faces [40, 114].
+   - **Exterior.** Only the outermost metallic layer couples
+     electromagnetically. The armour is an **ordinary HEM electrode**
+     carrying the cable's net current `I_net` (radius `r_eq`, internal
+     impedance from (a), jacket as an item 3 coating). No geometry factor
+     involves the interior conductors.
+   - **Interior, per segment and co-located** (decided). Each armour
+     segment of length `l` carries an internal π-section with the internal
+     loop currents `I_k` (conductor k out, armour inner face back):
+
+         ΔV_net = (Z_HEM + l·z_ao)·I_net − l·z_T·Σ_k I_k
+         ΔV_k   = l·Σ_j Z_in,kj·I_j − l·z_T·I_net          (v_k = u_k − u_armour)
+
+     with `l·Y_in/2` at each end node between the internal potentials
+     `v_k`. The coupling is symmetric, so reciprocity holds. Signs and
+     loop-to-conductor transforms are to be fixed against Ametani [43]
+     before coding. For a thick steel armour `z_T → 0` at high frequency,
+     and the interior decouples (shielding). At low frequency it does not,
+     and that is the case for induced voltages on control cables.
+   - **Unknowns.** Per cable node, n internal potentials. Per cable
+     segment, n internal currents. They are non-electromagnetic unknowns
+     stamped like the `branch` element (ADR 0028), so the interior adds no
+     fill cost, only LU size.
+   - **Ports.** At each cable end and at declared joints, a `ports` map
+     ties every terminal to a structure node: an electrode node (tower or
+     substation grounding), a `branch` node (linear terminations, surge
+     capacitances), or the next cable element. An unconnected terminal
+     floats. Screen bonding (solid, single-point) is a mapping, and
+     cross-bonding is a permuted mapping at a joint. Absolute terminal
+     potential is `u_armour + v_k`. The cable's (n+1)-port matrix at its
+     ends is an output, exportable as Touchstone Z-parameters (§7, EMT
+     note).
+   - **Entry sources.** Coaxial layers are closed-form [43, 40, 109].
+     Eccentric cores and proximity effects need a numerical 2-D solve:
+     MoM-SO [107, 108], FEM [113], or subdivision [73]. Pipe-type or
+     armour formulations follow [43]. Fits use matrix vector fitting with
+     a matrix passivity check (eigenvalues of `Re Z_in ≥ 0`). The `matrix`
+     kind amends ADR 0030 (new ADR).
+   - **Stages.**
+     - 4a: single-core screened, analytic entries. The oracle is the
+       exact-TL chain of the same `Z_in`, `Y_in`, and Ametani/EMTP cable
+       constants [43, 112].
+     - 4b: three-core armoured, numerical matrix entry, armour μr family
+       [111].
+     - 4c: LV/control multicore, where exterior coupling through `z_T`
+       dominates.
+     - Each stage gets one `common/` case with a golden fixture.
+   - **Validation.**
+     1. Degenerate: an unexcited interior with `z_T = 0` reproduces a
+        coated conductor of the armour radius.
+     2. Per-segment vs exact-TL interior on 4a, converging with
+        segmentation.
+     3. Screen voltage and current of a buried single-core cable against
+        published dispersive-soil cable transients.
+     4. Reciprocity and passivity over the sweep.
+   - **Not in scope here.** An exact-TL fast path for the interior, which
+     is a performance kernel. PRTL-mHEM's tubular bundles are a partial
+     analogue.
+5. **Sheet cross-section for the `plane` element (steel walls)** — **M**.
+   *Added 2026-10-29 (author).* The `plane` element (Phase 10e) gives every
+   bar a round-wire radius. For a metal wall, each bar stands for a strip of
+   width `d` of a **continuous** sheet, where `d` is the cell size across
+   the bar. An isolated-strip entry would add edge crowding, which a
+   continuous sheet does not have.
+   - **Entry.** A new `sheet` kind stores the per-square surface impedance
+     of a plate of thickness `t`, σ and μr:
+     `Z_s(s) = (k/2σ)·coth(k t/2)`, `k = √(sμσ)`. That is field on both
+     faces: the DC limit is `1/(σt)`, and at high frequency the two faces
+     act in parallel. A one-sided variant covers the interior of a closed
+     enclosure.
+   - **Use.** A plane bar gets `Z_int' = Z_s/d`. Non-square cells give the
+     u and v bars different `d`. The entry is a diffusion function, so it
+     fits in the v0 real-pole form, or it can be evaluated analytically.
+     Choosing between the two is open.
+   - **Magnetic steel.** A μr family, as for the tubes (Phase 12 item 2).
+   - **Bar radius (open).** Ludwig's equal-area rule `a = d/2π` [119] or
+     the strip conformal radius `d/4` (ADR 0030 §1). Settle it against a
+     solid-plate 3-D reference (BEM/FEM) on driving-point impedance and
+     shielding. ADR 0030's `Z_int` definition must be restated for the
+     sheet: a per-square impedance with no GMD correction.
+   - **Validation.** The plate surface impedance against the closed form,
+     the plate against the reference solve, and `marx_lab_2MV` rerun with
+     steel-sheet walls to measure the difference from bare wire-grid walls
+     [118, 119].
 
 ### Phase 14 — Air–soil coupling — **Fortran done 2026-10-19 (opt-in)**
 
@@ -907,8 +1120,22 @@ pulled forward if a tower-footing case needs shield wires.
    [41] background). Explicitly out of MVP scope (theory.md §5, §10.1).
    Time-domain and full-wave counterparts for cross-checking: Fan & Li [103]
    and Nazari et al. [104].
+2. **Finite conductive and dielectric volumes (concrete footings,
+   backfill)** — **L**, research. *Added 2026-10-29 (author), stage 2 of
+   Phase 13 item 3.* A concrete pad or pile is a bounded region of a third
+   medium, not a thin coaxial layer. Candidate routes:
+   - (a) a volume integral equation, with the conduction and polarisation
+     currents of the inclusion as extra unknowns;
+   - (b) equivalent sources or images for canonical shapes (a cylinder,
+     a hemisphere at the surface);
+   - (c) coupling to an external FEM solve through a port admittance.
 
-### Maintenance M1 — Remove SLATEC (native Bessel) — **proposed 2026-10-29**
+   Validate against FEM on encased-rod and pile cases, and require the
+   thin-layer model (Phase 13 item 3) as the limit of a slender inclusion.
+   Shares interface machinery with item 1 and with the faceted-terrain idea
+   (layered and inhomogeneous media).
+
+### Maintenance M1 — Remove SLATEC (native Bessel) — **steps 1–7 and 9 done 2026-10-29**
 
 [ADR 0031](adr/0031-remove-slatec-native-bessel.md): the only SLATEC routine
 in use is `ZBESI` (the `I₀/I₁` ratio of the solid-cylinder internal
@@ -918,6 +1145,11 @@ and the SLATEC path dependency removed, the commercial `vendor/slatec_zbesi`
 dropped, a per-conductor cache of the per-metre `Z_int`, and a separate
 decision on the `|ρ| > 500 → ratio = 1` cut-off (1e-3 relative error). Ten
 checklist steps in the ADR; steps 1–4 unblock the `ifx` build.
+**Status 2026-10-29:** `mBessel` landed (≤ 3e-14 against the AMOS table),
+SLATEC unlinked and its submodule removed, and the commercial vendor
+directory dropped. **Open:** step 8 (per-conductor `Z_int` cache), step 10
+(the cut-off decision), and the 40× parity run. `K₀/K₁` follow with Phase 12
+item 2.
 
 ### Legacy element inventory
 
@@ -1000,6 +1232,11 @@ shielded-wire segment.
   target), then Phase 8 item 9 (report); Phase 8J follow-along for Phases 9
   and 10b (Julia: Phase 10 done 2026-10-01 on the 1.13 toolchain; Phase 9
   — transfer-function/NLT transients — is next there, and Phase 10b follows it, then Phase 11); then Phase 12 (`tCircumference` first), with transient potential maps as the Phase 11 remainder.
+  Conductor and cable track (2026-10-29 plan, on top of ADR 0030): tube
+  entries (Phase 12 item 2) → coaxial encasement layer (Phase 13 item 3) →
+  `sheet` kind for planes (Phase 13 item 5) → the `matrix` kind and the
+  `cable` element, stages 4a–4c (Phase 13 item 4) → finite volumes
+  (Phase 15 item 2, research).
 
 ---
 
