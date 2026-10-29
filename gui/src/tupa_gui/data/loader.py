@@ -18,6 +18,7 @@ from .model import (
     LineElement,
     Material,
     MeshElement,
+    PlaneElement,
     Node,
     NodeVoltage,
     Outputs,
@@ -131,7 +132,7 @@ def load_study(path: str | Path) -> Study:
     except KeyError as exc:
         raise StudyLoadError(f"{path}: missing required field {exc}") from exc
 
-    elements: list[LineElement | CatenaryElement | MeshElement | ChannelElement] = []
+    elements: list[LineElement | CatenaryElement | MeshElement | PlaneElement | ChannelElement] = []
     for e in raw.get("elements", []):
         etype = e.get("type")
         if etype == "line":
@@ -170,6 +171,19 @@ def load_study(path: str | Path) -> Study:
                     rows_y=e["rowsY"],
                     radius=e["radius"],
                     segments=e.get("segments", 1),
+                    material=e["material"],
+                )
+            )
+        elif etype == "plane":
+            elements.append(
+                PlaneElement(
+                    id=e["id"],
+                    origin=tuple(e["origin"]),
+                    u=tuple(e["u"]),
+                    v=tuple(e["v"]),
+                    cells_u=e["cellsU"],
+                    cells_v=e["cellsV"],
+                    radius=e["radius"],
                     material=e["material"],
                 )
             )

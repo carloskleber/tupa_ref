@@ -303,7 +303,7 @@ contains
   ! Full geometry-matrix assembly
   ! =====================================================================
 
-  subroutine buildGeometryMatrices(p1, p2, radius, n, G, Gi, Rbar, Rbari, cosTheta, cosThetaI, forceNumeric, pos)
+  subroutine buildGeometryMatrices(p1, p2, radius, n, G, Gi, Rbar, Rbari, cosTheta, cosThetaI, forceNumeric, pos, crossMedium)
     !! Build the full set of n x n geometry matrices for n straight segments
     !! (theory.md §4-5): real geometry factor G, image geometry factor Gi,
     !! mean distance Rbar, image mean distance Rbari, direction cosine
@@ -336,16 +336,27 @@ contains
     !! 0005), so computing them is pure waste. G/Gi and their distances/
     !! cosines are set to 0 for those entries. Omit `pos` to compute every
     !! pair unconditionally (e.g. in geometry-only tests).
+    logical, intent(in), optional :: crossMedium
+    !! Cross-medium coupling (ROADMAP Phase 14 item 1, theory.md §5.1). With
+    !! `pos` present and `crossMedium` true, a mixed-media pair gets its DIRECT
+    !! geometry factor, mean distance and direction cosine like a same-medium
+    !! pair, with two differences: `Rbar` is the full midpoint distance, `Rbari`
+    !! carries the part of that straight ray lying in AIR (the rest lies in soil),
+    !! and the image outputs `Gi`/`cosThetaI` stay 0 (the transmitted field has
+    !! no image term).
     real(8) :: dir(n,3), len(n), mid(n,3)
-    real(8) :: p1i(3), p2i(3), midi(3), diri(3), gij
+    real(8) :: p1i(3), p2i(3), midi(3), diri(3), gij, zAir, zSoil
     integer :: i, j
-    logical :: mixedMedia
+    logical :: mixedMedia, cross
 
     ! Start each build with an empty memo table so statistics are per-build
     ! and no memory is carried across studies (entries would still be valid —
     ! keys are pure congruence invariants — but a fresh table keeps growth
     ! bounded by this geometry).
     call geomCacheClear()
+
+    cross = .false.
+    if (present(crossMedium) .and. present(pos)) cross = crossMedium
 
     do i = 1, n
       call segmentVector(p1(i,:), p2(i,:), dir(i,:), len(i))
@@ -376,7 +387,7 @@ contains
           G(i,i)        = selfGeometryFactor(len(i), radius(i))
           Rbar(i,i)     = radius(i)
           cosTheta(i,i) = 1.0d0
-        else if (mixedMedia) then
+        else if (mixedMedia .and. .not. cross) then
           G(i,j) = 0.0d0;                     G(j,i) = 0.0d0
           Rbar(i,j) = 0.0d0;                  Rbar(j,i) = 0.0d0
           cosTheta(i,j) = 0.0d0;              cosTheta(j,i) = 0.0d0
@@ -392,6 +403,17 @@ contains
         if (mixedMedia) then
           Gi(i,j) = 0.0d0;                    Gi(j,i) = 0.0d0
           Rbari(i,j) = 0.0d0;                 Rbari(j,i) = 0.0d0
+          if (cross) then
+            ! Air part of the straight midpoint-to-midpoint ray: it crosses
+            ! z = 0 at fraction zAir/(zAir - zSoil) of its length (zAir > 0 >= zSoil)
+            if (pos(i) == 1) then
+              zAir = mid(i,3); zSoil = mid(j,3)
+            else
+              zAir = mid(j,3); zSoil = mid(i,3)
+            end if
+            Rbari(i,j) = Rbar(i,j) * zAir / (zAir - zSoil)
+            Rbari(j,i) = Rbari(i,j)
+          end if
           cosThetaI(i,j) = 0.0d0;              cosThetaI(j,i) = 0.0d0
           cycle
         end if

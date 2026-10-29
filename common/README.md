@@ -16,7 +16,9 @@ when it reproduces every case within the stated tolerance.
 | `portela1997.json` | The Phase 2 validation conductor (10 m, 0.5 m depth, σ = 0.01 S/m, εr = 10), 1∠0° A at `Node_1`, 10 Hz-1 MHz | `portela1997_expected.csv` |
 | `portela1997_ideal.json` | ROADMAP Phase 10 item 2: as `portela1997.json` with `numerics.imageModel: "ideal"` (images `Γ = +1`, the pre-Phase-10 behaviour) and the sweep extended to 10 MHz, 1 point/decade — the pin that keeps the ideal-image path regression-tested and shows the size of the `Γ(ω)` default (it grows as f²: 1.8e-3 of the `Node_1` voltage at 1 MHz, versus `portela1997`) | `portela1997_ideal_expected.csv` |
 | `rod.json` | Single vertical buried rod (3 m, -0.5 to -3.5 m), same soil, 1∠0° A at `Node_1`, 10 Hz-1 MHz, 8 points/decade | `rod_expected.csv` |
-| `rod_air.json` | Two collinear rods sharing `Node_2` at the air-soil interface (z=0): 10 m above ground down to a 5 m buried rod, same soil/material, 1∠0° A at `Node_1` (top), 10 Hz-1 MHz | none yet — runs NaN-free since the ADR 0019 fix; fixture still to be generated (see below) |
+| `rod_air.json` | Two collinear rods sharing `Node_2` at the air-soil interface (z=0): 10 m above ground down to a 5 m buried rod, same soil/material, 1∠0° A at `Node_1` (top), 10 Hz-1 MHz | none yet — runs NaN-free since the ADR 0019 fix; the cross-coupled variant is `rod_air_cross.json` |
+| `rod_air_cross.json` | ROADMAP Phase 14 (ADR 0029): `rod_air.json` with `numerics.crossMedium: "transmission"`, 1 point/decade, plus two `observation` points 1 µm either side of the interface (the continuity check of `test_potentials`). The coupling moves the input voltage by 3.6e-6 at 10 Hz and 5.7e-2 at 1 MHz | `rod_air_cross_expected.csv` |
+| `channel_tower_cross.json` | Phase 14 item 2: the `channel_tower.json` geometry (tower, buried rod, channel), harmonic only, with the coupling on; `test_crossmedium` compares it with `channel_tower.json` (coupling off) | none (trend test) |
 | `grid.json` | Small buried grounding grid, one square mesh (4 nodes/edges), 1∠0° A at `Node_A`, 100 Hz-100 kHz | `grid_expected.csv` |
 | `portela1997_transient.json` | Same geometry/soil as `portela1997.json`, but a `signal` block (ADR 0015) instead of `sources`/`frequencies`: transient GPR under a 1.2/50 µs, 30 kA double-exponential surge | none (internal-consistency check only, theory.md §9.2 data gap — see `test_transient.f90`) |
 | `portela1997_transient_interpolated.json` | ROADMAP Phase 9 item 1: as `portela1997_transient.json`, `transferFunction: "interpolated"` — H(f) solved on the case's `frequencies` axis (100 Hz–1 MHz, 20/decade, 81 points; `freqZeroHz: 100`) and pchip-interpolated onto the 513 FFT bins | `portela1997_transient_interpolated_expected.csv` (transient shape) |
@@ -32,6 +34,7 @@ when it reproduces every case within the stated tolerance.
 | `channel_loaded.json` | ROADMAP Phase 10b: 3 km, r0 = 3 cm channel over ideal ground loaded to c/2 (`speed: 1.5e8`, `resistance: 0.5`, `calibrate: true`), segments graded from 5 m at the foot (`growth: 1.15`, ≤ 20 m), 10 kA 1 µs ramp current source at `ch-base`, NLT. The fixture pins the **calibrated** loading too (the `channels` block of its results records it) | `channel_loaded_expected.csv` (transient shape) |
 | `channel_tower.json`, `channel_tower_gap.json` | ROADMAP Phase 10b: strike to a 30 m tower (0.3 m radius) with a 3 m rod footing in σ = 1 mS/m soil, and a 1 km channel above the tower top (`strike: "Ttop"`, c/2, 0.5 Ω/m, graded). Source between the tower top and `ch-base` (a two-node source, ADR 0025): a 1 A current source in `channel_tower.json`, a 1 kV ideal voltage source (delta gap) in `channel_tower_gap.json`; each carries a harmonic sweep (10 kHz–1 MHz, 3/decade) and a transient (10 kA / 1 MV, 1 µs ramp, NLT, 256 samples to 2 MHz) | `channel_tower_expected.csv`, `channel_tower_transient_expected.csv`, `channel_tower_gap_expected.csv`, `channel_tower_gap_transient_expected.csv` |
 | `grid_safety.json` | ROADMAP Phase 11 ([ADR 0027](../docs/adr/0027-observation-potentials-and-safety-outputs.md)): grounding-safety outputs — a 16 × 16 m grid (`mesh`, 2 × 2 bays, 0.5 m deep, 4 segments/bar) in σ = 5 mS/m soil with a 1 m tower riser (`Riser_1` in soil, `Riser_2` in air) at the corner, 1 kA at `Tower_top`, 50 Hz–50 kHz (1/decade). The `observation` block asks for two points (grid centre, a remote point 40 m away), a 13 × 13 surface grid spanning 24 × 24 m with the step map, a touch site at `Tower_top` (36 points, 1 m) and a step pair at the grid edge. `outputs` limits the harmonic results to `Tower_top` and `Riser_1_e1`. Writes `grid_safety_results.*` and `grid_safety_potentials.*` | `grid_safety_expected.csv` (harmonic) and `grid_safety_potentials_expected.csv` (observation shape `frequency_hz,quantity,id,x,y,z,re,im`) |
+| `induced_nucci1993.json`, `induced_nucci1993_risers.json` | ROADMAP Phase 10d ([ADR 0028](../docs/adr/0028-induced-voltages-and-lumped-branch.md), theory.md §4.6.5): Nucci et al. 1993 (references.md [75]) base case — a 1 km, 5 mm radius wire 10 m above **ideal** ground (y = 50 m, 10 m segments), matched at both ends by a 497.6 Ω `branch` (= 60 acosh(h/a)), a subsequent stroke (two-term Heidler, 12 kA, 40 kA/µs) at the origin: a free-standing 3 km, 3 cm channel loaded to 1.3e8 m/s (`calibrate`, R' = 1.7 Ω/m ≈ 2 Zc/λ), graded from 5 m at the foot, driven at `ch-base`; NLT, 1024 samples to 10 MHz. The first connects each resistor to the wire end (variant A, the decided baseline); the second ends each wire in a vertical riser with the resistor at its foot (variant B, the reference's boundary condition; observe `Fw`, `Fe`) and sets `signal.totalVoltage`, so its interior node `Line_n50` is the total voltage of the paper's Fig. 9 (the feet are at the ground and unaffected). The sweeps, the Fig. 14 case and the sensitivity cases are generated by [`docs/validation/induced_checks.py`](../docs/validation/induced_checks.py), which also regenerates these two files (`--write-common`). Fortran only (the `branch` element, ROADMAP Phase 10d) — Rust and Julia refuse it | none (compared to the paper's tables, [`docs/validation/induced-validation.md`](../docs/validation/induced-validation.md)) |
 | `lima_fig6.json` | Lima et al. 2020 (IEEE TEMC, references.md [11]) §III-B Case #9: distribution tower grounding — 4 horizontal electrodes (6 m) radiating 90° apart from a center node, each ending in a vertical rod (3 m), plus a 5th vertical rod at the center (injection point); homogeneous soil (σ1 = 1 mS/m, εr = 10); 12.5 mm radius, arms at -0.5 m with rods to -3.5 m (both inferred — see writeup), 0.5 m segments, 1∠0° A at `Node_C`, 150 log-spaced points 100 Hz–10 MHz (`pointsPerDecade: 29.8`). For comparison against the paper's Fig. 6 MHEM curve — see [`docs/validation/lima-fig6.md`](../docs/validation/lima-fig6.md) | none yet (plausibility check only; case geometry only partially specified by the paper) |
 
 ### Legacy TUPÃ cases (`linha*.json`, `torre*.json`, ADR 0023)
@@ -181,7 +184,17 @@ Semantics:
   only — e.g. `{ "type": "alipio-visacro", "permeability": 1.0, "sigma0": 0.01 }`.
   See `silva2025_rho100.json` for a worked example.
 - `elements[].type`: `"line"`, `"mesh"` (ADR 0020), `"catenary"` (ADR
-  0023) or `"channel"` (ADR 0025); unknown types are skipped with a warning.
+  0023), `"channel"` (ADR 0025) or `"branch"` (ADR 0028, Fortran only);
+  other unknown types are skipped with a warning.
+- `"branch"` (ADR 0028, theory.md §6) is a lumped series `R + sL + 1/(sC)`
+  between node `from` and node `to`, or from `from` to remote earth when
+  `to` is absent: `resistance` (Ω), `inductance` (H), `capacitance` (F), each
+  optional, not all zero (a short circuit is refused: use a small
+  resistance). It adds no node and no segment and has no electromagnetic
+  coupling to anything; the branch current is `(u_from − u_to)/Z` and the
+  voltage across a branch to earth is the node voltage `u_from`. An isolated
+  node (no segment) may be the `from` node: a source there feeds a series
+  branch. The Rust and Julia loaders refuse the type (ROADMAP Phase 10d).
 - `"channel"` (ADR 0025, theory.md §4.5) is a lightning return-stroke
   channel in air: a chain of perfectly conducting segments rising from a
   `strike` node — or from a free-standing `position` `[x, y, z]`, exactly
@@ -369,6 +382,10 @@ Semantics:
     Transform, s = c + jω); `nltDamping` sets c (1/s), default ln(N²)/T.
     `"nlt"` cannot be combined with `"interpolated"`. NLT output is reliable
     over the early part of the record only (theory.md §8).
+  - `totalVoltage`: `true` reports every `observeNodes` voltage as the total
+    voltage φ + s∫A_z^i dz of the lightning channel's incident field instead of
+    the scalar potential φ (default `false`; theory.md §4.6.3, ADR 0028
+    amendment). Nodes at or below the ground are unchanged. Fortran only.
 - **Transient results with several sources**: the results JSON adds a
   `sources` array (`[{ "node", "current": [...] }]`, input order) after
   `injectedCurrent`, which, like `sourceNode`, keeps describing the first

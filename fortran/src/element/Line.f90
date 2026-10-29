@@ -29,6 +29,13 @@ module mElementLine
     !! Pointer to the start node (resolved during assembly)
     type(tNode), pointer :: nodeEnd => null()
     !! Pointer to the end node (resolved during assembly)
+    integer(4) :: lumpSegment = 0
+    !! 1-based segment of the chain that carries a lumped series R-L-C
+    !! (0 = none). It is added to that segment's internal impedance, so the
+    !! component keeps the segment's geometry, mutual coupling and shunt
+    !! capacitance (docs/marx_generator.md).
+    real(8) :: lumpResistance = 0.0d0, lumpInductance = 0.0d0, lumpCapacitance = 0.0d0
+    !! Lumped R (Ω), L (H) and C (F; 0 = none) of that segment
   contains
     procedure :: assemble => assembleLine
     procedure :: report   => reportLine
@@ -140,6 +147,11 @@ contains
         electrode = newElectrode(trim(buf), nodeIdx(k), nodeIdx(k + 1))
         electrode%radius = this%radius
         electrode%material => this%material
+        if (k == this%lumpSegment) then
+          electrode%lumpResistance  = this%lumpResistance
+          electrode%lumpInductance  = this%lumpInductance
+          electrode%lumpCapacitance = this%lumpCapacitance
+        end if
         call structure%addElectrode(electrode)
         this%electrodes(k) = electrode
       end do

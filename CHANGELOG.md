@@ -18,6 +18,75 @@ numerics, which move result files.
   `setMessageSink` / `emitMessage` with `MSG_INFO`/`MSG_WARNING`/`MSG_ERROR`
   — through which all library output now goes (standard output when no sink is
   installed, as before). Test `test_library_mode`.
+- **GUI: `plane` element** — the viewer and element tree load `plane` elements,
+  drawing the same wire grid the solver builds (bars shared between adjacent
+  planes drawn once) plus a translucent sheet over each rectangle.
+
+- **`plane` element and 2 MV laboratory case** ([docs/marx_generator.md](docs/marx_generator.md)):
+  a wire-grid rectangle of any orientation that reuses shared nodes and bars
+  (walls, ceiling), `tools/gen_marx_lab.py` generating
+  `common/marx_lab_2MV*.json` (Marx generator, divider, tower mockup with
+  500 kV string, 50 m phase cable, 40 m hall) and `tools/impulse_params.py`
+  (IEC 60060-1 peak, T1, T2).
+
+- **Marx impulse generator support** ([docs/marx_generator.md](docs/marx_generator.md)):
+  `step` and `branchNorton` signal waveforms (a capacitor charged to V0
+  discharging through a series R-L-C `branch`, as its Norton current source),
+  a `lumped` R-L-C embedded in one segment of a `line` element (keeps the
+  segment's geometry and coupling), and branch-current output in
+  `transientResponseSignals` (API only). Case `common/marx_single_stage.json`;
+  tests `test_marx`, `test_lumped_segment`.
+
+### Documentation
+
+- **Validation writeups for the newer features** ([docs/validation/](docs/validation/README.md)):
+  `sources-validation.md` (ideal voltage sources and two-node sources against
+  superposition of unit-current runs), `gpr-potentials.md` (surface potential,
+  GPR, touch and step voltage against closed forms) and a windowing section in
+  `phase9-transient-options.md`. The scripts behind them
+  (`sources_checks.py`, `phase11_checks.py`, `phase9_transient_checks.py`) run on
+  any solver executable through `run_checks.sh`. Root README: repository layout
+  and the full case list.
+- **Induced-voltage literature, second pass** (references.md [82]–[106]): the
+  original Agrawal derivation, field data (Rubinstein, Barker), the Rachidi
+  review, and corona, dispersive and lossy ground, inclined channels,
+  grounding coupling, sag and terrain. theory.md §4.4, §4.5, §4.6, §7, §9 and
+  §10.1 gain the matching notes and errata. The 1985 Florida line is now
+  taken as 450 m. ROADMAP Phase 10d lists the candidate follow-up cases.
+
+### Added
+
+- **Air–soil cross-medium coupling** (`numerics.crossMedium: "transmission"`,
+  default `"none"`; ADR 0029, theory.md §5.1, ROADMAP Phase 14). Segments in air
+  and in soil couple through the transmitted field (`1/(2π(Wₐ+Wₛ))`, no image term,
+  straight-ray retardation) in `Zt`, `Zℓ` and the observation potentials, so a
+  lightning channel or tower now acts on buried electrodes. Off by default: no
+  existing result moves. Fortran only; the Rust and Julia loaders refuse
+  the switch. New cases `rod_air_cross`, `channel_tower_cross`.
+- **Total voltage along an overhead line** (`signal.totalVoltage`, ADR 0028
+  amendment, theory.md §4.6.3): the observed node voltages of a transient run can be
+  reported as the total voltage `φ + s∫A_z^i dz` of the lightning channel's incident
+  field, the quantity the induced-voltage literature plots, instead of the scalar
+  potential `φ` (default; goldens unchanged). Nodes at or below the ground are
+  unchanged. For the Nucci base case (variant B) the voltage 250 m from the end
+  goes from 58.9 to 68.1 kV and the centre from 51.3 to 81.8 kV against about 74
+  and 100 kV in the paper's Fig. 9. New module `mIncident`
+  (`segmentPotentialFactor` moved there), `test_incident.f90`; `induced_nucci1993_risers.json`
+  sets the option. Fortran only; harmonic output has no such option yet.
+- **Lumped series-RLC `branch` element and the lightning-induced voltage anchor**
+  ([ADR 0028](docs/adr/0028-induced-voltages-and-lumped-branch.md), ROADMAP
+  Phase 10d, theory.md §4.6): `{"type": "branch", "from", "to"?, "resistance",
+  "inductance", "capacitance"}` puts a lumped `R + sL + 1/(sC)` between two nodes,
+  or from one node to remote earth (no `to`), on the harmonic and the
+  Laplace path; it adds no node and no segment. With it a matched overhead
+  line can be terminated, and the Nucci et al. (1993) base case — a 1 km, 10 m
+  high line, a subsequent stroke 50 m away — runs as `common/induced_nucci1993.json`
+  (resistor at the wire end) and `common/induced_nucci1993_risers.json`
+  (vertical risers, the reference's boundary condition); results against the
+  paper's tables in [docs/validation/induced-validation.md](docs/validation/induced-validation.md).
+  Fortran only: the Rust and Julia loaders refuse the element, the GUI skips it.
+  theory.md also gains §4.6 (fields of the channel, the Taylor/Agrawal/Rusck
+  coupling forms, lossy ground) and references.md [75]–[81].
 - **Grounding-safety outputs** (ROADMAP Phase 11,
   [ADR 0027](docs/adr/0027-observation-potentials-and-safety-outputs.md),
   theory.md §3.1): an optional `observation` input block asks for the potential

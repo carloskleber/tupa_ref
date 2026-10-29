@@ -14,10 +14,10 @@ from PySide6.Qt3DCore import Qt3DCore
 from PySide6.Qt3DExtras import Qt3DExtras
 from PySide6.Qt3DRender import Qt3DRender
 from PySide6.QtCore import QEvent, QPointF, Qt, Signal
-from PySide6.QtGui import QColor, QQuaternion, QVector3D
+from PySide6.QtGui import QColor, QMatrix4x4, QQuaternion, QVector3D
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
-from tupa_gui.data import CatenaryElement, ChannelElement, LineElement, MeshElement, Study
+from tupa_gui.data import CatenaryElement, ChannelElement, LineElement, MeshElement, PlaneElement, Study
 
 # theory.md §2: right-handed, z up, air-soil interface at z = 0.
 # Qt3D's convention is y-up; map study (x, y, z) -> Qt3D (x, z, y) so the
@@ -26,6 +26,11 @@ from tupa_gui.data import CatenaryElement, ChannelElement, LineElement, MeshElem
 def _to_qt3d(position: tuple[float, float, float]) -> QVector3D:
     x, y, z = position
     return QVector3D(x, z, y)
+
+
+def _round_key(p: tuple[float, float, float]) -> tuple[int, int, int]:
+    """Position key for deduplicating shared bar ends (1 µm grid, the solver's node tolerance)."""
+    return (round(p[0] * 1e6), round(p[1] * 1e6), round(p[2] * 1e6))
 
 
 def _from_qt3d(v: QVector3D) -> tuple[float, float, float]:
@@ -41,6 +46,9 @@ CHANNEL_HALO_COLOR = QColor(90, 150, 255)
 NODE_COLOR = QColor(255, 205, 60)
 CONDUCTOR_COLOR = QColor(200, 120, 60)
 SOIL_COLOR = QColor(110, 80, 55, 120)
+PLANE_COLOR = QColor(120, 170, 220, 70)
+# Plane bars draw at this fraction of the scene-wide conductor radius floor (see below).
+PLANE_BAR_FLOOR_FRACTION = 0.2
 HIGHLIGHT_COLOR = QColor(255, 60, 60)
 GRID_COLOR = QColor(255, 255, 255, 45)
 AXIS_COLOR_X = QColor(210, 70, 70)
@@ -197,6 +205,10 @@ class GeometryViewer(QWidget):
                     node_positions[node_id] = _to_qt3d(position)
 
         positions = list(node_positions.values())
+        # A plane's corners frame the scene too, though it draws no node markers.
+        for element in study.elements:
+            if isinstance(element, PlaneElement):
+                positions += [_to_qt3d(element.point(i, j)) for i in (0, element.cells_u) for j in (0, element.cells_v)]
         extent = max((v.length() for v in positions), default=1.0)
         extent = max(extent, 1.0)
         min_visible_radius = extent * MIN_VISIBLE_RADIUS_FRACTION
@@ -213,6 +225,7 @@ class GeometryViewer(QWidget):
             node_entries[node_id] = entry
             node_transforms[node_id] = node_transform
             self._node_labels[node_id] = self._make_label(node_id)
+        drawn_bars: set[frozenset] = set()
         for element in study.elements:
             if isinstance(element, CatenaryElement):
                 # Parabolic span (ADR 0023): one cylinder per chain segment,
@@ -247,6 +260,27 @@ class GeometryViewer(QWidget):
                     root, scene, a, b, min_visible_radius, element.id
                 )
                 element_centers[element.id] = (a + b) * 0.5
+            elif isinstance(element, PlaneElement):
+                # Translucent slab 2 * radius deep (the bar diameter) with the wire grid inside. Bars shared
+                # with an earlier plane (same end positions, as the solver reuses them)
+                # are drawn once. Bars are fine wire at a fraction of the scene floor, whatever
+                # the authored radius; only the slab carries that radius.
+                bar_radius = min_visible_radius * PLANE_BAR_FLOOR_FRACTION
+                materials = []
+                for pa, pb in element.bars():
+                    key = frozenset((_round_key(pa), _round_key(pb)))
+                    if key in drawn_bars:
+                        continue
+                    drawn_bars.add(key)
+                    entry = self._add_conductor(
+                        root, scene, _to_qt3d(pa), _to_qt3d(pb), bar_radius, 0.0, element.id
+                    )
+                    if entry is not None:
+                        materials += entry.materials
+                if materials:
+                    element_entries[element.id] = _Highlightable(materials, CONDUCTOR_COLOR)
+                self._add_plane_slab(root, scene, element, 2.0 * element.radius)
+                element_centers[element.id] = _to_qt3d(element.center())
             else:  # MeshElement (ADR 0020) — one cylinder per bar, all sharing the element's ID
                 materials: list[Qt3DExtras.QPhongMaterial] = []
                 centers: list[QVector3D] = []
@@ -414,6 +448,38 @@ class GeometryViewer(QWidget):
             y = (1.0 - (ndc.y() * 0.5 + 0.5)) * height
             label.show()
             label.move(int(x - label.width() / 2), int(y - label.height() - 6))
+
+    def _add_plane_slab(
+        self, root: Qt3DCore.QEntity, scene: list[object], plane: PlaneElement, thickness: float
+    ) -> None:
+        """Translucent solid slab (`thickness` deep, centred on the grid) around a `PlaneElement`'s
+        wire grid. Not pickable (the bars are)."""
+        u, v = _to_qt3d(plane.u), _to_qt3d(plane.v)
+        normal = QVector3D.crossProduct(v, u)  # (u, normal, v) right-handed: keeps face winding
+        if normal.length() == 0:
+            return
+        normal.normalize()
+        center = _to_qt3d(plane.center())
+        entity = Qt3DCore.QEntity(root)
+        mesh = Qt3DExtras.QCuboidMesh(entity)  # unit cube centred on the origin
+        material = Qt3DExtras.QPhongAlphaMaterial(entity)
+        material.setDiffuse(PLANE_COLOR)
+        material.setAmbient(PLANE_COLOR)
+        material.setAlpha(PLANE_COLOR.alphaF())
+        n = normal * thickness
+        # Columns: image of X (u), of Y (normal * thickness), of Z (v), then the centre.
+        matrix = QMatrix4x4(
+            u.x(), n.x(), v.x(), center.x(),
+            u.y(), n.y(), v.y(), center.y(),
+            u.z(), n.z(), v.z(), center.z(),
+            0.0, 0.0, 0.0, 1.0,
+        )
+        transform = Qt3DCore.QTransform(entity)
+        transform.setMatrix(matrix)
+        entity.addComponent(mesh)
+        entity.addComponent(material)
+        entity.addComponent(transform)
+        scene += [entity, mesh, material, transform]
 
     def _add_soil_plane(self, root: Qt3DCore.QEntity, scene: list[object], extent: float) -> None:
         size = max(extent * 3, 5.0)

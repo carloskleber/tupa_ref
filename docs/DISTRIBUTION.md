@@ -10,9 +10,9 @@ policy and the dependency inventory.
 | Step | Tool | Notes |
 | --- | --- | --- |
 | Dependency fetch + build | FPM (`fpm.toml`) | stdlib and feh fetched by fpm; LAPACK/BLAS/SLATEC linked as system/prebuilt libraries |
-| SLATEC provisioning | `fortran/build.sh` | clones the author's SLATEC fork into `fortran/slatec/`, `fpm install`s it to `~/.local/lib` with legacy flags |
+| SLATEC provisioning | `fortran/build.sh` | checks out the SLATEC submodule (author's fork, an fpm path dependency) and `fpm install`s the optimised binary to `fortran/bin/Tupa` |
 | Optimised build | `fortran/build.sh` | `--profile release` plus `-O3 -march=native -fopenmp -ffast-math …` |
-| Development build/test | `fpm build` / `fpm test` | needs `LIBRARY_PATH=$HOME/.local/lib:$LIBRARY_PATH` for the SLATEC link when not run via build.sh; on shared LAPACK also `--link-flag "-Wl,--no-as-needed -llapack -lblas"` and `--flag "-ffree-line-length-none -fno-range-check -fopenmp"` ([fortran/README.md](../fortran/README.md)) |
+| Development build/test | `fpm build` / `fpm test` | needs `--flag "-std=legacy -Wno-argument-mismatch -fallow-invalid-boz -ffree-line-length-none -fno-range-check -fopenmp"`; on shared LAPACK also `--link-flag "-Wl,--no-as-needed -llapack -lblas"` ([fortran/README.md](../fortran/README.md)) |
 | Threads | `OMP_NUM_THREADS`, `--threads <n>` | frequency loop of `runSweep` (needs a `-fopenmp` build, i.e. `build.sh`); with a threaded BLAS set `OPENBLAS_NUM_THREADS=1` (ADR 0024 §4) |
 | API docs | FORD (`fortran/Tupa.md`) | optional; needs a Python venv (`pip install ford lxml`) |
 | Rust build/test | `cargo build --release` / `cargo test --release` in `rust/` | no system libraries; crates: `serde`, `serde_json`, `num-complex` (MIT/Apache-2.0); `Cargo.lock` is committed ([ADR 0022](adr/0022-rust-implementation.md)) |

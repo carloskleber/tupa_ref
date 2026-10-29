@@ -262,6 +262,8 @@ struct NumericsSpec {
     image_model: Option<String>,
     #[serde(rename = "maxSegmentLength")]
     max_segment_length: Option<f64>,
+    #[serde(rename = "crossMedium")]
+    cross_medium: Option<String>,
 }
 
 /// `observation` block (ADR 0027, ROADMAP Phase 11).
@@ -571,6 +573,21 @@ fn build(spec: CaseSpec) -> Result<LoadedCase> {
                 )));
             }
         };
+        // ROADMAP Phase 14 (ADR 0029): refused rather than silently run without the coupling
+        match num.cross_medium.as_deref() {
+            None | Some("none") => {}
+            Some("transmission") => {
+                return Err(TupaError::new(
+                    "mTupa: numerics.crossMedium \"transmission\" (ROADMAP Phase 14, ADR 0029) is not \
+                     implemented in the Rust port",
+                ));
+            }
+            Some(other) => {
+                return Err(TupaError::new(format!(
+                    "mTupa: unknown numerics.crossMedium '{other}' (expected none or transmission)"
+                )));
+            }
+        }
         if let Some(l) = num.max_segment_length {
             if l <= 0.0 {
                 return Err(TupaError::new(
@@ -668,6 +685,14 @@ fn build(spec: CaseSpec) -> Result<LoadedCase> {
             })),
             "channel" => {
                 structure.add_element(Element::Channel(build_channel(e, max_segment_length)?))
+            }
+            // ROADMAP Phase 10d (ADR 0028): rejected rather than skipped, so a case never
+            // runs without its terminations by mistake
+            "branch" => {
+                return Err(TupaError::new(
+                    "mTupa: the branch element (ROADMAP Phase 10d, ADR 0028) is not implemented in the Rust \
+                     port yet (follow-along lag, see rust/README.md)",
+                ))
             }
             other => eprintln!(" mTupa: unknown element type '{other}' — skipped"),
         }

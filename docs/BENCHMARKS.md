@@ -4,7 +4,7 @@ What "validated" means for this project, which cases count, and where they
 stand. The physics definition of each anchor is in
 [theory.md §9](theory.md); this file tracks execution status and policy.
 
-**Current status (2026-10-01): the end-to-end frequency-sweep and
+**Current status (2026-10-11): the end-to-end frequency-sweep and
 time-domain pipeline are wired and green (ROADMAP Phases 0–10).** Six
 literature comparisons (anchors 7–11, Lima's two grids sharing anchor 10)
 have run against published papers' own figures — see
@@ -13,7 +13,7 @@ have run against published papers' own figures — see
 below 1 MHz the codes agree to 0.3 % or better). The formula/tabulated
 anchors (1, 2, 5) are still pending: no Sunde/Dwight DC pin or Portela 1997
 /Grcev & Heimbach 1997 tabulated data exists yet, and PRTL-mHEM has been run
-only on the Grcev 10 m case ([validation/tupa-vs-mhem.md](validation/tupa-vs-mhem.md)). Unit-level pins (sign conventions, geometry factors vs
+only on the Grcev 10 m case ([validation/tupa-vs-mhem.md](validation/tupa-vs-mhem.md)). Internal-consistency anchors 12–14 cover the newer features — voltage and two-node sources, the Phase 11 potential outputs and the transient windows — with scripts that rerun them on any solver executable ([validation/README.md](validation/README.md#scripts)). Unit-level pins (sign conventions, geometry factors vs
 quadrature oracles, Bessel limits, hand-solved 4×4 system) are green — see
 `fortran/test/`.
 
@@ -32,6 +32,9 @@ quadrature oracles, Bessel limits, hand-solved 4×4 system) are green — see
 | 9 | Harmonic input impedance, buried horizontal electrodes, ℓ = 10/100 m, ρ1 = 30/300/3000 Ω·m, vs. the paper's own rigorous full-wave MoM model | Grcev et al. 2018 [23], Fig. 12 | qualitative (digitized plot) | **executed** — [validation/grcev-fig12.md](validation/grcev-fig12.md): DC/HF asymptotes within 0-4%, resonance shape/depth/location reproduced; excluding digitization outliers, every other point within ±11.5% |
 | 10 | Harmonic input impedance, distribution-tower counterpoise (Case #9) and two square grounding grids (Cases #10/#11), ρ = 1000 Ω·m | Lima et al. 2020 [11], Figs. 6–7 | qualitative (digitized plot) | **executed** — [validation/lima-fig6.md](validation/lima-fig6.md): resonance locations within ~10-15% but a systematic −13 to −17% DC-to-2MHz gap (case geometry only partially stated by the paper); [validation/lima-fig7.md](validation/lima-fig7.md): both grids within ±7% below ~4 MHz, 10-19% through the ~6.5-7 MHz peak |
 | 11 | Harmonic input impedance, single vertical electrode, L = 2 m, ρ = 5400 Ω·m, DC-100 MHz | Poljak & Doric 2006 [35], Fig. 4 | qualitative (digitized plot) | **executed** — [validation/poljak-fig4.md](validation/poljak-fig4.md): closest agreement of any comparison in this folder — DC plateau, roll-off and all four resonance lobes within ±10% almost everywhere |
+| 12 | Voltage sources and two-node sources (current dipole, delta gap) against superposition of unit-current runs; transient surges against U(t)/R and R·i(t) | ADR 0016, ADR 0025 (internal consistency) | solver/output precision (harmonic); surge bandwidth (transient) | **executed 2026-10-11** — [validation/sources-validation.md](validation/sources-validation.md): harmonic ≤ 5e-9, two-node transient 3e-5 of peak, Fortran and Rust identical |
+| 13 | Surface potential, GPR, touch and step voltage: flush rod against Dwight and the line-source closed form; 16 × 16 m grid against the disc bound, Laurent–Niemann and Sverak and the point-source far field; potential beside a conductor against its node voltage | ADR 0027, theory.md §3.1 (closed forms; no published curve) | closed-form agreement stated per quantity | **executed 2026-10-11** — [validation/gpr-potentials.md](validation/gpr-potentials.md): rod GPR −0.06 %, ψ within 0.5 % beyond 5 m, far field 0.2 %, conductor-side ψ within 0.5 % to 1 MHz; the grid resistance is bracketed, not pinned (a published grid case is still open) |
+| 14 | Windowing (`signal.window`, `antialiasStart`): sensitivity on the unresolved Portela front and the resolved Silva MCS_FST#2 case, spectral Hann ≡ `antialiasStart` → 0, time window ≡ excitation × w(t) | ADR 0015 amendment, ADR 0021 (internal consistency) | identities to ≤ 4e-7 | **executed 2026-10-11** — [validation/phase9-transient-options.md](validation/phase9-transient-options.md) §3: spectral Hann −10.5 % of peak on the Portela surge, −0.56 % on Silva (the unwindowed Fig. 4 comparison stands) |
 
 Anchors 7-11 are the primary executable oracle for the near term. Anchor
 2's original data does not exist in tabulated form (only the published

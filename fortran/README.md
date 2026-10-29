@@ -7,6 +7,20 @@ documentation lives in [../docs/](../docs/README.md); conventions in
 **Compilers**: developed against the latest gfortran; the code is kept
 ifx-compatible.
 
+## TL;DR
+
+```bash
+cd fortran
+./fpmw run -- ../common/marx_single_stage.json   # build (first time: slow) + run a case
+./fpmw test --profile release                    # test suite
+bash build.sh                                    # optimised binary -> bin/Tupa
+```
+
+Results go to `results/` (change with `--output-dir DIR`). Plain `fpm run`
+fails: the SLATEC F77 sources need legacy flags, which `fpmw` sets (via
+`FPM_FFLAGS`) before calling `fpm`. Needs `gfortran` and `fpm`
+([setup](#recommended-setup)).
+
 ## Recommended setup
 
 ### Windows
@@ -43,14 +57,17 @@ Look for `gcc-fortran`
 
 ## Building and testing without build.sh
 
-`build.sh` installs SLATEC to `~/.local/lib`, which is not on the default
-linker search path. Plain `fpm` invocations therefore need:
+SLATEC is a path dependency of `fpm.toml`, so no library path setup is needed.
+Its F77 sources need legacy flags, which fpm applies to all packages. `./fpmw`
+is `fpm` with those flags preset (`FPM_FFLAGS`); the equivalent explicit form is:
 
 ```bash
-export LIBRARY_PATH=$HOME/.local/lib:$LIBRARY_PATH
-fpm build
-fpm test
+fpm build --flag "-std=legacy -Wno-argument-mismatch -fallow-invalid-boz -ffree-line-length-none -fno-range-check -fopenmp"
 ```
+
+(Without them, `fpm run`/`build` stop with a "Rank mismatch" error in
+`slatec/src/defcmn.f`.) `bash build.sh` does an optimised `fpm install` to
+`fortran/bin/Tupa`.
 
 The SLATEC checkout that `build.sh` clones into `fortran/slatec/` is the
 canonical copy (author's fork) and may be fine-tuned in place.
@@ -61,7 +78,6 @@ long source lines allowed, OpenMP for the threaded sweep, and LAPACK kept on
 the link line after SLATEC (`D1MACH` calls `DLAMCH`):
 
 ```bash
-export LIBRARY_PATH=$HOME/.local/lib:$LIBRARY_PATH
 fpm test --profile release \
   --flag "-ffree-line-length-none -fno-range-check -fopenmp" \
   --link-flag "-Wl,--no-as-needed -llapack -lblas"
@@ -88,9 +104,8 @@ the `test_geometry`/`test_impedance` runtime note above is about the 2-D
 oracle. To profile:
 
 ```bash
-export LIBRARY_PATH=$HOME/.local/lib:$LIBRARY_PATH
 fpm build --profile release --flag "-g"
-perf record --call-graph dwarf ./build/gfortran_*/app/Tupa ../common/rod_air.json
+perf record --call-graph dwarf ./bin/Tupa ../common/rod_air.json
 perf report
 ```
 
@@ -102,12 +117,12 @@ change it, `gprof` is a lower-resolution fallback that doesn't need it:
 
 ```bash
 fpm build --profile release --flag "-pg"
-./build/gfortran_*/app/Tupa ../common/rod_air.json
-gprof ./build/gfortran_*/app/Tupa gmon.out | less
+./bin/Tupa ../common/rod_air.json
+gprof ./bin/Tupa gmon.out | less
 ```
 
 For exact call counts and a navigable call graph (much slower to run),
-`valgrind --tool=callgrind ./build/gfortran_*/app/Tupa ../common/rod_air.json`
+`valgrind --tool=callgrind ./bin/Tupa ../common/rod_air.json`
 then open the resulting `callgrind.out.*` in `kcachegrind`.
 
 ## Running Tupa
@@ -117,7 +132,7 @@ The standalone solver executable (`app/main.f90`, package name `Tupa` in
 ([common/README.md](../common/README.md) schema) and runs it end to end.
 
 ```bash
-fpm run -- ../common/portela1997.json
+./fpmw run -- ../common/portela1997.json
 ```
 
 This is `fpm run` for the *default* (only) executable, passing the JSON
@@ -125,7 +140,7 @@ path after `--` as its command-line argument. The command is identical on
 Linux and inside WSL on Windows — there is no separate native-Windows
 build (see "Recommended setup" above). Once built, the compiled binary can
 also be run directly, e.g.
-`./build/gfortran_*/app/Tupa ../common/portela1997.json`, or install it to
+`./bin/Tupa ../common/portela1997.json`, or install it to
 a stable path with `fpm install` and invoke it as `Tupa <study.json>`.
 
 `-v`/`--verbose` and `-q`/`--quiet` may be passed alongside (or in place of)
@@ -151,6 +166,8 @@ states one, takes precedence over the flag; [ADR 0024](../docs/adr/0024-phase10-
   Gauss–Kronrod quadrature (`mImpedance%geometryFactor1D`/`geometryFactor2D`);
   default `1.0e-6`. Looser values (e.g. `--epsrel 1e-4`) trade accuracy for
   speed.
+* `--output-dir <dir>` sets where result files are written (default `results/`,
+  relative to the working directory).
 * `--no-cache` disables the quadrature memo table (`mGeometryCache`),
   which otherwise reuses the geometry factor of congruent segment pairs
   (same segment lengths and cross endpoint distances, e.g. translated
@@ -164,8 +181,8 @@ only if — the case file also carries `sources`/`frequencies` (ADR 0013,
 like `portela1997.json`/`rod.json`/`grid.json`/`rod_air.json`), it
 additionally runs the frequency sweep and writes
 `<basename>_results.csv`/`.json` (tidy CSV + ADR 0012 JSON,
-`mResultsWriter`) into the *current working directory* — e.g. running from
-`fortran/` writes `fortran/portela1997_results.csv`. A case with an `observation` block
+`mResultsWriter`) into `results/` (created if missing; `--output-dir DIR`
+overrides) — e.g. `results/portela1997_results.csv`. A case with an `observation` block
 (ADR 0027, e.g. `grid_safety.json`) also writes
 `<basename>_potentials.csv`/`.json` — surface potentials, GPR, touch and step
 voltages. A structure-only case

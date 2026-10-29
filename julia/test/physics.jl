@@ -212,6 +212,24 @@ end
         end
         @test err isa TupaError && occursin("ROADMAP Phase 10b", err.msg)
     end
+    for f in filter(f -> replace(f, ".json" => "") in PHASE10D_LAG_CASES, cases)
+        # Phase 10d cases (`branch` element): refused explicitly (lag)
+        err = try
+            load_study(joinpath(COMMON, f)); nothing
+        catch e
+            e
+        end
+        @test err isa TupaError && occursin("ROADMAP Phase 10d", err.msg)
+    end
+    for f in filter(f -> replace(f, ".json" => "") in PHASE14_LAG_CASES, cases)
+        # Phase 14 cases (`numerics.crossMedium`): refused explicitly (lag)
+        err = try
+            load_study(joinpath(COMMON, f)); nothing
+        catch e
+            e
+        end
+        @test err isa TupaError && occursin("ROADMAP Phase 14", err.msg)
+    end
     for f in filter(f -> replace(f, ".json" => "") in PHASE11_LAG_CASES, cases)
         # Phase 11 cases (`observation` block): refused explicitly (lag)
         err = try
@@ -223,6 +241,8 @@ end
     end
     for f in filter(f -> !(replace(f, ".json" => "") in PHASE9_LAG) &&
                          !(replace(f, ".json" => "") in PHASE10B_LAG_CASES) &&
+                         !(replace(f, ".json" => "") in PHASE10D_LAG_CASES) &&
+                         !(replace(f, ".json" => "") in PHASE14_LAG_CASES) &&
                          !(replace(f, ".json" => "") in PHASE11_LAG_CASES), cases)
         c = validate_study_references!(load_study(joinpath(COMMON, f)))
         @test !isempty(c.study.structure.electrodes)

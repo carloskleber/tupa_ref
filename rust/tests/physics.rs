@@ -595,10 +595,34 @@ fn catenary_nodes_follow_the_parabolic_profile() {
 
 #[test]
 fn every_common_case_loads_validates_and_assembles() {
+    // ROADMAP Phase 10d (ADR 0028): the `branch` element is not ported; the loader must refuse
+    // these cases explicitly rather than skip the element
+    const PHASE10D_LAG: [&str; 2] = ["induced_nucci1993", "induced_nucci1993_risers"];
+    const PHASE14_LAG: [&str; 2] = ["rod_air_cross", "channel_tower_cross"];
     let mut n_cases = 0;
     for entry in std::fs::read_dir(common()).unwrap() {
         let path = entry.unwrap().path();
         if path.extension().and_then(|e| e.to_str()) != Some("json") {
+            continue;
+        }
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        if PHASE10D_LAG.contains(&stem) {
+            let err = match load_study(&path) {
+                Ok(_) => panic!("{}: expected a Phase 10d refusal", path.display()),
+                Err(e) => e,
+            };
+            assert!(err.message().contains("ROADMAP Phase 10d"), "{err}");
+            n_cases += 1;
+            continue;
+        }
+        // ROADMAP Phase 14 (ADR 0029): the cross-medium switch is not ported either
+        if PHASE14_LAG.contains(&stem) {
+            let err = match load_study(&path) {
+                Ok(_) => panic!("{}: expected a Phase 14 refusal", path.display()),
+                Err(e) => e,
+            };
+            assert!(err.message().contains("ROADMAP Phase 14"), "{err}");
+            n_cases += 1;
             continue;
         }
         let mut case = load_study(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));

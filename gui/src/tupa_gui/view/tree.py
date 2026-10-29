@@ -5,7 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QStandardItem, QStandardItemModel
 
-from tupa_gui.data import CatenaryElement, ChannelElement, Excitation, LineElement, Study
+from tupa_gui.data import CatenaryElement, ChannelElement, Excitation, LineElement, PlaneElement, Study
 
 # Qt.UserRole payload on a node/element's tree item: ("node"|"element", id).
 # Lets the controller (main_window) map a tree selection to the matching 3D
@@ -119,6 +119,17 @@ def build_study_model(study: Study) -> tuple[QStandardItemModel, dict[tuple[str,
                     item.appendRow(_row(label, str(value)))
             if e.calibrate:
                 item.appendRow(_row("calibrate", "true"))
+        elif isinstance(e, PlaneElement):
+            item = _row(e.id, f"plane {e.cells_u}x{e.cells_v} cells @ {tuple(e.origin)}")
+            item.setData(("element", e.id), ENTITY_ROLE)
+            entity_items[("element", e.id)] = item
+            item.appendRow(_row("origin", str(tuple(e.origin))))
+            item.appendRow(_row("u", str(tuple(e.u))))
+            item.appendRow(_row("v", str(tuple(e.v))))
+            item.appendRow(_row("cellsU", str(e.cells_u)))
+            item.appendRow(_row("cellsV", str(e.cells_v)))
+            item.appendRow(_row("radius", f"{e.radius} m"))
+            item.appendRow(_row("material", e.material))
         else:  # MeshElement (ADR 0020)
             item = _row(e.id, f"mesh {e.rows_x}x{e.rows_y} rows @ {tuple(e.position)}")
             item.setData(("element", e.id), ENTITY_ROLE)

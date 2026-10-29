@@ -34,7 +34,7 @@ implementation**; usability as an engineering tool is secondary.
 | Materials | `tLinear`, `tPortelaSoil` (ADR 0007), `tVisacroAlipioSoil` (mean set, theory.md §7); air hardcoded to vacuum (ADR 0019) |
 | Sweep & results | `runSweep` (OpenMP over frequencies) + `tResult` storage, `inputImpedance`/`maxVoltageMagnitude`; CSV/JSON writers (ADR 0012) with `outputs` filtering; surface potentials, GPR, touch and step voltage from the solved currents (`observation` block, `mPotentials`, `<case>_potentials.*`, Phase 11, ADR 0027) |
 | Time domain | `mSignal` (Heidler — legacy 6-term [38] and standard parametrised form [37, 39]; double-exp ± Jones; Portela concave front; switched-on sine), tail taper, in-repo FFT (ADR 0014), transfer-function transient driver (`mTransient`) with opt-in scan-fed (pchip-interpolated) transfer function, half-Hann window (spectral or time placement), multiple injections and Numerical Laplace Transform (Phase 9, ADR 0015 amendment 2026-09-30) |
-| JSON I/O | json-fortran parser (ADR 0006, superseded-in-place 2026-08-01); schema v1: structure + `sources`/`frequencies`/`outputs` (ADR 0013) + `signal` (ADR 0015) + voltage sources/Heidler terms (ADR 0016/0015 amendment) + `mesh` composite element (ADR 0020) + optional `signal.antialiasStart` (ADR 0021) + optional `observation` block (ADR 0027) + `catenary` element and `portela` waveform (ADR 0023) + `signal.sources`/`window`/`transferFunction`/`transform`/`nltDamping` and the `sine` waveform (ADR 0015 amendment 2026-09-30); the optional `numerics` block (`kernel`, `imageModel`, `maxSegmentLength`) and optional `segments` (ADR 0024); pre-run reference validation (`validateStudyReferences`) and CLI verbosity levels |
+| JSON I/O | json-fortran parser (ADR 0006, superseded-in-place 2026-08-01); schema v1: structure + `sources`/`frequencies`/`outputs` (ADR 0013) + `signal` (ADR 0015) + voltage sources/Heidler terms (ADR 0016/0015 amendment) + `mesh` composite element (ADR 0020) + optional `signal.antialiasStart` (ADR 0021) + optional `observation` block (ADR 0027) + `catenary` element and `portela` waveform (ADR 0023) + `signal.sources`/`window`/`transferFunction`/`transform`/`nltDamping` and the `sine` waveform (ADR 0015 amendment 2026-09-30); the optional `numerics` block (`kernel`, `imageModel`, `maxSegmentLength`, `crossMedium` — ADR 0029) and optional `segments` (ADR 0024); pre-run reference validation (`validateStudyReferences`) and CLI verbosity levels |
 | Cases & tests | `common/` regression fixtures (golden; four harmonic — `portela1997`, `rod`, `grid`, `portela1997_ideal` — five transient since Phase 9, and the 32 × 32 m `portelaMesh` harmonic + scan-fed transient since Phase 10; **all regenerated once for Phase 10**; `grid_safety` harmonic + observation since Phase 11) plus ten cases imported from the legacy Matlab case library (`linha*.json`, `torre*.json`, ADR 0023), 19 test programs under `fpm test --profile release` — all green except `test_common_cases` on the `channel_loaded` fixture, which predates the case's later change to 2048 samples and fails in Fortran and Rust alike until regenerated (re-run 2026-10-01, gfortran 13; `test_impedance`'s coincident-segment divergence check is defeated by `-ffast-math`, as before). Plain `fpm test` needs `-ffree-line-length-none` and, on shared LAPACK, `--no-as-needed -llapack -lblas` (fortran/README.md) |
 | Validation | [`docs/validation/`](validation/README.md): digitized published-curve comparisons — Grcev et al. 2018 Fig. 12 (6 cases), Lima et al. 2020 Figs. 6/7, Poljak & Doric 2006 Fig. 4, Silva et al. 2025 Figs. 3/4 (harmonic + transient) — accepted as the release-bar oracle (§4) |; since Phase 10 also the cross-code check against TAGS ([`validation/tags-xval.md`](validation/tags-xval.md): ≤ 0.3 % below 1 MHz on six cases) and the effect of the `Γ(ω)` default on every comparison ([`phase10-image-model.md`](validation/phase10-image-model.md))
 | GUI | Python/PySide6 view-only module (`gui/`, ADR 0011): study tree, 3-D view, results/transient plots |
@@ -199,12 +199,12 @@ Where the former Phase 7 items went:
 | GPR, touch and step voltage (§7 P7) | Phase 11 items 1–2 — done 2026-10-01 (harmonic) |
 | `tCircumference` (grounding rings) | Phase 12 item 1 |
 | Tubular conductor | Phase 12 item 2 |
-| Series RLC element | Phase 12 item 3 |
+| Series RLC element | Phase 12 item 3 — pulled forward 2026-10-11 into Phase 10d (Fortran done) |
 | `tCatenary` | Phase 13 item 1 — done 2026-09-30 |
 | Generic internal impedance models (OPGW) | Phase 13 item 2 |
 | Insulated conductor | Phase 13 item 3 |
 | Multipolar cables | Phase 13 item 4 |
-| Mutual impedance between segments in different media | Phase 14 item 1 |
+| Mutual impedance between segments in different media | Phase 14 item 1 — done 2026-10-19 (Fortran, opt-in) |
 | Lightning discharge channel | Phase 10b (in air) — done 2026-10-01; coupling to buried electrodes: Phase 14 item 2 |
 | Multi-layer soil and reflection-coefficient images | Phase 15 item 1 |
 
@@ -718,6 +718,42 @@ potential post-processing; the field vector is its open remainder), induced-volt
 the HEM option of an enlarged transversal radius to lower the channel
 impedance (theory.md §4.5, optional extension).
 
+### Phase 10d — Lightning-induced voltages on nearby lines — **Fortran done 2026-10-12**
+
+Raised by the author on 2026-10-11, when the Nucci/Rachidi papers entered the
+reference library; [ADR 0028](adr/0028-induced-voltages-and-lumped-branch.md).
+Design basis: theory.md §4.6 (new). Numbered 10d for the same reason as 10b:
+the Phase 11–15 cross-references in ADRs and READMEs stay valid.
+
+1. **Lumped series-RLC `branch` element** — **S–M** — **done (Fortran)**; this
+   is Phase 12 item 3, pulled forward because a matched line needs a
+   termination resistor. Nodal-admittance stamp in the Kirchhoff rows,
+   harmonic and Laplace paths; `test_branch.f90` pins the DC cases of
+   theory.md §6 to 1e-9. **Rust, Julia, GUI lag**: the loaders refuse the
+   element, the tests list the new cases as lagging.
+2. **Validation anchor** — **M** — **done (Fortran)**: the Nucci et al. 1993
+   base case, the trends of its Table III, its Fig. 14 formulation test, the
+   sensitivity study and the lossy-ground variant
+   ([validation/induced-validation.md](validation/induced-validation.md),
+   `docs/validation/induced_checks.py`; cases
+   `common/induced_nucci1993*.json`).
+3. **Interior voltages** — **done 2026-10-12 (Fortran, transient)**:
+   `signal.totalVoltage` adds `s ∫ A_z^i dz` of the channel to the observed node
+   voltages (ADR 0028 amendment, theory.md §4.6.3, `mIncident`).
+4. **Open remainder**: a total-voltage option for harmonic output and for
+   incident sources other than the loaded channel; the lossy-ground horizontal-field
+   correction (Norton / Cooray–Rubinstein, Phase 14 item 2 territory); a
+   branch-current output; the follow-along ports. On the field correction,
+   Tossani et al. [89] find Cooray–Rubinstein adequate for statistical
+   performance and the Sommerfeld integrals needed only for a very poor
+   ground. That makes Cooray–Rubinstein the first target.
+5. **Candidates, unscheduled** (2026-10-15 library review, theory.md §4.6.3,
+   §9 item 9): a measured anchor from field or scale-model data (Rubinstein
+   [83], Barker [84], Piantini [93]); conductive coupling through the line's
+   grounding against Napolitano [92], which needs buried electrodes but no
+   Phase 14 work; an inclined-channel case against Natsui [91]; a sagged-line
+   induced-voltage case against Stracqualursi [96].
+
 ### Phase 10c — Independent transient signals — **done 2026-10-01**
 
 Raised by the author on 2026-10-01: the legacy case accepts a list of signals
@@ -793,7 +829,7 @@ geometries (rods, counterpoises, rings, lumped branches).
    formula in theory.md §4.3 [40]; element = `tLine` + wall thickness
    (legacy `Tubo.m`); extends `mImpedance` with SLATEC `ZBESK` alongside
    `ZBESI` (scaled variants for large arguments).
-3. **Series RLC element** — **M**. *Series form only first
+3. **Series RLC element** — **M** — **done 2026-10-12 (Fortran), as Phase 10d item 1**. *Series form only first
    (R + jωL + 1/(jωC) two-terminal, Matlab-style non-coupling lumped
    element); parallel later if a case needs it.* Legacy mechanism (extra
    non-electromagnetic branch, Z(ω) on the Z_ℓ diagonal, zeroed Z_t row)
@@ -837,16 +873,20 @@ pulled forward if a tower-footing case needs shield wires.
    element); refs: Ametani cable constants [43], Schelkunoff [40];
    PRTL-mHEM's tubular bundles are a partial analogue.
 
-### Phase 14 — Air–soil coupling
+### Phase 14 — Air–soil coupling — **Fortran done 2026-10-19 (opt-in)**
 
-1. **Mutual impedance between segments in different media** — **L**.
+1. **Mutual impedance between segments in different media** — **L**
+   — **done 2026-10-19 (Fortran, opt-in `numerics.crossMedium`,
+   [ADR 0029](adr/0029-cross-medium-coupling.md), theory.md §5.1)**.
    No legacy implementation to port (unfinished body, ADR 0017); the
    candidate quasi-static transmission-coefficient route is in theory.md
    §5 [35], worked out for cross-medium potentials in Salari [66]
    App. B; validate on `rod_air`-class cases. *Decided (2026-07-17 Q&A):
    strictly after P2 (Phase 10 item 2) — both touch the same interface
    machinery and P2 restores reference behaviour first.*
-2. **Channel coupling to buried electrodes** — **M**. The channel
+2. **Channel coupling to buried electrodes** — **M** — **done
+   2026-10-19 (Fortran; follows from item 1 plus the transmitted term in the
+   observation potentials; `channel_tower_cross`)**. The channel
    itself moved to Phase 10b (2026-10-01). What remains is its
    interaction with electrodes in soil, which needs item 1: a channel
    above buried electrodes then affects GPR, touch and step voltages
@@ -854,12 +894,19 @@ pulled forward if a tower-footing case needs shield wires.
    opens: induced voltages ([45,46]; lossy-ground coupling via Norton's
    approximation) and the LEMP term plain EMT analysis misses [52].
 
+   *Left open:* Rust and Julia ports (their loaders refuse the switch);
+   flipping the default after review; a published reference to validate
+   against (the checks so far are analytic limits and continuity, not
+   literature curves); lossy-ground induced voltages and LEMP.
+
 ### Phase 15 — Multi-layer soil
 
 1. **Multi-layer soil and reflection-coefficient images** — **L**. Lifts
    the §5 single-interface premise; route: layered-earth Green's
    functions via quasi-static complex images (Li, Chen & Wang [33]; Sunde
    [41] background). Explicitly out of MVP scope (theory.md §5, §10.1).
+   Time-domain and full-wave counterparts for cross-checking: Fan & Li [103]
+   and Nazari et al. [104].
 
 ### Legacy element inventory
 
@@ -934,6 +981,8 @@ shielded-wire segment.
   (series-loaded, graded, speed-calibrated), two-node current and voltage
   sources, four `common/` fixtures matched by Rust, validation against Chen
   and Baba & Rakov (the Ishii case is open); ADR 0025; Fortran package **0.7.0**.
+- **Phase 10d — Fortran met (2026-10-12)**: the `branch` element and the Nucci
+  et al. induced-voltage anchor (ADR 0028); Rust, Julia and the GUI follow.
 - **Next engineering steps**: Phase 8 item 1 (the rest — widened fixtures, the
   structure dump and the conformance tag, which now falls on the Phase 10
   fixture set; it closes Milestone 8b and gives the Julia port a sharper

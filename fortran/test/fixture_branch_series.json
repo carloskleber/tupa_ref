@@ -1,0 +1,16 @@
+{
+  "title": "Rod with a lumped series branch between an isolated source node and the rod head",
+  "soil": { "conductivity": 0.01, "permittivity": 10.0, "permeability": 1.0 },
+  "nodes": [
+    { "id": "Src",    "position": [0.0, 0.0, 5.0] },
+    { "id": "Node_1", "position": [0.0, 0.0, -0.5] },
+    { "id": "Node_2", "position": [0.0, 0.0, -3.5] }
+  ],
+  "materials": [ { "id": "copper", "epsilonr": 1.0, "mur": 1.0, "sigma": 5.96e7 } ],
+  "elements": [
+    { "type": "line", "id": "Rod_1", "from": "Node_1", "to": "Node_2", "radius": 0.01, "segments": 6, "material": "copper" },
+    { "type": "branch", "id": "Rs", "from": "Src", "to": "Node_1", "resistance": 5.0, "inductance": 1.0e-6, "capacitance": 1.0e-9 }
+  ],
+  "sources": [ { "node": "Src", "current": { "re": 1.0, "im": 0.0 } } ],
+  "frequencies": { "min": 10.0, "max": 1.0e6, "pointsPerDecade": 2 }
+}

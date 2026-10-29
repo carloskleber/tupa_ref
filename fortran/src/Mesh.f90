@@ -94,6 +94,12 @@ module mMesh
     !! Propagation constant for air: γ = sqrt(jωμ(σ+jωε)), Re γ ≥ 0 (theory.md §2)
     complex(8) :: propSoil
     !! Propagation constant for soil
+    logical :: crossMedium = .false.
+    !! Air-soil cross-coupling on (ROADMAP Phase 14 item 1); default off
+    complex(8) :: cEMixed
+    !! Electric constant of a mixed pair, 1/(2π(W_air + W_soil)) (theory.md §5.1)
+    complex(8) :: cMMixed
+    !! Magnetic constant of a mixed pair: mean of cMAir and cMSoil
 
     ! Image reflection coefficients (theory.md §5), set by calcParamW /
     ! calcParamLaplace from the media immittances
@@ -181,6 +187,32 @@ contains
     mesh%D    = ZERO_CPLX
   end subroutine initMesh
 
+  subroutine stampBranch(mesh, a, b, y)
+    !! Add a lumped branch of admittance `y` between nodes `a` and `b`
+    !! (`b = 0`: remote earth) to the Kirchhoff rows of `mesh%Zeq`
+    !! (theory.md §6).
+    !!
+    !! The KCL block of `Zeq` reads `C i1 + D i2 = i_e`, with currents leaving
+    !! the node into its segments. A branch is one more outflow, `y (u_a − u_b)`
+    !! at `a` and `y (u_b − u_a)` at `b`, so its stamp is the usual nodal
+    !! admittance pattern in the `u` columns of those rows. It touches nothing
+    !! else: no segment, no geometry factor, no unknown. Call after `calcFreq2`.
+    type(tMesh), intent(inout) :: mesh
+    integer(4), intent(in) :: a, b
+    !! 1-based node indices (b = 0: remote earth)
+    complex(8), intent(in) :: y
+    !! Branch admittance 1/Z (S)
+    integer(4) :: off
+
+    off = 2 * mesh%nseg
+    mesh%Zeq(off + a, a) = mesh%Zeq(off + a, a) + y
+    if (b /= 0) then
+      mesh%Zeq(off + a, b) = mesh%Zeq(off + a, b) - y
+      mesh%Zeq(off + b, b) = mesh%Zeq(off + b, b) + y
+      mesh%Zeq(off + b, a) = mesh%Zeq(off + b, a) - y
+    end if
+  end subroutine stampBranch
+
   ! =====================================================================
   ! Topology matrix assembly
   ! =====================================================================
@@ -256,6 +288,8 @@ contains
     ! theory.md §2: gamma = sqrt(j*omega*mu*W), Re(gamma) >= 0
     mesh%propAir  = sqrt(cmplx(0.0d0, omega, kind=8) * muAir  * Wair)
     mesh%propSoil = sqrt(cmplx(0.0d0, omega, kind=8) * muSoil * Wsoil)
+    mesh%cEMixed = 1.0d0 / (0.5d0 * FOUR_PI * (Wair + Wsoil))
+    mesh%cMMixed = 0.5d0 * (mesh%cMAir + mesh%cMSoil)
     call calcImageCoefficients(mesh)
   end subroutine calcParamW
 
@@ -277,6 +311,8 @@ contains
     mesh%cMSoil = s * (muSoil / FOUR_PI)
     mesh%propAir  = sqrt(s * muAir  * Wair)
     mesh%propSoil = sqrt(s * muSoil * Wsoil)
+    mesh%cEMixed = 1.0d0 / (0.5d0 * FOUR_PI * (Wair + Wsoil))
+    mesh%cMMixed = 0.5d0 * (mesh%cMAir + mesh%cMSoil)
     call calcImageCoefficients(mesh)
   end subroutine calcParamLaplace
 
@@ -366,8 +402,10 @@ contains
     !! All theory factors (propagation at the mean distances, direction
     !! cosines, 1/(la·lb) length normalisation) are applied HERE; callers pass
     !! the raw outputs of mGeometry%buildGeometryMatrices. Image factor
-    !! Γ = `gammaAir` both in air, `gammaSoil` both in soil (ideal limits −1/+1); mixed-media pairs are neglected (zero),
-    !! per theory.md §5 / ADR 0005.
+    !! Γ = `gammaAir` both in air, `gammaSoil` both in soil (ideal limits −1/+1). Mixed-media
+    !! pairs are neglected (zero, theory.md §5 / ADR 0005) unless `mesh%crossMedium`
+    !! is set (theory.md §5.1, ADR 0029): then `d` is the full distance and `di` the
+    !! part of the ray in air.
     integer(4), intent(in), value :: i, j, pos1, pos2
     !! 1-based segment indices, positions (1 = air, 2 = soil)
     real(8), intent(in), value :: d, di
@@ -391,6 +429,13 @@ contains
       fpropi = exp(-di * prop)
       zt = cE * (fprop * g + s * fpropi * gi) / (la * lb)
       zl = cM * (cosTheta * fprop * g + s * cosThetaI * fpropi * gi)
+    else if (mesh%crossMedium) then
+      ! Mixed media, transmitted field (theory.md §5.1): direct term only,
+      ! cE -> 1/(2π(W_a+W_s)), retardation along the straight ray split at
+      ! z = 0 (`d` = full distance, `di` = its length in air)
+      fprop = exp(-di * mesh%propAir - (d - di) * mesh%propSoil)
+      zt = mesh%cEMixed * fprop * g / (la * lb)
+      zl = mesh%cMMixed * cosTheta * fprop * g
     else
       ! Mixed media: coupling neglected (theory.md §5)
       zt = ZERO_CPLX
@@ -412,13 +457,13 @@ contains
     !!
     !! Builds the augmented (nno + 2*nseg) × (nno + 2*nseg) matrix:
     !!
-    !!     ┌─────────────────────────────────┐
-    !!     │  A   | Zlong/2  | -Zlong/2    │
-    !!     ├─────────────────────────────────┤
-    !!     │  B   | Ztrans   | Ztrans      │
-    !!     ├─────────────────────────────────┤
-    !!     │  0   | C        | D           │
-    !!     └─────────────────────────────────┘
+    !!     ┌───────────────────────────────┐
+    !!     │  A     | Zlong/2  | -Zlong/2  │
+    !!     ├───────────────────────────────┤
+    !!     │  B     | Ztrans   | Ztrans    │
+    !!     ├───────────────────────────────┤
+    !!     │  0     | C        | D         │
+    !!     └───────────────────────────────┘
     !!
     !! This matrix is then solved by ZGESV in `injectSignal`.
     type(tMesh), intent(inout) :: mesh

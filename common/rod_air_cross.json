@@ -1,0 +1,107 @@
+{
+  "title": "Vertical rod with air above ground, air-soil cross-coupling on",
+  "soil": {
+    "conductivity": 0.01,
+    "permittivity": 10.0,
+    "permeability": 1.0
+  },
+  "nodes": [
+    {
+      "id": "Node_1",
+      "position": [
+        0.0,
+        0.0,
+        10.0
+      ]
+    },
+    {
+      "id": "Node_2",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "id": "Node_3",
+      "position": [
+        0.0,
+        0.0,
+        -5.0
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "id": "copper",
+      "epsilonr": 1.0,
+      "mur": 1.0,
+      "sigma": 59600000.0
+    }
+  ],
+  "elements": [
+    {
+      "type": "line",
+      "id": "Rod_1",
+      "from": "Node_1",
+      "to": "Node_2",
+      "radius": 0.01,
+      "segments": 6,
+      "material": "copper"
+    },
+    {
+      "type": "line",
+      "id": "Rod_2",
+      "from": "Node_2",
+      "to": "Node_3",
+      "radius": 0.01,
+      "segments": 6,
+      "material": "copper"
+    }
+  ],
+  "sources": [
+    {
+      "node": "Node_1",
+      "current": {
+        "re": 1.0,
+        "im": 0.0
+      }
+    }
+  ],
+  "frequencies": {
+    "min": 10.0,
+    "max": 1000000.0,
+    "pointsPerDecade": 1
+  },
+  "outputs": {
+    "quantities": [
+      "voltage",
+      "i1",
+      "i2",
+      "inputImpedance"
+    ]
+  },
+  "numerics": {
+    "crossMedium": "transmission"
+  },
+  "observation": {
+    "points": [
+      {
+        "id": "surface_soil",
+        "position": [
+          0.5,
+          0.0,
+          -1e-06
+        ]
+      },
+      {
+        "id": "surface_air",
+        "position": [
+          0.5,
+          0.0,
+          1e-06
+        ]
+      }
+    ]
+  }
+}

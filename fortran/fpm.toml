@@ -5,6 +5,7 @@ author = "Carlos Kleber C. Arruda"
 maintainer = "carloskleber@gmail.com"
 copyright = "Copyright 2026, Carlos Kleber"
 dependencies.stdlib = "*"
+dependencies.slatec = { path = "slatec" }
 dependencies.feh = { git = "https://github.com/samharrison7/fortran-error-handler" }
 dependencies.json-fortran = { git = "https://github.com/jacobwilliams/json-fortran" }
 
@@ -13,12 +14,14 @@ auto-executables = true
 auto-tests = true
 auto-examples = true
 module-naming = false
-link = ["lapack", "blas", "slatec"]
-external-modules = ["slatec"]
+link = ["lapack", "blas"]
 
 [install]
 library = false
 test = false
+
+[preprocess]
+cpp.suffixes = ["F90"]
 
 [fortran]
 implicit-typing = false

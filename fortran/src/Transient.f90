@@ -64,6 +64,10 @@ module mTransient
     real(dp), allocatable :: scanFreqHz(:)
     !! Ascending scan axis (Hz) for "interpolated"; must span
     !! [freqZeroHz, nyquistHz]
+    logical :: totalVoltage = .false.
+    !! Report the observed node voltages as the total voltage
+    !! φ + s ∫ A_z^i dz of the lightning channel's incident field instead of
+    !! the scalar potential φ (theory.md §4.6.3, ADR 0028)
   end type tTransientOptions
 
 contains
@@ -414,7 +418,7 @@ contains
   subroutine transientResponseSignals(study, signals, sourceNodeIds, observeNodeIds, &
                                        nyquistHz, nSamples, freqZeroHz, t, injectedCurrents, &
                                        nodeResponses, observeElectrodeIds, i1Responses, i2Responses, options, &
-                                       independent)
+                                       independent, observeBranchIds, branchResponses)
     !! Transient driver (ROADMAP Phase 9 item 4, ADR 0026). `signals(k)` is
     !! an excitation applied at terminal k (node `sourceNodeIds(k)`, plus the
     !! return node and quantity carried by the slot, ADR 0025).
@@ -450,13 +454,20 @@ contains
     !! i1(t)/i2(t) (A), shape (size(observeElectrodeIds), nSamples, nOut)
     type(tTransientOptions), intent(in), optional :: options
     logical, intent(in), optional :: independent
+    character(len=*), intent(in), optional :: observeBranchIds(:)
+    !! Lumped `branch` elements whose current to report
+    real(dp), allocatable, intent(out), optional :: branchResponses(:,:,:)
+    !! i_branch(t) (A) from node a to node b (or to remote earth),
+    !! Y(s)·(u_a − u_b), shape (size(observeBranchIds), nSamples, nOut)
 
     type(tTransientOptions) :: opts
     real(dp), allocatable :: taper(:), filter(:), timeWindow(:), damp(:), binFreqHz(:), solveFreqHz(:)
     complex(dp), allocatable :: excitation(:,:), transferFunction(:)
     complex(dp), allocatable :: pNode(:,:,:), pI1(:,:,:), pI2(:,:,:)
     complex(dp), allocatable :: hNode(:,:,:), hI1(:,:,:), hI2(:,:,:)
-    integer(4), allocatable :: nodeIdx(:), elecIdx(:), termOf(:), outOf(:)
+    integer(4), allocatable :: nodeIdx(:), elecIdx(:), termOf(:), outOf(:), brIdx(:), solveNodes(:)
+    complex(dp), allocatable :: pBr(:,:,:), hDiff(:)
+    integer(4) :: nObsBr, iBr, jBr, nBrRows
     character(len=256), allocatable :: termNode(:), termRet(:)
     logical, allocatable :: termVolt(:)
     integer(4) :: nBins, nSrc, nOut, nTerm, nObsNodes, nObsElectrodes, iSrc, iObs, iTerm, iOut, k
@@ -597,6 +608,23 @@ contains
         return
       end if
     end do
+    ! Branch end nodes are appended to the solved rows: Y(s)·(u_a − u_b)
+    nObsBr = 0
+    if (present(observeBranchIds) .and. present(branchResponses)) nObsBr = size(observeBranchIds)
+    allocate(brIdx(nObsBr))
+    do iBr = 1, nObsBr
+      brIdx(iBr) = study%structure%findBranchIndex(trim(observeBranchIds(iBr)))
+      if (brIdx(iBr) == 0) then
+        call raiseError("transientResponse: branch '" // trim(observeBranchIds(iBr)) // "' not found")
+        return
+      end if
+    end do
+    solveNodes = nodeIdx
+    do iBr = 1, nObsBr
+      solveNodes = [solveNodes, study%structure%branches(brIdx(iBr))%nodeA]
+      if (study%structure%branches(brIdx(iBr))%nodeB /= 0) &
+        solveNodes = [solveNodes, study%structure%branches(brIdx(iBr))%nodeB]
+    end do
     nObsElectrodes = 0
     wantI1 = .false.
     wantI2 = .false.
@@ -643,7 +671,7 @@ contains
     ! Unit-terminal transfer functions on the solve axis: one factorisation
     ! per frequency serves every terminal; only the observed rows are kept
     call study%runSweepUnits(solveFreqHz, termNode(1:nTerm), termRet(1:nTerm), termVolt(1:nTerm), &
-                             nodeIdx, elecIdx, hNode, hI1, hI2, damping=c)
+                             solveNodes, elecIdx, hNode, hI1, hI2, damping=c, totalVoltage=opts%totalVoltage)
     if (.not. allocated(hNode)) return
 
     ! Accumulated one-sided products P = Σ_k H_k·X_k per observe point and output
@@ -687,6 +715,39 @@ contains
         end if
       end do
     end do
+
+    ! Branch currents: P_br = Y(s)·(H_a − H_b)·X per bin
+    if (nObsBr > 0) then
+      allocate(pBr(nBins, nObsBr, nOut), hDiff(nBins))
+      pBr = (0.0_dp, 0.0_dp)
+      do iTerm = 1, nTerm
+        nBrRows = nObsNodes
+        do iBr = 1, nObsBr
+          associate (br => study%structure%branches(brIdx(iBr)))
+            nBrRows = nBrRows + 1
+            call toBins(hNode(nBrRows, :, iTerm), hDiff)
+            if (br%nodeB /= 0) then
+              nBrRows = nBrRows + 1
+              call toBins(hNode(nBrRows, :, iTerm), transferFunction)
+              hDiff = hDiff - transferFunction
+            end if
+            do k = 1, nBins
+              hDiff(k) = br%admittance(cmplx(c, 2.0_dp * PI * binFreqHz(k), kind=dp)) * hDiff(k)
+            end do
+          end associate
+          do iSrc = 1, nSrc
+            if (termOf(iSrc) /= iTerm) cycle
+            pBr(:, iBr, outOf(iSrc)) = pBr(:, iBr, outOf(iSrc)) + hDiff(1:nBins) * excitation(1:nBins, iSrc)
+          end do
+        end do
+      end do
+      allocate(branchResponses(nObsBr, nSamples, nOut))
+      do iOut = 1, nOut
+        do iBr = 1, nObsBr
+          branchResponses(iBr, :, iOut) = productToTimeSeries(pBr(:, iBr, iOut))
+        end do
+      end do
+    end if
 
     allocate(nodeResponses(nObsNodes, nSamples, nOut))
     do iOut = 1, nOut

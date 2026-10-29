@@ -23,7 +23,9 @@ module mSignal
   private
 
   public :: tSignal, tHeidlerSignal, tDoubleExpSignal, tPortelaSignal, tSineSignal, tSignalSlot
+  public :: tStepSignal, tBranchNortonSignal
   public :: newHeidlerSignal, newHeidlerSignalTerms, newDoubleExpSignal, newPortelaSignal, newSineSignal
+  public :: newStepSignal, newBranchNortonSignal
   public :: tailTaper
 
   type, abstract :: tSignal
@@ -114,6 +116,30 @@ module mSignal
   contains
     procedure :: waveform => sineWaveform
   end type tSineSignal
+
+  type, extends(tSignal) :: tStepSignal
+    !! Step switched on at t = 0: i(t) = imax for t >= 0, zero before. For a
+    !! step in series with a lumped element (a voltage source of a charged
+    !! capacitor) use it as a voltage slot; its spectrum has a DC term, so the
+    !! Numerical Laplace Transform (`transform: "nlt"`) is the intended path.
+  contains
+    procedure :: waveform => stepWaveform
+  end type tStepSignal
+
+  type, extends(tSignal) :: tBranchNortonSignal
+    !! Norton equivalent of a capacitor charged to V0 discharging through a
+    !! series R-L-C `branch` (Marx impulse generator stage, free response).
+    !! A charged C is an uncharged C in series with the step V0·u(t); in
+    !! parallel (Norton) form that is the branch with the same R, L, C plus
+    !! the current source i_N(t) = L⁻¹{ V0·Y(s)/s } injected at the branch
+    !! node `a` and returned at node `b` (or remote earth). With
+    !! Y = sC/(1 + sCR + s²LC) this is V0·C/(1 + sCR + s²LC), i.e.
+    !! V0·h(t) with h the impulse response (1/L)/(s² + (R/L)s + 1/(LC)),
+    !! or (1/R)·exp(-t/(RC)) when L = 0. `imax` carries V0 (V).
+    real(dp) :: resistance, inductance, capacitance
+  contains
+    procedure :: waveform => branchNortonWaveform
+  end type tBranchNortonSignal
 
   type :: tSignalSlot
     !! One entry of a heterogeneous source list (`signal.sources`, ROADMAP
@@ -247,6 +273,31 @@ contains
     sig%phaseDeg    = phaseDeg
   end function newSineSignal
 
+  function newStepSignal(imax) result(sig)
+    !! Step of height `imax` switched on at t = 0.
+    real(dp), intent(in) :: imax
+    type(tStepSignal) :: sig
+    sig%imax = imax
+  end function newStepSignal
+
+  function newBranchNortonSignal(v0, resistance, inductance, capacitance) result(sig)
+    !! Norton current source for a capacitor charged to `v0` (V) behind a
+    !! series branch R (ohm), L (H), C (F); needs C > 0 and R > 0 or L > 0
+    !! (an ideal C-only loop is an impulse, not a sampled waveform).
+    real(dp), intent(in) :: v0, resistance, inductance, capacitance
+    type(tBranchNortonSignal) :: sig
+
+    if (capacitance <= 0.0_dp .or. resistance < 0.0_dp .or. inductance < 0.0_dp .or. &
+        (resistance == 0.0_dp .and. inductance == 0.0_dp)) then
+      call raiseError("newBranchNortonSignal: needs capacitance > 0, resistance and inductance >= 0, not both zero")
+      return
+    end if
+    sig%imax        = v0
+    sig%resistance  = resistance
+    sig%inductance  = inductance
+    sig%capacitance = capacitance
+  end function newBranchNortonSignal
+
   ! =====================================================================
   ! Waveform evaluation
   ! =====================================================================
@@ -339,6 +390,42 @@ contains
     i = merge(this%imax * sin(2.0_dp * PI * this%frequencyHz * t + this%phaseDeg * PI / 180.0_dp), &
               0.0_dp, t >= 0.0_dp)
   end function sineWaveform
+
+  function stepWaveform(this, t) result(i)
+    class(tStepSignal), intent(in) :: this
+    real(dp), intent(in) :: t(:)
+    real(dp) :: i(size(t))
+
+    i = merge(this%imax, 0.0_dp, t >= 0.0_dp)
+  end function stepWaveform
+
+  function branchNortonWaveform(this, t) result(i)
+    !! V0·h(t), h = L⁻¹{ C/(1 + sCR + s²LC) } for t >= 0 (see the type).
+    class(tBranchNortonSignal), intent(in) :: this
+    real(dp), intent(in) :: t(:)
+    real(dp) :: i(size(t))
+    real(dp) :: a, w0sq, disc, wd, p1, p2, tp(size(t))
+
+    tp = max(t, 0.0_dp)
+    if (this%inductance == 0.0_dp) then
+      i = exp(-tp / (this%resistance * this%capacitance)) / this%resistance
+    else
+      a    = 0.5_dp * this%resistance / this%inductance
+      w0sq = 1.0_dp / (this%inductance * this%capacitance)
+      disc = a * a - w0sq
+      if (abs(disc) <= 1.0d-12 * w0sq) then
+        i = tp * exp(-a * tp) / this%inductance
+      else if (disc < 0.0_dp) then
+        wd = sqrt(-disc)
+        i = exp(-a * tp) * sin(wd * tp) / (this%inductance * wd)
+      else
+        p1 = -a + sqrt(disc)
+        p2 = -a - sqrt(disc)
+        i = (exp(p1 * tp) - exp(p2 * tp)) / (this%inductance * (p1 - p2))
+      end if
+    end if
+    i = merge(this%imax * i, 0.0_dp, t >= 0.0_dp)
+  end function branchNortonWaveform
 
   elemental function expm1(x) result(y)
     !! exp(x) - 1 without cancellation for small |x| (Kahan's u - 1 = x·(u - 1)/log u

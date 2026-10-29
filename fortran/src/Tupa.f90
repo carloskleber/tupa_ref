@@ -42,6 +42,17 @@ module tupa
   !!   `growth` (graded from the foot). Plants `<id>-base` (separate from
   !!   the strike node), `<id>_n<k>` and `<id>-top`.
   !!
+  !! - `"plane"` — wire-grid rectangle of any orientation
+  !!   (`mElementPlane`, docs/marx_generator.md): `id`, `origin`, `u`, `v`
+  !!   (edge vectors, 3D), `cellsU`, `cellsV`, `radius`, `material`. Reuses
+  !!   nodes and bars already present, so planes join along shared edges.
+  !!
+  !! - `"branch"` — lumped series R-L-C branch (`mElementBranch`, ADR 0028,
+  !!   theory.md §6): `id`, `from` (node), optional `to` (node; absent =
+  !!   remote earth), and `resistance` (Ω), `inductance` (H),
+  !!   `capacitance` (F), each optional but not all zero. Plants no nodes
+  !!   and no segments; the usual matched termination of an overhead line.
+  !!
   !! - `"observation"` (optional, ADR 0027): potentials, GPR, touch and step
   !!   voltages from the solved sweep — `points`, `grid`, `touch`, `steps`
   !!   (`mObservation`, evaluated by `mPotentials`; written to
@@ -57,12 +68,14 @@ module tupa
   use mMaterial
   use mElementLine
   use mElementMesh
+  use mElementPlane
   use mElementCatenary
   use mElementChannel
+  use mElementBranch
   use mChannelCalibration, only: calibrateChannels
   use mJsonParser
   use mSignal, only: tSignal, tSignalSlot, newHeidlerSignal, newHeidlerSignalTerms, newDoubleExpSignal, &
-                     newPortelaSignal, newSineSignal
+                     newPortelaSignal, newSineSignal, newStepSignal, newBranchNortonSignal
   use mTransient, only: transientResponseSources, transientResponseSignals, tTransientOptions
   use mResultsWriter, only: writeResultsCsv, writeResultsJson, &
                              writeTransientResultsCsv, writeTransientResultsJson, &
@@ -341,6 +354,19 @@ contains
           return
         end select
       end if
+      if (json_has(numerics_obj, "crossMedium")) then
+        elem_type = json_str(numerics_obj, "crossMedium")
+        select case (trim(elem_type))
+        case ("none")
+          study%crossMedium = .false.
+        case ("transmission")
+          study%crossMedium = .true.
+        case default
+          call raiseError("mTupa: unknown numerics.crossMedium '" // trim(elem_type) // &
+                          "' (expected none or transmission)")
+          return
+        end select
+      end if
       if (json_has(numerics_obj, "maxSegmentLength")) then
         study%maxSegmentLength = json_real(numerics_obj, "maxSegmentLength")
         if (study%maxSegmentLength <= 0.0d0) then
@@ -396,6 +422,7 @@ contains
           mat_id  = json_str(elem_obj, "material")
           elem = newElementLine(trim(id), trim(from_id), trim(to_id), &
                                 radius, nseg, trim(mat_id))
+          if (json_has(elem_obj, "lumped")) call setLineLumped(elem, json_child(elem_obj, "lumped"), nseg)
           call study%structure%addElement(elem)
         case ("catenary")
           id      = json_str(elem_obj, "id")
@@ -411,6 +438,20 @@ contains
           elem = newElementCatenary(trim(id), trim(from_id), trim(to_id), &
                                     sag, radius, nseg, trim(mat_id))
           call study%structure%addElement(elem)
+        case ("branch")
+          block
+            real(8) :: brR, brL, brC
+            id      = json_str(elem_obj, "id")
+            from_id = json_str(elem_obj, "from")
+            to_id   = ""
+            if (json_has(elem_obj, "to")) to_id = json_str(elem_obj, "to")
+            brR = 0.0d0; brL = 0.0d0; brC = 0.0d0
+            if (json_has(elem_obj, "resistance"))  brR = json_real(elem_obj, "resistance")
+            if (json_has(elem_obj, "inductance"))  brL = json_real(elem_obj, "inductance")
+            if (json_has(elem_obj, "capacitance")) brC = json_real(elem_obj, "capacitance")
+            elem = newElementBranch(trim(id), trim(from_id), trim(to_id), brR, brL, brC)
+            call study%structure%addElement(elem)
+          end block
         case ("channel")
           block
             class(tElement), allocatable :: chElem
@@ -519,6 +560,18 @@ contains
           elem = newElementMesh(trim(id), [x, y, z], lengthX, lengthY, rowsX, rowsY, &
                                 radius, nseg, trim(mat_id))
           call study%structure%addElement(elem)
+        case ("plane")
+          block
+            real(8) :: pOrigin(3), pU(3), pV(3)
+            id = json_str(elem_obj, "id")
+            pOrigin = jsonVec3(elem_obj, "origin")
+            pU = jsonVec3(elem_obj, "u")
+            pV = jsonVec3(elem_obj, "v")
+            mat_id = json_str(elem_obj, "material")
+            elem = newElementPlane(trim(id), pOrigin, pU, pV, json_int(elem_obj, "cellsU"), &
+                                   json_int(elem_obj, "cellsV"), json_real(elem_obj, "radius"), trim(mat_id))
+            call study%structure%addElement(elem)
+          end block
         case default
           call emitMessage(MSG_WARNING, "mTupa: unknown element type '" // trim(elem_type) // "' — skipped")
         end select
@@ -738,6 +791,7 @@ contains
             return
           end select
         end if
+        if (json_has(signal_obj, "totalVoltage")) opts%totalVoltage = json_getbool(signal_obj, "totalVoltage")
         if (json_has(signal_obj, "nltDamping")) then
           opts%nltDamping = json_real(signal_obj, "nltDamping")
           if (opts%nltDamping <= 0.0d0) then
@@ -989,6 +1043,51 @@ contains
     end if
   end subroutine parseSlotTerminals
 
+  function jsonVec3(obj, key) result(v)
+    !! Read a 3-vector from the JSON array `key` of `obj`.
+    type(tJsonValue), pointer, intent(in) :: obj
+    character(len=*), intent(in) :: key
+    real(8) :: v(3)
+    type(tJsonValue), pointer :: arr, item
+    integer :: k
+
+    arr => json_child(obj, key)
+    do k = 1, 3
+      item => json_item(arr, k)
+      v(k) = json_value_real(item)
+    end do
+  end function jsonVec3
+
+  subroutine setLineLumped(elem, lumped, nseg)
+    !! Embed a lumped series R-L-C in one segment of a `line` element
+    !! ("lumped": {segment, resistance, inductance, capacitance}); `segment`
+    !! is 1-based and defaults to the middle one.
+    class(tElement), intent(inout) :: elem
+    type(tJsonValue), pointer, intent(in) :: lumped
+    integer, intent(in) :: nseg
+    integer :: seg
+    character(len=16) :: buf
+
+    seg = (nseg + 1) / 2
+    if (json_has(lumped, "segment")) seg = json_int(lumped, "segment")
+    if (seg < 1 .or. seg > nseg) then
+      write(buf, '(I0)') nseg
+      call raiseError("mTupa: lumped.segment must lie in 1.." // trim(buf) // " for line '" // trim(elem%id) // "'")
+      return
+    end if
+    select type (elem)
+    type is (tLine)
+      elem%lumpSegment = seg
+      if (json_has(lumped, "resistance"))  elem%lumpResistance  = json_real(lumped, "resistance")
+      if (json_has(lumped, "inductance"))  elem%lumpInductance  = json_real(lumped, "inductance")
+      if (json_has(lumped, "capacitance")) elem%lumpCapacitance = json_real(lumped, "capacitance")
+      if (elem%lumpResistance < 0.0d0 .or. elem%lumpInductance < 0.0d0 .or. elem%lumpCapacitance < 0.0d0) then
+        call raiseError("mTupa: lumped resistance, inductance and capacitance of line '" // trim(elem%id) // &
+                        "' must be non-negative")
+      end if
+    end select
+  end subroutine setLineLumped
+
   subroutine parseSignalWaveform(obj, sig)
     !! Build one excitation waveform from a JSON object carrying
     !! "waveform" and its fields (ADR 0015 and amendments): the "signal"
@@ -1040,9 +1139,16 @@ contains
       phaseDeg = 0.0d0
       if (json_has(obj, "phaseDeg")) phaseDeg = json_real(obj, "phaseDeg")
       allocate(sig, source=newSineSignal(imax, json_real(obj, "frequencyHz"), phaseDeg))
+    case ("step")
+      allocate(sig, source=newStepSignal(imax))
+    case ("branchNorton")
+      ! Charged capacitor behind a series R-L-C branch ("imax" = V0 in V):
+      ! the Norton current of a Marx stage free response
+      allocate(sig, source=newBranchNortonSignal(imax, json_real(obj, "resistance"), &
+        json_real(obj, "inductance"), json_real(obj, "capacitance")))
     case default
       call raiseError("mTupa: unknown signal.waveform '" // trim(waveformType) // &
-                       "' (expected heidler, doubleExp, portela or sine)")
+                       "' (expected heidler, doubleExp, portela, sine, step or branchNorton)")
     end select
     ! A constructor that rejected its parameters (library mode) leaves a
     ! default waveform behind: drop it so the caller sees the failure
@@ -1220,7 +1326,7 @@ contains
   ! Convenience entry point
   ! =====================================================================
 
-  subroutine runFromFile(filename)
+  subroutine runFromFile(filename, outputDir)
     !! CLI entry point (`app/main.f90`): load a JSON case file, run it end
     !! to end, and report.
     !!
@@ -1234,7 +1340,8 @@ contains
     !! neither may be present. Each that is writes its own results
     !! (`<basename>_results.csv/.json` for the sweep,
     !! `<basename>_transient_results.csv/.json` for the transient run,
-    !! `mResultsWriter`) to the current directory, honouring an `outputs`
+    !! `mResultsWriter`) to `outputDir` (default the current directory),
+    !! honouring an `outputs`
     !! selection if present. The sweep's results are written before
     !! `transientResponse` runs, since `transientResponse` calls
     !! `study%runSweep` internally (its own unit-current, FFT-sample
@@ -1244,6 +1351,8 @@ contains
     !! nothing to solve.
     character(len=*), intent(in) :: filename
     !! Path to the JSON study file
+    character(len=*), intent(in), optional :: outputDir
+    !! Directory the result files are written to (created if missing)
     type(tStudy) :: study
     !! Local study object (created, reported, then destroyed)
     character(len=256), allocatable :: sourceNodeIds(:), sourceReturnNodeIds(:)
@@ -1302,6 +1411,12 @@ contains
     ranSweep     = allocated(sourceNodeIds) .and. allocated(freqHz)
     ranTransient = allocated(signal)
     base = basenameNoExt(filename)
+    if (present(outputDir)) then
+      if (len_trim(outputDir) > 0 .and. (ranSweep .or. ranTransient)) then
+        call execute_command_line("mkdir -p '" // trim(outputDir) // "'")
+        base = trim(outputDir) // "/" // trim(base)
+      end if
+    end if
 
     if (ranSweep) then
       call study%runSweep(freqHz, sourceNodeIds, sourceCurrents, sourceIsVoltage=sourceIsVoltage, &

@@ -6,8 +6,8 @@ program main
   !! Loads a JSON study file and runs the complete electromagnetic analysis pipeline:
   !!
   !! **Usage:**
-  !!   fpm run -- [-v|--verbose] [-q|--quiet] [--epsrel <value>] [--kernel single|double]
-  !!              [--image-model frequency-dependent|ideal] [--threads <n>] [--no-cache] <study.json>
+  !!   fpm run -- [-h|--help] [--version] [-v|--verbose] [-q|--quiet] [--epsrel <value>] [--kernel single|double]
+  !!              [--image-model frequency-dependent|ideal] [--threads <n>] [--no-cache] [--output-dir <dir>] <study.json>
   !!   ./tupa [same options] <study.json>
   !!
   !! **Input:**
@@ -62,7 +62,8 @@ program main
   !$ use omp_lib
   use tupa, only: runFromFile
   use mError, only: raiseError
-  use mVerbosity, only: setVerbosity, VERB_QUIET, VERB_VERBOSE
+  use mVerbosity, only: setVerbosity, verbosityLevel, VERB_QUIET, VERB_VERBOSE
+  use mVersion, only: versionBanner
   use mImpedance, only: setQuadEpsRel
   use mGeometry, only: setGeometryKernel, GEOM_KERNEL_SINGLE, GEOM_KERNEL_DOUBLE
   use mMesh, only: setDefaultImageModel, IMAGE_FREQ_DEPENDENT, IMAGE_IDEAL
@@ -79,6 +80,8 @@ program main
   !! Parsed --threads value
   logical :: threadsGiven = .false.
   !! Whether --threads was passed
+  character(len=512) :: outputDir = "results"
+  !! Parsed --output-dir value
 
   filename = ""
   nargs = command_argument_count()
@@ -90,6 +93,12 @@ program main
       cycle
     end if
     select case (trim(arg))
+    case ("-h", "--help")
+      call printUsage()
+      stop
+    case ("--version")
+      print '(a)', versionBanner()
+      stop
     case ("-v", "--verbose")
       call setVerbosity(VERB_VERBOSE)
     case ("-q", "--quiet")
@@ -134,6 +143,10 @@ program main
       if (ios /= 0 .or. iosVal /= 0 .or. nThreads < 1) &
         call raiseError("--threads: invalid value '" // trim(arg) // "' (must be a positive integer)")
       threadsGiven = .true.
+    case ("--output-dir")
+      i = i + 1
+      if (i > nargs) call raiseError("--output-dir requires a directory, e.g. --output-dir results")
+      call get_command_argument(i, outputDir)
     case ("--no-cache")
       call geomCacheSetEnabled(.false.)
     case default
@@ -143,10 +156,11 @@ program main
   end do
 
   if (len_trim(filename) == 0) then
-    print *, "Usage: tupa [-v|--verbose] [-q|--quiet] [--epsrel <value>] [--kernel single|double] "// &
-      "[--image-model frequency-dependent|ideal] [--threads <n>] [--no-cache] <study.json>"
+    call printUsage()
     call raiseError("missing study file argument")
   end if
+
+  if (verbosityLevel() > VERB_QUIET) print '(a)', versionBanner()
 
   if (threadsGiven) then
     !$ call omp_set_num_threads(nThreads)
@@ -154,5 +168,34 @@ program main
     if (threadsGiven) print *, "tupa: --threads ignored (built without OpenMP; the frequency loop runs serially)"
   end if
 
-  call runFromFile(trim(filename))
+  call runFromFile(trim(filename), outputDir=trim(outputDir))
+
+contains
+
+  subroutine printUsage()
+    !! Option summary; also the source `help2man` builds the man page from.
+    print '(a)', "Usage: tupa [OPTION]... STUDY.json"
+    print '(a)', "Run a TUPA electromagnetic transient study described by a JSON file."
+    print '(a)', ""
+    print '(a)', "Options:"
+    print '(a)', "  -v, --verbose              extra progress detail"
+    print '(a)', "  -q, --quiet                suppress the banner and routine report output;"
+    print '(a)', "                             errors and warnings still print"
+    print '(a)', "      --epsrel VALUE         relative error of the adaptive geometry quadrature"
+    print '(a)', "                             (default 1.0e-6)"
+    print '(a)', "      --kernel single|double"
+    print '(a)', "                             geometry-factor quadrature: single integral"
+    print '(a)', "                             (default) or nested 2-D; numerics.kernel in the"
+    print '(a)', "                             study overrides it"
+    print '(a)', "      --image-model frequency-dependent|ideal"
+    print '(a)', "                             image reflection coefficient: frequency-dependent"
+    print '(a)', "                             (default) or ideal +-1; numerics.imageModel in the"
+    print '(a)', "                             study overrides it"
+    print '(a)', "      --threads N            threads for the frequency loop (OpenMP builds;"
+    print '(a)', "                             default OMP_NUM_THREADS)"
+    print '(a)', "      --no-cache             disable the geometry-factor quadrature memo table"
+    print '(a)', "      --output-dir DIR       directory for the result files (default: results/)"
+    print '(a)', "  -h, --help                 display this help and exit"
+    print '(a)', "      --version              output version information and exit"
+  end subroutine printUsage
 end program main

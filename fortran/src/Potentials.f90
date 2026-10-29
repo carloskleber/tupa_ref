@@ -16,6 +16,7 @@ module mPotentials
   use mStudy
   use mObservation
   use mResult
+  use mIncident, only: segmentPotentialFactor
   use mMesh, only: tMesh, calcParamW
   use mCtes, only: PI, MU0
   use mError, only: raiseError
@@ -25,31 +26,6 @@ module mPotentials
   public :: computeObservations, potentialsAt, segmentPotentialFactor
 
 contains
-
-  pure function segmentPotentialFactor(a, b, p, radius) result(g)
-    !! Geometry factor of a straight segment seen from a point,
-    !! g = ∫ dℓ / |P − r(ℓ)| over the segment from `a` to `b` (theory.md
-    !! §3.1; the closed form of §4.2 for a field point off the axis).
-    !!
-    !! With s1, s2 the axial coordinates of P relative to the two ends and ρ
-    !! its distance to the axis, g = asinh(s1/ρ) − asinh(s2/ρ). A point closer
-    !! to the axis than the conductor radius is treated as lying on the
-    !! surface (ρ = `radius`), the §4.3 regularisation of the self terms.
-    real(8), intent(in) :: a(3), b(3), p(3)
-    !! Segment end points and field point (m)
-    real(8), intent(in) :: radius
-    !! Conductor radius (m): floor of the distance to the axis
-    real(8) :: g
-    real(8) :: l, u(3), s1, s2, rho
-
-    l  = norm2(b - a)
-    u  = (b - a) / l
-    s1 = dot_product(p - a, u)
-    s2 = s1 - l
-    rho = sqrt(max(dot_product(p - a, p - a) - s1 * s1, 0.0d0))
-    rho = max(rho, radius)
-    g = asinh(s1 / rho) - asinh(s2 / rho)
-  end function segmentPotentialFactor
 
   subroutine potentialsAt(study, pts, psi)
     !! ψ at every point of `pts` for every frequency of the study's stored
@@ -63,9 +39,9 @@ contains
 
     integer :: nf, nseg, nM, k, b, m, med
     real(8), allocatable :: omega(:), p1(:,:), p2(:,:), q1(:,:), q2(:,:), mid(:,:), midi(:,:)
-    complex(8), allocatable :: cE(:,:), gam(:,:), gImg(:,:), it(:,:), acc(:)
+    complex(8), allocatable :: cE(:,:), gam(:,:), gImg(:,:), it(:,:), acc(:), cEMix(:)
     type(tMesh) :: mesh
-    real(8) :: muAir, muSoil, g, gi, r, ri, pt(3)
+    real(8) :: muAir, muSoil, g, gi, r, ri, pt(3), zA, zS, rAir
     complex(8) :: w
 
     nf   = study%voltageResults%frequencyCount()
@@ -74,7 +50,7 @@ contains
     allocate(psi(nM, nf))
     psi = (0.0d0, 0.0d0)
 
-    allocate(omega(nf), cE(2, nf), gam(2, nf), gImg(2, nf), it(nseg, nf))
+    allocate(cEMix(nf), omega(nf), cE(2, nf), gam(2, nf), gImg(2, nf), it(nseg, nf))
     muAir  = study%structure%air%mur * MU0
     muSoil = study%structure%soil%mur * MU0
     mesh%imageModel = study%imageModel
@@ -85,6 +61,7 @@ contains
       cE(1, k)   = mesh%cEAir;     cE(2, k)   = mesh%cESoil
       gam(1, k)  = mesh%propAir;   gam(2, k)  = mesh%propSoil
       gImg(1, k) = mesh%gammaAir;  gImg(2, k) = mesh%gammaSoil
+      cEMix(k)   = mesh%cEMixed
       do b = 1, nseg
         it(b, k) = study%longCurrentResults%get(b, k) + study%transCurrentResults%get(b, k)
       end do
@@ -100,7 +77,7 @@ contains
       midi(:, b) = 0.5d0 * (q1(:, b) + q2(:, b))
     end do
 
-    !$omp parallel default(shared) private(m, b, k, med, g, gi, r, ri, pt, w, acc)
+    !$omp parallel default(shared) private(m, b, k, med, g, gi, r, ri, pt, w, acc, zA, zS, rAir)
     allocate(acc(nf))
     !$omp do schedule(dynamic)
     do m = 1, nM
@@ -109,7 +86,23 @@ contains
       if (pt(3) > 0.0d0) med = 1
       acc = (0.0d0, 0.0d0)
       do b = 1, nseg
-        if (study%geomPos(b) /= med) cycle
+        if (study%geomPos(b) /= med) then
+          ! Other medium: transmitted field only (theory.md §5.1), when enabled
+          if (.not. study%crossMedium) cycle
+          g = segmentPotentialFactor(p1(:, b), p2(:, b), pt, study%geomRadius(b))
+          r = norm2(pt - mid(:, b))
+          if (med == 1) then
+            zA = pt(3);       zS = mid(3, b)
+          else
+            zA = mid(3, b);   zS = pt(3)
+          end if
+          rAir = r * zA / (zA - zS)
+          do k = 1, nf
+            w = exp(-gam(1, k) * rAir - gam(2, k) * (r - rAir)) * g
+            acc(k) = acc(k) + cEMix(k) * it(b, k) * w / study%geomLength(b)
+          end do
+          cycle
+        end if
         g  = segmentPotentialFactor(p1(:, b), p2(:, b), pt, study%geomRadius(b))
         gi = segmentPotentialFactor(q1(:, b), q2(:, b), pt, study%geomRadius(b))
         r  = norm2(pt - mid(:, b))

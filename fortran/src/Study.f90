@@ -13,6 +13,9 @@ module mStudy
   !! 4. Study stores results from `mesh%getOutputs()`
   !! 5. I/O writes results to CSV or JSON
   use mMesh
+  use mBranch, only: tBranch
+  use mElectrode, only: lumpedImpedance
+  use mIncident, only: tIncidentPath, buildIncidentPath, incidentDrop
   use mStructure
   use mElement
   use mMaterial
@@ -77,6 +80,9 @@ module mStudy
     !! Image reflection model (`IMAGE_FREQ_DEPENDENT` / `IMAGE_IDEAL` of
     !! mMesh; ROADMAP Phase 10 item 2). 0 = the process default
     !! (`mMesh%getDefaultImageModel`, frequency-dependent unless `--image-model`).
+    logical :: crossMedium = .false.
+    !! Air-soil cross-coupling (ROADMAP Phase 14 item 1, ADR 0029); set from
+    !! `numerics.crossMedium: "transmission"`, off by default
     integer :: geometryKernel = 0
     !! Geometry-factor quadrature (`GEOM_KERNEL_SINGLE`/`_DOUBLE` of
     !! mGeometry; ROADMAP Phase 10 item 1). 0 = the process default
@@ -173,7 +179,7 @@ contains
     if (this%geometryKernel /= 0) call setGeometryKernel(this%geometryKernel)
     call buildGeometryMatrices(p1, p2, this%geomRadius, nseg, &
       this%geomG, this%geomGi, this%geomRbar, this%geomRbari, &
-      this%geomCosTheta, this%geomCosThetaI, pos=this%geomPos)
+      this%geomCosTheta, this%geomCosThetaI, pos=this%geomPos, crossMedium=this%crossMedium)
     if (this%geometryKernel /= 0) call setGeometryKernel(kernelDefault)
 
     if (verbosityLevel() .eq. VERB_VERBOSE) then
@@ -224,6 +230,17 @@ contains
     integer(4), intent(in) :: i
     real(8), intent(in) :: omega
 
+    zint = segmentConductorImpedance(this, i, omega) + &
+           lumpedImpedance(this%structure%electrodes(i), cmplx(0.0d0, omega, kind=8))
+  end function segmentInternalImpedance
+
+  complex(8) function segmentConductorImpedance(this, i, omega) result(zint)
+    !! Conductor part of `segmentInternalImpedance`, without the embedded
+    !! lumped element.
+    class(tStudy), intent(in) :: this
+    integer(4), intent(in) :: i
+    real(8), intent(in) :: omega
+
     if (this%structure%electrodes(i)%loaded) then
       zint = cmplx(this%structure%electrodes(i)%loadResistance, &
                    omega * this%structure%electrodes(i)%loadInductance, kind=8) * this%geomLength(i)
@@ -236,10 +253,19 @@ contains
       call raiseError("tStudy%run: internal impedance requires a tLinear conductor material")
       zint = ZERO_CPLX
     end select
-  end function segmentInternalImpedance
+  end function segmentConductorImpedance
 
   complex(8) function segmentInternalImpedanceLaplace(this, i, sLap) result(zint)
     !! `segmentInternalImpedance` at a complex frequency s = c + jω.
+    class(tStudy), intent(in) :: this
+    integer(4), intent(in) :: i
+    complex(8), intent(in) :: sLap
+
+    zint = segmentConductorImpedanceLaplace(this, i, sLap) + lumpedImpedance(this%structure%electrodes(i), sLap)
+  end function segmentInternalImpedanceLaplace
+
+  complex(8) function segmentConductorImpedanceLaplace(this, i, sLap) result(zint)
+    !! Conductor part of `segmentInternalImpedanceLaplace`.
     class(tStudy), intent(in) :: this
     integer(4), intent(in) :: i
     complex(8), intent(in) :: sLap
@@ -256,7 +282,7 @@ contains
       call raiseError("tStudy%run: internal impedance requires a tLinear conductor material")
       zint = ZERO_CPLX
     end select
-  end function segmentInternalImpedanceLaplace
+  end function segmentConductorImpedanceLaplace
 
   ! =====================================================================
   ! Study execution and reporting
@@ -502,6 +528,7 @@ contains
     ! dispersive soil (ROADMAP Phase 4, ADR 0007) works here without a
     ! type-specific branch.
     mesh%imageModel = this%imageModel
+    mesh%crossMedium = this%crossMedium
     if (laplace) then
       call calcParamLaplace(mesh, sLap, muAir, this%structure%air%admittanceLaplace(sLap), &
                              muSoil, this%structure%soil%admittanceLaplace(sLap))
@@ -533,6 +560,16 @@ contains
     end do
 
     call calcFreq2(mesh)
+
+    ! Lumped branches (theory.md §6, ADR 0028): admittance stamps in the
+    ! Kirchhoff rows, after the electromagnetic block is assembled
+    if (this%structure%branchCount > 0) then
+      if (.not. laplace) sLap = cmplx(0.0d0, omega, kind=8)
+      do i = 1, this%structure%branchCount
+        call stampBranch(mesh, this%structure%branches(i)%nodeA, this%structure%branches(i)%nodeB, &
+                         this%structure%branches(i)%admittance(sLap))
+      end do
+    end if
   end subroutine fillAtFrequency
 
   subroutine solveWithVoltageSources(mesh, sourcePos, retPos, injNodes, patterns, sourceValues, isVoltage, &
@@ -788,7 +825,7 @@ contains
   end subroutine runSweep
 
   subroutine runSweepUnits(this, freqHz, termNodeIds, termReturnIds, termIsVoltage, nodeRows, electrodeRows, &
-                           hNode, hI1, hI2, damping)
+                           hNode, hI1, hI2, damping, totalVoltage)
     !! Transfer functions of several independent unit terminals at once
     !! (transient driver, ADR 0026). Terminal m is a unit current (A) or unit
     !! voltage (V) at node `termNodeIds(m)` — across the pair when
@@ -804,6 +841,11 @@ contains
     !! `electrodeRows(i)`, at `freqHz(k)` for terminal m. The study's own
     !! sweep storage (`voltageResults` etc.) is not touched. A nonzero
     !! `damping` c solves at s = c + 2πj·f as in `runSweep`.
+    !!
+    !! With `totalVoltage` the rows of `hNode` are the *total* voltage
+    !! u = φ + s ∫₀^h A_z^i dz of the lightning channel's incident field
+    !! (theory.md §4.6.3, `mIncident`) instead of the scalar potential φ;
+    !! nodes at or below the ground are unchanged.
     class(tStudy), intent(inout) :: this
     real(8), intent(in) :: freqHz(:)
     character(len=*), intent(in) :: termNodeIds(:), termReturnIds(:)
@@ -812,9 +854,13 @@ contains
     !! 1-based node / electrode indices to keep
     complex(8), allocatable, intent(out) :: hNode(:,:,:), hI1(:,:,:), hI2(:,:,:)
     real(8), intent(in), optional :: damping
+    logical, intent(in), optional :: totalVoltage
+    !! Report the total voltage at `nodeRows` (default: scalar potential)
     real(8), allocatable :: omegaAxis(:)
     integer(4), allocatable :: sourcePos(:), retPos(:), injNodes(:)
-    complex(8), allocatable :: patterns(:,:), unitValues(:)
+    complex(8), allocatable :: patterns(:,:), unitValues(:), drop(:)
+    type(tIncidentPath) :: incident
+    logical :: wantTotal
     integer(4) :: nf, nT, k, solveInfo
     logical :: anyVoltage, laplace
     type(tMesh) :: meshLocal
@@ -839,12 +885,15 @@ contains
 
     omegaAxis = 2.0d0 * PI * freqHz
     call injectionPatterns(sourcePos, retPos, injNodes, patterns)
+    wantTotal = .false.
+    if (present(totalVoltage)) wantTotal = totalVoltage
+    if (wantTotal) call buildIncidentPath(this%structure, this%geomPos, this%geomRadius, nodeRows, incident)
 
     ! Same threading scheme as `runSweep`: independent frequencies, one
     ! thread-private mesh each, disjoint writes, bit-identical for any thread count.
     solveInfo = 0
     call warmUpMachineConstants()
-    !$omp parallel default(shared) private(meshLocal, vU, i1U, i2U, scale, m, info)
+    !$omp parallel default(shared) private(meshLocal, vU, i1U, i2U, scale, m, info, drop)
     meshLocal = this%mesh
     block
       !$omp do schedule(dynamic)
@@ -866,6 +915,10 @@ contains
             scale = cmplx(1.0d0, 0.0d0, kind=8) / scale
           end if
           hNode(:, k, m) = scale * vU(nodeRows, m)
+          if (wantTotal) then
+            drop = incidentDrop(incident, meshLocal, i1U(:, m), i2U(:, m))
+            hNode(:, k, m) = hNode(:, k, m) + scale * drop
+          end if
           hI1(:, k, m)   = scale * i1U(electrodeRows, m)
           hI2(:, k, m)   = scale * i2U(electrodeRows, m)
         end do
