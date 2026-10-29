@@ -908,6 +908,17 @@ pulled forward if a tower-footing case needs shield wires.
    Time-domain and full-wave counterparts for cross-checking: Fan & Li [103]
    and Nazari et al. [104].
 
+### Maintenance M1 — Remove SLATEC (native Bessel) — **proposed 2026-10-29**
+
+[ADR 0031](adr/0031-remove-slatec-native-bessel.md): the only SLATEC routine
+in use is `ZBESI` (the `I₀/I₁` ratio of the solid-cylinder internal
+impedance); the Rust port already replaced it. Plan: a pure `mBessel` module
+validated against a stored AMOS table (≤ 1e-13), `warmUpMachineConstants`
+and the SLATEC path dependency removed, the commercial `vendor/slatec_zbesi`
+dropped, a per-conductor cache of the per-metre `Z_int`, and a separate
+decision on the `|ρ| > 500 → ratio = 1` cut-off (1e-3 relative error). Ten
+checklist steps in the ADR; steps 1–4 unblock the `ifx` build.
+
 ### Legacy element inventory
 
 The Matlab reference's full element inventory, for the record: straight

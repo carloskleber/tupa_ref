@@ -15,19 +15,10 @@ module mImpedance
   !! component issues in older compilers and preserves historical code structure.
   !! A modern refactoring could use module-level pointers instead.
   use mCtes, only: PI, MU0
+  use mBessel, only: besselI0OverI1
   use mError, only: raiseError
   use mGeometryCache, only: geomCacheClear
   implicit none
-
-  ! Explicit interface for SLATEC ZBESI (complex modified Bessel function I)
-  interface
-    subroutine zbesi(zr, zi, fnu, kode, n, cyr, cyi, nz, ierr)
-      real(8), intent(in) :: zr, zi, fnu
-      integer, intent(in) :: kode, n
-      real(8), intent(out) :: cyr(n), cyi(n)
-      integer, intent(out) :: nz, ierr
-    end subroutine zbesi
-  end interface
 
   ! =====================================================================
   ! Abstract interfaces for function pointers
@@ -100,7 +91,7 @@ module mImpedance
   !! Indices in xgk/wgk that correspond to the 7-point Gauss rule
 
   public :: geometryFactor2D, geometryFactor1D, inverseDistanceIntegrand, lowerLimit, upperLimit, TWODQ, internalImpedance, internalImpedanceLaplace
-  public :: setQuadEpsRel, getQuadEpsRel, warmUpMachineConstants
+  public :: setQuadEpsRel, getQuadEpsRel
 
 contains
 
@@ -126,24 +117,6 @@ contains
     eps = quadEpsRel
   end function getQuadEpsRel
 
-  subroutine warmUpMachineConstants()
-    !! Initialise SLATEC's lazily-filled machine-constant table before any
-    !! threaded region. `D1MACH` (the fork's version, via LAPACK `DLAMCH`)
-    !! sets its `IFLAG` *before* it fills `DMACH`, so two threads whose first
-    !! ZBESI calls overlap can read an unfilled table (zeros), and ZBESI then
-    !! fails with IERR=2. One serial call per process closes the window
-    !! (ROADMAP Phase 10 item 4). Idempotent and cheap.
-    interface
-      real(8) function d1mach(i)
-        integer, intent(in) :: i
-      end function d1mach
-    end interface
-    real(8) :: dummy
-
-    dummy = d1mach(1) + d1mach(2) + d1mach(3) + d1mach(4) + d1mach(5)
-    if (dummy /= dummy) call raiseError("warmUpMachineConstants: D1MACH returned NaN")
-  end subroutine warmUpMachineConstants
-
   ! =====================================================================
   ! Internal (skin-effect) impedance of a solid cylindrical conductor
   ! =====================================================================
@@ -155,7 +128,7 @@ contains
     !!     rho   = r0 * sqrt(j*omega*mu*sigma),  Zint = z_int * l
     !!
     !! I0, I1 are modified Bessel functions of the first kind (complex
-    !! argument), evaluated via SLATEC ZBESI. For |rho| > 500 the ratio is
+    !! argument), evaluated by `besselI0OverI1` (mBessel, ADR 0031). For |rho| > 500 the ratio is
     !! taken as 1 (its asymptotic limit) to avoid unnecessary/unstable
     !! evaluation at large argument, matching the original implementation.
     real(8), intent(in) :: radius
@@ -169,21 +142,13 @@ contains
     real(8), intent(in) :: mur
     !! Conductor relative permeability mu_r
     complex(8) :: rho, ratio, zPerLength
-    real(8) :: cyr(2), cyi(2)
-    integer :: nz, ierr
-    character(len=8) :: ierrStr
 
     rho = radius * sqrt(cmplx(0.0d0, omega, kind=8) * mur * MU0 * sigma)
 
     if (abs(rho) > 500.0d0) then
       ratio = cmplx(1.0d0, 0.0d0, kind=8)
     else
-      call zbesi(real(rho, kind=8), aimag(rho), 0.0d0, 1, 2, cyr, cyi, nz, ierr)
-      if (ierr /= 0 .and. ierr /= 3) then
-        write(ierrStr, '(I0)') ierr
-        call raiseError("internalImpedance: ZBESI failed with IERR=" // trim(ierrStr))
-      end if
-      ratio = cmplx(cyr(1), cyi(1), kind=8) / cmplx(cyr(2), cyi(2), kind=8)
+      ratio = besselI0OverI1(rho)
     end if
 
     zPerLength = sqrt(cmplx(0.0d0, omega, kind=8) * mur * MU0 / sigma) / (2.0d0 * PI * radius) * ratio
@@ -193,7 +158,7 @@ contains
   complex(8) function internalImpedanceLaplace(radius, length, s, sigma, mur) result(Zint)
     !! `internalImpedance` at a complex frequency s = c + jω (jω -> s in
     !! both square roots), for the Numerical Laplace Transform driver
-    !! (ROADMAP Phase 9 item 5). ZBESI takes any complex argument; with
+    !! (ROADMAP Phase 9 item 5). `besselI0OverI1` takes any `Re rho >= 0`; with
     !! Re(s) >= 0, arg(rho) lies in [0, π/4], so the |rho| > 500 cut-off
     !! (ratio -> 1) also bounds the unscaled I0/I1 below overflow.
     real(8), intent(in) :: radius, length
@@ -201,21 +166,13 @@ contains
     !! Complex frequency s = c + jω (1/s)
     real(8), intent(in) :: sigma, mur
     complex(8) :: rho, ratio, zPerLength
-    real(8) :: cyr(2), cyi(2)
-    integer :: nz, ierr
-    character(len=8) :: ierrStr
 
     rho = radius * sqrt(s * mur * MU0 * sigma)
 
     if (abs(rho) > 500.0d0) then
       ratio = cmplx(1.0d0, 0.0d0, kind=8)
     else
-      call zbesi(real(rho, kind=8), aimag(rho), 0.0d0, 1, 2, cyr, cyi, nz, ierr)
-      if (ierr /= 0 .and. ierr /= 3) then
-        write(ierrStr, '(I0)') ierr
-        call raiseError("internalImpedanceLaplace: ZBESI failed with IERR=" // trim(ierrStr))
-      end if
-      ratio = cmplx(cyr(1), cyi(1), kind=8) / cmplx(cyr(2), cyi(2), kind=8)
+      ratio = besselI0OverI1(rho)
     end if
 
     zPerLength = sqrt(s * mur * MU0 / sigma) / (2.0d0 * PI * radius) * ratio

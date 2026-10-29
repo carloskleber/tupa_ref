@@ -5,7 +5,6 @@ author = "Carlos Kleber C. Arruda"
 maintainer = "carloskleber@gmail.com"
 copyright = "Copyright 2026, Carlos Kleber"
 dependencies.stdlib = "*"
-dependencies.slatec = { path = "slatec" }
 dependencies.feh = { git = "https://github.com/samharrison7/fortran-error-handler" }
 dependencies.json-fortran = { git = "https://github.com/jacobwilliams/json-fortran" }
 

@@ -23,7 +23,7 @@ module mStudy
   use mObservation, only: tObservation, tObservationResults
   use mGeometry, only: buildGeometryMatrices, setGeometryKernel, getGeometryKernel
   use mGeometryCache, only: geomCacheStats
-  use mImpedance, only: internalImpedance, internalImpedanceLaplace, warmUpMachineConstants
+  use mImpedance, only: internalImpedance, internalImpedanceLaplace
   use mError, only: raiseError
   use mCtes, only: newl, PI, EPSILON0, MU0, ZERO_CPLX
   use mVerbosity
@@ -776,7 +776,6 @@ contains
     ! bit-identical for any thread count. Without -fopenmp the directives are
     ! comments and the loop is the former serial one.
     solveInfo = 0
-    call warmUpMachineConstants()
     !$omp parallel default(shared) private(k, lastSrc, info, meshLocal)
     meshLocal = this%mesh
     block
@@ -892,7 +891,6 @@ contains
     ! Same threading scheme as `runSweep`: independent frequencies, one
     ! thread-private mesh each, disjoint writes, bit-identical for any thread count.
     solveInfo = 0
-    call warmUpMachineConstants()
     !$omp parallel default(shared) private(meshLocal, vU, i1U, i2U, scale, m, info, drop)
     meshLocal = this%mesh
     block
