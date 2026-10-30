@@ -18,6 +18,7 @@ when it reproduces every case within the stated tolerance.
 | `rod.json` | Single vertical buried rod (3 m, -0.5 to -3.5 m), same soil, 1∠0° A at `Node_1`, 10 Hz-1 MHz, 8 points/decade | `rod_expected.csv` |
 | `rod_air.json` | Two collinear rods sharing `Node_2` at the air-soil interface (z=0): 10 m above ground down to a 5 m buried rod, same soil/material, 1∠0° A at `Node_1` (top), 10 Hz-1 MHz | none yet — runs NaN-free since the ADR 0019 fix; the cross-coupled variant is `rod_air_cross.json` |
 | `rod_air_cross.json` | ROADMAP Phase 14 (ADR 0029): `rod_air.json` with `numerics.crossMedium: "transmission"`, 1 point/decade, plus two `observation` points 1 µm either side of the interface (the continuity check of `test_potentials`). The coupling moves the input voltage by 3.6e-6 at 10 Hz and 5.7e-2 at 1 MHz | `rod_air_cross_expected.csv` |
+| `labuat_impulse.json`, `labuat_impulse_noarc.json` | Port of the legacy LabUAT oscillation study (`tools/gen_labuat.py`, [docs/marx_generator.md](../docs/marx_generator.md)): 32-stage 6 MV Marx generator, five-unit damped divider, two 220 m poles on three porticos with ring yokes, tower mockup; the first has the insulator-string arc closed from t = 0, the second none. NLT, 1024 samples to 5 MHz, ideal ground images (legacy `solo_ideal`). Fortran only (`ring`, `branch`, `branchNorton`) | none (generated; about 2 min per run) |
 | `channel_tower_cross.json` | Phase 14 item 2: the `channel_tower.json` geometry (tower, buried rod, channel), harmonic only, with the coupling on; `test_crossmedium` compares it with `channel_tower.json` (coupling off) | none (trend test) |
 | `grid.json` | Small buried grounding grid, one square mesh (4 nodes/edges), 1∠0° A at `Node_A`, 100 Hz-100 kHz | `grid_expected.csv` |
 | `portela1997_transient.json` | Same geometry/soil as `portela1997.json`, but a `signal` block (ADR 0015) instead of `sources`/`frequencies`: transient GPR under a 1.2/50 µs, 30 kA double-exponential surge | none (internal-consistency check only, theory.md §9.2 data gap — see `test_transient.f90`) |
@@ -184,7 +185,8 @@ Semantics:
   only — e.g. `{ "type": "alipio-visacro", "permeability": 1.0, "sigma0": 0.01 }`.
   See `silva2025_rho100.json` for a worked example.
 - `elements[].type`: `"line"`, `"mesh"` (ADR 0020), `"catenary"` (ADR
-  0023), `"channel"` (ADR 0025) or `"branch"` (ADR 0028, Fortran only);
+  0023), `"channel"` (ADR 0025), `"plane"` (Phase 10e, Fortran only), `"ring"`
+  (Phase 12 item 1, Fortran only) or `"branch"` (ADR 0028, Fortran only);
   other unknown types are skipped with a warning.
 - `"branch"` (ADR 0028, theory.md §6) is a lumped series `R + sL + 1/(sC)`
   between node `from` and node `to`, or from `from` to remote earth when
@@ -195,6 +197,15 @@ Semantics:
   voltage across a branch to earth is the node voltage `u_from`. An isolated
   node (no segment) may be the `from` node: a source there feeds a series
   branch. The Rust and Julia loaders refuse the type (ROADMAP Phase 10d).
+- `"ring"` (legacy `Anel`) is a circular conductor: a closed loop of `chords`
+  (>= 3) straight one-segment bars inscribed in a circle. Fields `id`,
+  `centre` `[x, y, z]`, `normal` (direction of the circle's plane; default
+  `[0, 0, 1]`), `ringRadius` (circle radius, m), `radius` (conductor radius,
+  m) and `material`. The first vertex is `centre + ringRadius * y'`, with y'
+  the y axis tilted with the plane, and is the node named `<id>`; the others
+  are `<id>-01`, `<id>-02`, ... A vertex coinciding with an existing node
+  reuses it. All vertices must be in one medium. Used for grounding rings and
+  toroidal corona shields. The Rust and Julia loaders refuse the type.
 - `"channel"` (ADR 0025, theory.md §4.5) is a lightning return-stroke
   channel in air: a chain of perfectly conducting segments rising from a
   `strike` node — or from a free-standing `position` `[x, y, z]`, exactly

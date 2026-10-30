@@ -1,0 +1,3286 @@
+{
+ "title": "LabUAT impulse: 32-stage Marx generator, damped divider, porticos and tower mockup",
+ "soil": {
+  "conductivity": 0.01,
+  "permittivity": 10.0,
+  "permeability": 1.0
+ },
+ "numerics": {
+  "imageModel": "ideal"
+ },
+ "nodes": [
+  {
+   "id": "p1i",
+   "position": [
+    -110.0,
+    -4.0,
+    30.0
+   ]
+  },
+  {
+   "id": "p1conec",
+   "position": [
+    -30.0,
+    -4.0,
+    30.0
+   ]
+  },
+  {
+   "id": "p1m",
+   "position": [
+    0.0,
+    -4.0,
+    30.0
+   ]
+  },
+  {
+   "id": "p1f",
+   "position": [
+    110.0,
+    -4.0,
+    30.0
+   ]
+  },
+  {
+   "id": "divi",
+   "position": [
+    -30.69,
+    -47.97,
+    0.0
+   ]
+  },
+  {
+   "id": "divsec",
+   "position": [
+    -30.69,
+    -47.97,
+    0.1
+   ]
+  },
+  {
+   "id": "divint1",
+   "position": [
+    -30.69,
+    -47.97,
+    4.5
+   ]
+  },
+  {
+   "id": "divint2",
+   "position": [
+    -30.69,
+    -47.97,
+    8.0
+   ]
+  },
+  {
+   "id": "divint3",
+   "position": [
+    -30.69,
+    -47.97,
+    11.0
+   ]
+  },
+  {
+   "id": "divint4",
+   "position": [
+    -30.69,
+    -47.97,
+    14.5
+   ]
+  },
+  {
+   "id": "divf",
+   "position": [
+    -30.69,
+    -47.97,
+    20.0
+   ]
+  },
+  {
+   "id": "divt",
+   "position": [
+    -30.69,
+    -47.97,
+    -1.0
+   ]
+  },
+  {
+   "id": "divt2",
+   "position": [
+    50.69,
+    -47.97,
+    -1.0
+   ]
+  },
+  {
+   "id": "gii",
+   "position": [
+    -40.69,
+    -47.97,
+    0.0
+   ]
+  },
+  {
+   "id": "gif",
+   "position": [
+    -40.69,
+    -47.97,
+    24.0
+   ]
+  },
+  {
+   "id": "git",
+   "position": [
+    -40.69,
+    -47.97,
+    -1.0
+   ]
+  },
+  {
+   "id": "git2",
+   "position": [
+    -100.69,
+    -47.97,
+    -1.0
+   ]
+  },
+  {
+   "id": "p2i",
+   "position": [
+    -110.0,
+    15.8,
+    30.0
+   ]
+  },
+  {
+   "id": "p2m",
+   "position": [
+    0.0,
+    15.8,
+    30.0
+   ]
+  },
+  {
+   "id": "p2f",
+   "position": [
+    110.0,
+    15.8,
+    30.0
+   ]
+  },
+  {
+   "id": "p2at",
+   "position": [
+    5.0,
+    15.8,
+    30.0
+   ]
+  },
+  {
+   "id": "p2at2",
+   "position": [
+    5.0,
+    15.8,
+    0.0
+   ]
+  },
+  {
+   "id": "p2at3",
+   "position": [
+    5.0,
+    15.8,
+    -1.0
+   ]
+  },
+  {
+   "id": "portSe",
+   "position": [
+    -110.0,
+    -35.0,
+    0.0
+   ]
+  },
+  {
+   "id": "portSd",
+   "position": [
+    -110.0,
+    35.0,
+    0.0
+   ]
+  },
+  {
+   "id": "portSeT",
+   "position": [
+    -110.0,
+    -35.0,
+    65.0
+   ]
+  },
+  {
+   "id": "portSdT",
+   "position": [
+    -110.0,
+    35.0,
+    65.0
+   ]
+  },
+  {
+   "id": "portSeV",
+   "position": [
+    -110.0,
+    -30.0,
+    48.0
+   ]
+  },
+  {
+   "id": "portSdV",
+   "position": [
+    -110.0,
+    30.0,
+    48.0
+   ]
+  },
+  {
+   "id": "portSeF",
+   "position": [
+    -110.0,
+    -35.0,
+    -10.0
+   ]
+  },
+  {
+   "id": "portSdF",
+   "position": [
+    -110.0,
+    35.0,
+    -10.0
+   ]
+  },
+  {
+   "id": "portCe",
+   "position": [
+    0.0,
+    -35.0,
+    0.0
+   ]
+  },
+  {
+   "id": "portCd",
+   "position": [
+    0.0,
+    35.0,
+    0.0
+   ]
+  },
+  {
+   "id": "portCeT",
+   "position": [
+    0.0,
+    -35.0,
+    65.0
+   ]
+  },
+  {
+   "id": "portCdT",
+   "position": [
+    0.0,
+    35.0,
+    65.0
+   ]
+  },
+  {
+   "id": "portCeV",
+   "position": [
+    0.0,
+    -30.0,
+    41.0
+   ]
+  },
+  {
+   "id": "portCeV2",
+   "position": [
+    0.0,
+    -4.0,
+    41.0
+   ]
+  },
+  {
+   "id": "portCdV",
+   "position": [
+    0.0,
+    30.0,
+    41.0
+   ]
+  },
+  {
+   "id": "portCdV2",
+   "position": [
+    0.0,
+    16.0,
+    41.0
+   ]
+  },
+  {
+   "id": "portCeF",
+   "position": [
+    0.0,
+    -35.0,
+    -10.0
+   ]
+  },
+  {
+   "id": "portCdF",
+   "position": [
+    0.0,
+    35.0,
+    -10.0
+   ]
+  },
+  {
+   "id": "portNe",
+   "position": [
+    110.0,
+    -35.0,
+    0.0
+   ]
+  },
+  {
+   "id": "portNd",
+   "position": [
+    110.0,
+    35.0,
+    0.0
+   ]
+  },
+  {
+   "id": "portNeT",
+   "position": [
+    110.0,
+    -35.0,
+    65.0
+   ]
+  },
+  {
+   "id": "portNdT",
+   "position": [
+    110.0,
+    35.0,
+    65.0
+   ]
+  },
+  {
+   "id": "portNeV",
+   "position": [
+    110.0,
+    -30.0,
+    48.0
+   ]
+  },
+  {
+   "id": "portNdV",
+   "position": [
+    110.0,
+    30.0,
+    48.0
+   ]
+  },
+  {
+   "id": "portNeF",
+   "position": [
+    110.0,
+    -35.0,
+    -10.0
+   ]
+  },
+  {
+   "id": "portNdF",
+   "position": [
+    110.0,
+    35.0,
+    -10.0
+   ]
+  },
+  {
+   "id": "torreMd",
+   "position": [
+    0.0,
+    15.8,
+    38.0
+   ]
+  },
+  {
+   "id": "torreMc",
+   "position": [
+    0.0,
+    5.9,
+    38.0
+   ]
+  },
+  {
+   "id": "torreMe",
+   "position": [
+    0.0,
+    -4.0,
+    38.0
+   ]
+  },
+  {
+   "id": "torreInf",
+   "position": [
+    0.0,
+    5.9,
+    20.0
+   ]
+  },
+  {
+   "id": "A1",
+   "position": [
+    -40.69,
+    -47.97,
+    0.0
+   ]
+  },
+  {
+   "id": "M1",
+   "position": [
+    -40.69,
+    -47.97,
+    0.0
+   ]
+  },
+  {
+   "id": "N1",
+   "position": [
+    -40.69,
+    -47.97,
+    0.75
+   ]
+  },
+  {
+   "id": "A2",
+   "position": [
+    -40.69,
+    -47.97,
+    0.75
+   ]
+  },
+  {
+   "id": "M2",
+   "position": [
+    -40.69,
+    -47.97,
+    0.75
+   ]
+  },
+  {
+   "id": "N2",
+   "position": [
+    -40.69,
+    -47.97,
+    1.5
+   ]
+  },
+  {
+   "id": "A3",
+   "position": [
+    -40.69,
+    -47.97,
+    1.5
+   ]
+  },
+  {
+   "id": "M3",
+   "position": [
+    -40.69,
+    -47.97,
+    1.5
+   ]
+  },
+  {
+   "id": "N3",
+   "position": [
+    -40.69,
+    -47.97,
+    2.25
+   ]
+  },
+  {
+   "id": "A4",
+   "position": [
+    -40.69,
+    -47.97,
+    2.25
+   ]
+  },
+  {
+   "id": "M4",
+   "position": [
+    -40.69,
+    -47.97,
+    2.25
+   ]
+  },
+  {
+   "id": "N4",
+   "position": [
+    -40.69,
+    -47.97,
+    3.0
+   ]
+  },
+  {
+   "id": "A5",
+   "position": [
+    -40.69,
+    -47.97,
+    3.0
+   ]
+  },
+  {
+   "id": "M5",
+   "position": [
+    -40.69,
+    -47.97,
+    3.0
+   ]
+  },
+  {
+   "id": "N5",
+   "position": [
+    -40.69,
+    -47.97,
+    3.75
+   ]
+  },
+  {
+   "id": "A6",
+   "position": [
+    -40.69,
+    -47.97,
+    3.75
+   ]
+  },
+  {
+   "id": "M6",
+   "position": [
+    -40.69,
+    -47.97,
+    3.75
+   ]
+  },
+  {
+   "id": "N6",
+   "position": [
+    -40.69,
+    -47.97,
+    4.5
+   ]
+  },
+  {
+   "id": "A7",
+   "position": [
+    -40.69,
+    -47.97,
+    4.5
+   ]
+  },
+  {
+   "id": "M7",
+   "position": [
+    -40.69,
+    -47.97,
+    4.5
+   ]
+  },
+  {
+   "id": "N7",
+   "position": [
+    -40.69,
+    -47.97,
+    5.25
+   ]
+  },
+  {
+   "id": "A8",
+   "position": [
+    -40.69,
+    -47.97,
+    5.25
+   ]
+  },
+  {
+   "id": "M8",
+   "position": [
+    -40.69,
+    -47.97,
+    5.25
+   ]
+  },
+  {
+   "id": "N8",
+   "position": [
+    -40.69,
+    -47.97,
+    6.0
+   ]
+  },
+  {
+   "id": "A9",
+   "position": [
+    -40.69,
+    -47.97,
+    6.0
+   ]
+  },
+  {
+   "id": "M9",
+   "position": [
+    -40.69,
+    -47.97,
+    6.0
+   ]
+  },
+  {
+   "id": "N9",
+   "position": [
+    -40.69,
+    -47.97,
+    6.75
+   ]
+  },
+  {
+   "id": "A10",
+   "position": [
+    -40.69,
+    -47.97,
+    6.75
+   ]
+  },
+  {
+   "id": "M10",
+   "position": [
+    -40.69,
+    -47.97,
+    6.75
+   ]
+  },
+  {
+   "id": "N10",
+   "position": [
+    -40.69,
+    -47.97,
+    7.5
+   ]
+  },
+  {
+   "id": "A11",
+   "position": [
+    -40.69,
+    -47.97,
+    7.5
+   ]
+  },
+  {
+   "id": "M11",
+   "position": [
+    -40.69,
+    -47.97,
+    7.5
+   ]
+  },
+  {
+   "id": "N11",
+   "position": [
+    -40.69,
+    -47.97,
+    8.25
+   ]
+  },
+  {
+   "id": "A12",
+   "position": [
+    -40.69,
+    -47.97,
+    8.25
+   ]
+  },
+  {
+   "id": "M12",
+   "position": [
+    -40.69,
+    -47.97,
+    8.25
+   ]
+  },
+  {
+   "id": "N12",
+   "position": [
+    -40.69,
+    -47.97,
+    9.0
+   ]
+  },
+  {
+   "id": "A13",
+   "position": [
+    -40.69,
+    -47.97,
+    9.0
+   ]
+  },
+  {
+   "id": "M13",
+   "position": [
+    -40.69,
+    -47.97,
+    9.0
+   ]
+  },
+  {
+   "id": "N13",
+   "position": [
+    -40.69,
+    -47.97,
+    9.75
+   ]
+  },
+  {
+   "id": "A14",
+   "position": [
+    -40.69,
+    -47.97,
+    9.75
+   ]
+  },
+  {
+   "id": "M14",
+   "position": [
+    -40.69,
+    -47.97,
+    9.75
+   ]
+  },
+  {
+   "id": "N14",
+   "position": [
+    -40.69,
+    -47.97,
+    10.5
+   ]
+  },
+  {
+   "id": "A15",
+   "position": [
+    -40.69,
+    -47.97,
+    10.5
+   ]
+  },
+  {
+   "id": "M15",
+   "position": [
+    -40.69,
+    -47.97,
+    10.5
+   ]
+  },
+  {
+   "id": "N15",
+   "position": [
+    -40.69,
+    -47.97,
+    11.25
+   ]
+  },
+  {
+   "id": "A16",
+   "position": [
+    -40.69,
+    -47.97,
+    11.25
+   ]
+  },
+  {
+   "id": "M16",
+   "position": [
+    -40.69,
+    -47.97,
+    11.25
+   ]
+  },
+  {
+   "id": "N16",
+   "position": [
+    -40.69,
+    -47.97,
+    12.0
+   ]
+  },
+  {
+   "id": "A17",
+   "position": [
+    -40.69,
+    -47.97,
+    12.0
+   ]
+  },
+  {
+   "id": "M17",
+   "position": [
+    -40.69,
+    -47.97,
+    12.0
+   ]
+  },
+  {
+   "id": "N17",
+   "position": [
+    -40.69,
+    -47.97,
+    12.75
+   ]
+  },
+  {
+   "id": "A18",
+   "position": [
+    -40.69,
+    -47.97,
+    12.75
+   ]
+  },
+  {
+   "id": "M18",
+   "position": [
+    -40.69,
+    -47.97,
+    12.75
+   ]
+  },
+  {
+   "id": "N18",
+   "position": [
+    -40.69,
+    -47.97,
+    13.5
+   ]
+  },
+  {
+   "id": "A19",
+   "position": [
+    -40.69,
+    -47.97,
+    13.5
+   ]
+  },
+  {
+   "id": "M19",
+   "position": [
+    -40.69,
+    -47.97,
+    13.5
+   ]
+  },
+  {
+   "id": "N19",
+   "position": [
+    -40.69,
+    -47.97,
+    14.25
+   ]
+  },
+  {
+   "id": "A20",
+   "position": [
+    -40.69,
+    -47.97,
+    14.25
+   ]
+  },
+  {
+   "id": "M20",
+   "position": [
+    -40.69,
+    -47.97,
+    14.25
+   ]
+  },
+  {
+   "id": "N20",
+   "position": [
+    -40.69,
+    -47.97,
+    15.0
+   ]
+  },
+  {
+   "id": "A21",
+   "position": [
+    -40.69,
+    -47.97,
+    15.0
+   ]
+  },
+  {
+   "id": "M21",
+   "position": [
+    -40.69,
+    -47.97,
+    15.0
+   ]
+  },
+  {
+   "id": "N21",
+   "position": [
+    -40.69,
+    -47.97,
+    15.75
+   ]
+  },
+  {
+   "id": "A22",
+   "position": [
+    -40.69,
+    -47.97,
+    15.75
+   ]
+  },
+  {
+   "id": "M22",
+   "position": [
+    -40.69,
+    -47.97,
+    15.75
+   ]
+  },
+  {
+   "id": "N22",
+   "position": [
+    -40.69,
+    -47.97,
+    16.5
+   ]
+  },
+  {
+   "id": "A23",
+   "position": [
+    -40.69,
+    -47.97,
+    16.5
+   ]
+  },
+  {
+   "id": "M23",
+   "position": [
+    -40.69,
+    -47.97,
+    16.5
+   ]
+  },
+  {
+   "id": "N23",
+   "position": [
+    -40.69,
+    -47.97,
+    17.25
+   ]
+  },
+  {
+   "id": "A24",
+   "position": [
+    -40.69,
+    -47.97,
+    17.25
+   ]
+  },
+  {
+   "id": "M24",
+   "position": [
+    -40.69,
+    -47.97,
+    17.25
+   ]
+  },
+  {
+   "id": "N24",
+   "position": [
+    -40.69,
+    -47.97,
+    18.0
+   ]
+  },
+  {
+   "id": "A25",
+   "position": [
+    -40.69,
+    -47.97,
+    18.0
+   ]
+  },
+  {
+   "id": "M25",
+   "position": [
+    -40.69,
+    -47.97,
+    18.0
+   ]
+  },
+  {
+   "id": "N25",
+   "position": [
+    -40.69,
+    -47.97,
+    18.75
+   ]
+  },
+  {
+   "id": "A26",
+   "position": [
+    -40.69,
+    -47.97,
+    18.75
+   ]
+  },
+  {
+   "id": "M26",
+   "position": [
+    -40.69,
+    -47.97,
+    18.75
+   ]
+  },
+  {
+   "id": "N26",
+   "position": [
+    -40.69,
+    -47.97,
+    19.5
+   ]
+  },
+  {
+   "id": "A27",
+   "position": [
+    -40.69,
+    -47.97,
+    19.5
+   ]
+  },
+  {
+   "id": "M27",
+   "position": [
+    -40.69,
+    -47.97,
+    19.5
+   ]
+  },
+  {
+   "id": "N27",
+   "position": [
+    -40.69,
+    -47.97,
+    20.25
+   ]
+  },
+  {
+   "id": "A28",
+   "position": [
+    -40.69,
+    -47.97,
+    20.25
+   ]
+  },
+  {
+   "id": "M28",
+   "position": [
+    -40.69,
+    -47.97,
+    20.25
+   ]
+  },
+  {
+   "id": "N28",
+   "position": [
+    -40.69,
+    -47.97,
+    21.0
+   ]
+  },
+  {
+   "id": "A29",
+   "position": [
+    -40.69,
+    -47.97,
+    21.0
+   ]
+  },
+  {
+   "id": "M29",
+   "position": [
+    -40.69,
+    -47.97,
+    21.0
+   ]
+  },
+  {
+   "id": "N29",
+   "position": [
+    -40.69,
+    -47.97,
+    21.75
+   ]
+  },
+  {
+   "id": "A30",
+   "position": [
+    -40.69,
+    -47.97,
+    21.75
+   ]
+  },
+  {
+   "id": "M30",
+   "position": [
+    -40.69,
+    -47.97,
+    21.75
+   ]
+  },
+  {
+   "id": "N30",
+   "position": [
+    -40.69,
+    -47.97,
+    22.5
+   ]
+  },
+  {
+   "id": "A31",
+   "position": [
+    -40.69,
+    -47.97,
+    22.5
+   ]
+  },
+  {
+   "id": "M31",
+   "position": [
+    -40.69,
+    -47.97,
+    22.5
+   ]
+  },
+  {
+   "id": "N31",
+   "position": [
+    -40.69,
+    -47.97,
+    23.25
+   ]
+  },
+  {
+   "id": "A32",
+   "position": [
+    -40.69,
+    -47.97,
+    23.25
+   ]
+  },
+  {
+   "id": "M32",
+   "position": [
+    -40.69,
+    -47.97,
+    23.25
+   ]
+  },
+  {
+   "id": "N32",
+   "position": [
+    -40.69,
+    -47.97,
+    24.0
+   ]
+  }
+ ],
+ "materials": [
+  {
+   "id": "steel",
+   "epsilonr": 1.0,
+   "mur": 100.0,
+   "sigma": 5880000.0
+  },
+  {
+   "id": "aluminum",
+   "epsilonr": 1.0,
+   "mur": 1.0,
+   "sigma": 35400000.0
+  },
+  {
+   "id": "copper",
+   "epsilonr": 1.0,
+   "mur": 1.0,
+   "sigma": 58000000.0
+  }
+ ],
+ "elements": [
+  {
+   "type": "ring",
+   "id": "yoke1a",
+   "centre": [
+    -110,
+    -4,
+    30
+   ],
+   "normal": [
+    110,
+    0,
+    0
+   ],
+   "ringRadius": 3.0,
+   "radius": 0.5,
+   "chords": 10,
+   "material": "steel"
+  },
+  {
+   "type": "ring",
+   "id": "yoke1b",
+   "centre": [
+    110,
+    -4,
+    30
+   ],
+   "normal": [
+    -110,
+    0,
+    0
+   ],
+   "ringRadius": 3.0,
+   "radius": 0.5,
+   "chords": 10,
+   "material": "steel"
+  },
+  {
+   "type": "ring",
+   "id": "yoke2a",
+   "centre": [
+    -110,
+    15.8,
+    30
+   ],
+   "normal": [
+    110,
+    0,
+    0
+   ],
+   "ringRadius": 3.0,
+   "radius": 0.5,
+   "chords": 10,
+   "material": "steel"
+  },
+  {
+   "type": "ring",
+   "id": "yoke2b",
+   "centre": [
+    110,
+    15.8,
+    30
+   ],
+   "normal": [
+    -110,
+    0,
+    0
+   ],
+   "ringRadius": 3.0,
+   "radius": 0.5,
+   "chords": 10,
+   "material": "steel"
+  },
+  {
+   "type": "ring",
+   "id": "torgi",
+   "centre": [
+    -40.69,
+    -47.97,
+    24
+   ],
+   "normal": [
+    0,
+    0,
+    6
+   ],
+   "ringRadius": 3.75,
+   "radius": 1.0,
+   "chords": 10,
+   "material": "aluminum"
+  },
+  {
+   "type": "ring",
+   "id": "torgiint",
+   "centre": [
+    -40.69,
+    -47.97,
+    11
+   ],
+   "normal": [
+    0,
+    0,
+    19
+   ],
+   "ringRadius": 2.3,
+   "radius": 0.1,
+   "chords": 10,
+   "material": "aluminum"
+  },
+  {
+   "type": "ring",
+   "id": "tordiv",
+   "centre": [
+    -30.69,
+    -47.97,
+    20
+   ],
+   "normal": [
+    0,
+    0,
+    10
+   ],
+   "ringRadius": 3.0,
+   "radius": 1.0,
+   "chords": 10,
+   "material": "aluminum"
+  },
+  {
+   "type": "ring",
+   "id": "tordiv2",
+   "centre": [
+    -30.69,
+    -47.97,
+    17.5
+   ],
+   "normal": [
+    0,
+    0,
+    12.5
+   ],
+   "ringRadius": 1.55,
+   "radius": 0.4,
+   "chords": 10,
+   "material": "aluminum"
+  },
+  {
+   "type": "ring",
+   "id": "tordiv3",
+   "centre": [
+    -30.69,
+    -47.97,
+    14.5
+   ],
+   "normal": [
+    0,
+    0,
+    15.5
+   ],
+   "ringRadius": 0.8,
+   "radius": 0.25,
+   "chords": 10,
+   "material": "aluminum"
+  },
+  {
+   "type": "ring",
+   "id": "tordiv4",
+   "centre": [
+    -30.69,
+    -47.97,
+    11
+   ],
+   "normal": [
+    0,
+    0,
+    19
+   ],
+   "ringRadius": 0.8,
+   "radius": 0.25,
+   "chords": 10,
+   "material": "aluminum"
+  },
+  {
+   "type": "ring",
+   "id": "tordiv5",
+   "centre": [
+    -30.69,
+    -47.97,
+    8
+   ],
+   "normal": [
+    0,
+    0,
+    22
+   ],
+   "ringRadius": 0.4,
+   "radius": 0.1,
+   "chords": 10,
+   "material": "aluminum"
+  },
+  {
+   "type": "ring",
+   "id": "tordiv6",
+   "centre": [
+    -30.69,
+    -47.97,
+    4.5
+   ],
+   "normal": [
+    0,
+    0,
+    25.5
+   ],
+   "ringRadius": 0.4,
+   "radius": 0.1,
+   "chords": 10,
+   "material": "aluminum"
+  },
+  {
+   "type": "line",
+   "id": "p1s",
+   "from": "p1i",
+   "to": "p1conec",
+   "radius": 0.56,
+   "segments": 50,
+   "material": "aluminum"
+  },
+  {
+   "type": "line",
+   "id": "p1s2",
+   "from": "p1conec",
+   "to": "p1m",
+   "radius": 0.56,
+   "segments": 5,
+   "material": "aluminum"
+  },
+  {
+   "type": "line",
+   "id": "p1n",
+   "from": "p1m",
+   "to": "p1f",
+   "radius": 0.56,
+   "segments": 50,
+   "material": "aluminum"
+  },
+  {
+   "type": "line",
+   "id": "p2s",
+   "from": "p2i",
+   "to": "p2m",
+   "radius": 0.56,
+   "segments": 50,
+   "material": "aluminum"
+  },
+  {
+   "type": "line",
+   "id": "p2n",
+   "from": "p2m",
+   "to": "p2at",
+   "radius": 0.56,
+   "segments": 5,
+   "material": "aluminum"
+  },
+  {
+   "type": "line",
+   "id": "p2n2",
+   "from": "p2at",
+   "to": "p2f",
+   "radius": 0.56,
+   "segments": 50,
+   "material": "aluminum"
+  },
+  {
+   "type": "line",
+   "id": "atgi",
+   "from": "gii",
+   "to": "git",
+   "radius": 0.01,
+   "segments": 2,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "atdiv",
+   "from": "divi",
+   "to": "divt",
+   "radius": 0.01,
+   "segments": 2,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "bond1",
+   "from": "git",
+   "to": "git2",
+   "radius": 0.01,
+   "segments": 30,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "bond2",
+   "from": "divt",
+   "to": "divt2",
+   "radius": 0.01,
+   "segments": 30,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "bond3",
+   "from": "git",
+   "to": "divt",
+   "radius": 0.01,
+   "segments": 5,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "alim1",
+   "from": "gif",
+   "to": "divf",
+   "radius": 0.001,
+   "segments": 5,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "alim2",
+   "from": "divf",
+   "to": "p1conec",
+   "radius": 0.00175,
+   "segments": 20,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "ligtorgi",
+   "from": "gif",
+   "to": "torgi",
+   "radius": 0.01,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "ligtordiv",
+   "from": "divf",
+   "to": "tordiv",
+   "radius": 0.01,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "p2at1",
+   "from": "p2at",
+   "to": "p2at2",
+   "radius": 0.002,
+   "segments": 5,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "p2at2w",
+   "from": "p2at2",
+   "to": "p2at3",
+   "radius": 0.01,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "p2at4",
+   "from": "p2at3",
+   "to": "divt",
+   "radius": 0.01,
+   "segments": 15,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "conecy1a",
+   "from": "p1i",
+   "to": "yoke1a",
+   "radius": 0.1,
+   "segments": 1,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "conecy1b",
+   "from": "p1f",
+   "to": "yoke1b",
+   "radius": 0.1,
+   "segments": 1,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "conecy2a",
+   "from": "p2i",
+   "to": "yoke2a",
+   "radius": 0.1,
+   "segments": 1,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "conecy2b",
+   "from": "p2f",
+   "to": "yoke2b",
+   "radius": 0.1,
+   "segments": 1,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "conectordiv",
+   "from": "divf",
+   "to": "tordiv2",
+   "radius": 0.1,
+   "segments": 1,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "conectordiv1",
+   "from": "divint1",
+   "to": "tordiv6",
+   "radius": 0.1,
+   "segments": 1,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "conectordiv2",
+   "from": "divint2",
+   "to": "tordiv5",
+   "radius": 0.1,
+   "segments": 1,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "conectordiv3",
+   "from": "divint3",
+   "to": "tordiv4",
+   "radius": 0.1,
+   "segments": 1,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "conectordiv4",
+   "from": "divint4",
+   "to": "tordiv3",
+   "radius": 0.1,
+   "segments": 1,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "portColSe",
+   "from": "portSe",
+   "to": "portSeT",
+   "radius": 0.5,
+   "segments": 10,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "portColSd",
+   "from": "portSd",
+   "to": "portSdT",
+   "radius": 0.5,
+   "segments": 10,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "portColCe",
+   "from": "portCe",
+   "to": "portCeT",
+   "radius": 0.5,
+   "segments": 10,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "portColCd",
+   "from": "portCd",
+   "to": "portCdT",
+   "radius": 0.5,
+   "segments": 10,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "portColNe",
+   "from": "portNe",
+   "to": "portNeT",
+   "radius": 0.5,
+   "segments": 10,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "portColNd",
+   "from": "portNd",
+   "to": "portNdT",
+   "radius": 0.5,
+   "segments": 10,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "portTravS",
+   "from": "portSeT",
+   "to": "portSdT",
+   "radius": 0.5,
+   "segments": 10,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "portTravC",
+   "from": "portCeT",
+   "to": "portCdT",
+   "radius": 0.5,
+   "segments": 10,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "portTravN",
+   "from": "portNeT",
+   "to": "portNdT",
+   "radius": 0.5,
+   "segments": 10,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "portVigaS",
+   "from": "portSeV",
+   "to": "portSdV",
+   "radius": 0.2,
+   "segments": 10,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "portVigaC",
+   "from": "portCeV",
+   "to": "portCdV",
+   "radius": 0.2,
+   "segments": 10,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "portVigaN",
+   "from": "portNeV",
+   "to": "portNdV",
+   "radius": 0.2,
+   "segments": 10,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "portFundSe",
+   "from": "portSe",
+   "to": "portSeF",
+   "radius": 0.2,
+   "segments": 5,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "portFundSd",
+   "from": "portSd",
+   "to": "portSdF",
+   "radius": 0.2,
+   "segments": 5,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "portFundCe",
+   "from": "portCe",
+   "to": "portCeF",
+   "radius": 0.2,
+   "segments": 5,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "portFundCd",
+   "from": "portCd",
+   "to": "portCdF",
+   "radius": 0.2,
+   "segments": 5,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "portFundNe",
+   "from": "portNe",
+   "to": "portNeF",
+   "radius": 0.2,
+   "segments": 5,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "portFundNd",
+   "from": "portNd",
+   "to": "portNdF",
+   "radius": 0.2,
+   "segments": 5,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "torreMdw",
+   "from": "torreMd",
+   "to": "torreMc",
+   "radius": 0.1,
+   "segments": 5,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "torreMew",
+   "from": "torreMc",
+   "to": "torreMe",
+   "radius": 0.1,
+   "segments": 5,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "torre",
+   "from": "torreMc",
+   "to": "torreInf",
+   "radius": 0.4,
+   "segments": 20,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "torreAtd",
+   "from": "torreMd",
+   "to": "portCdV2",
+   "radius": 0.02,
+   "segments": 2,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "torreAte",
+   "from": "torreMe",
+   "to": "portCeV2",
+   "radius": 0.02,
+   "segments": 2,
+   "material": "steel"
+  },
+  {
+   "type": "line",
+   "id": "fitaCd",
+   "from": "portCdV",
+   "to": "portCd",
+   "radius": 0.002,
+   "segments": 10,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "fitaCe",
+   "from": "portCeV",
+   "to": "portCe",
+   "radius": 0.002,
+   "segments": 10,
+   "material": "copper"
+  },
+  {
+   "type": "line",
+   "id": "torreAtInf",
+   "from": "torreInf",
+   "to": "p2at2",
+   "radius": 0.002,
+   "segments": 5,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "cdiv1",
+   "from": "divsec",
+   "to": "divint1",
+   "resistance": 120.0,
+   "capacitance": 1.5e-09
+  },
+  {
+   "type": "branch",
+   "id": "cdiv2",
+   "from": "divint1",
+   "to": "divint2",
+   "resistance": 120.0,
+   "capacitance": 1.5e-09
+  },
+  {
+   "type": "branch",
+   "id": "cdiv3",
+   "from": "divint2",
+   "to": "divint3",
+   "resistance": 120.0,
+   "capacitance": 1.5e-09
+  },
+  {
+   "type": "branch",
+   "id": "cdiv4",
+   "from": "divint3",
+   "to": "divint4",
+   "resistance": 200.0,
+   "capacitance": 1.5e-09
+  },
+  {
+   "type": "branch",
+   "id": "cdiv5",
+   "from": "divint4",
+   "to": "divf",
+   "resistance": 550.0,
+   "capacitance": 1.5e-09
+  },
+  {
+   "type": "branch",
+   "id": "cdivsec",
+   "from": "divi",
+   "to": "divsec",
+   "resistance": 165500.0,
+   "capacitance": 4.965e-07
+  },
+  {
+   "type": "branch",
+   "id": "Rf1",
+   "from": "M1",
+   "to": "gii",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C1",
+   "from": "A1",
+   "to": "M1",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt1",
+   "from": "A1",
+   "to": "M1",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body1",
+   "from": "A1",
+   "to": "N1",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf2",
+   "from": "M2",
+   "to": "N1",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C2",
+   "from": "A2",
+   "to": "M2",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt2",
+   "from": "A2",
+   "to": "M2",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body2",
+   "from": "A2",
+   "to": "N2",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf3",
+   "from": "M3",
+   "to": "N2",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C3",
+   "from": "A3",
+   "to": "M3",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt3",
+   "from": "A3",
+   "to": "M3",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body3",
+   "from": "A3",
+   "to": "N3",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf4",
+   "from": "M4",
+   "to": "N3",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C4",
+   "from": "A4",
+   "to": "M4",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt4",
+   "from": "A4",
+   "to": "M4",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body4",
+   "from": "A4",
+   "to": "N4",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf5",
+   "from": "M5",
+   "to": "N4",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C5",
+   "from": "A5",
+   "to": "M5",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt5",
+   "from": "A5",
+   "to": "M5",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body5",
+   "from": "A5",
+   "to": "N5",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf6",
+   "from": "M6",
+   "to": "N5",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C6",
+   "from": "A6",
+   "to": "M6",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt6",
+   "from": "A6",
+   "to": "M6",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body6",
+   "from": "A6",
+   "to": "N6",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf7",
+   "from": "M7",
+   "to": "N6",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C7",
+   "from": "A7",
+   "to": "M7",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt7",
+   "from": "A7",
+   "to": "M7",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body7",
+   "from": "A7",
+   "to": "N7",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf8",
+   "from": "M8",
+   "to": "N7",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C8",
+   "from": "A8",
+   "to": "M8",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt8",
+   "from": "A8",
+   "to": "M8",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body8",
+   "from": "A8",
+   "to": "N8",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf9",
+   "from": "M9",
+   "to": "N8",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C9",
+   "from": "A9",
+   "to": "M9",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt9",
+   "from": "A9",
+   "to": "M9",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body9",
+   "from": "A9",
+   "to": "N9",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf10",
+   "from": "M10",
+   "to": "N9",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C10",
+   "from": "A10",
+   "to": "M10",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt10",
+   "from": "A10",
+   "to": "M10",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body10",
+   "from": "A10",
+   "to": "N10",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf11",
+   "from": "M11",
+   "to": "N10",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C11",
+   "from": "A11",
+   "to": "M11",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt11",
+   "from": "A11",
+   "to": "M11",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body11",
+   "from": "A11",
+   "to": "N11",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf12",
+   "from": "M12",
+   "to": "N11",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C12",
+   "from": "A12",
+   "to": "M12",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt12",
+   "from": "A12",
+   "to": "M12",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body12",
+   "from": "A12",
+   "to": "N12",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf13",
+   "from": "M13",
+   "to": "N12",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C13",
+   "from": "A13",
+   "to": "M13",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt13",
+   "from": "A13",
+   "to": "M13",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body13",
+   "from": "A13",
+   "to": "N13",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf14",
+   "from": "M14",
+   "to": "N13",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C14",
+   "from": "A14",
+   "to": "M14",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt14",
+   "from": "A14",
+   "to": "M14",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body14",
+   "from": "A14",
+   "to": "N14",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf15",
+   "from": "M15",
+   "to": "N14",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C15",
+   "from": "A15",
+   "to": "M15",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt15",
+   "from": "A15",
+   "to": "M15",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body15",
+   "from": "A15",
+   "to": "N15",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf16",
+   "from": "M16",
+   "to": "N15",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C16",
+   "from": "A16",
+   "to": "M16",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt16",
+   "from": "A16",
+   "to": "M16",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body16",
+   "from": "A16",
+   "to": "N16",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf17",
+   "from": "M17",
+   "to": "N16",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C17",
+   "from": "A17",
+   "to": "M17",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt17",
+   "from": "A17",
+   "to": "M17",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body17",
+   "from": "A17",
+   "to": "N17",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf18",
+   "from": "M18",
+   "to": "N17",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C18",
+   "from": "A18",
+   "to": "M18",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt18",
+   "from": "A18",
+   "to": "M18",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body18",
+   "from": "A18",
+   "to": "N18",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf19",
+   "from": "M19",
+   "to": "N18",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C19",
+   "from": "A19",
+   "to": "M19",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt19",
+   "from": "A19",
+   "to": "M19",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body19",
+   "from": "A19",
+   "to": "N19",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf20",
+   "from": "M20",
+   "to": "N19",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C20",
+   "from": "A20",
+   "to": "M20",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt20",
+   "from": "A20",
+   "to": "M20",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body20",
+   "from": "A20",
+   "to": "N20",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf21",
+   "from": "M21",
+   "to": "N20",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C21",
+   "from": "A21",
+   "to": "M21",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt21",
+   "from": "A21",
+   "to": "M21",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body21",
+   "from": "A21",
+   "to": "N21",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf22",
+   "from": "M22",
+   "to": "N21",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C22",
+   "from": "A22",
+   "to": "M22",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt22",
+   "from": "A22",
+   "to": "M22",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body22",
+   "from": "A22",
+   "to": "N22",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf23",
+   "from": "M23",
+   "to": "N22",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C23",
+   "from": "A23",
+   "to": "M23",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt23",
+   "from": "A23",
+   "to": "M23",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body23",
+   "from": "A23",
+   "to": "N23",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf24",
+   "from": "M24",
+   "to": "N23",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C24",
+   "from": "A24",
+   "to": "M24",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt24",
+   "from": "A24",
+   "to": "M24",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body24",
+   "from": "A24",
+   "to": "N24",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf25",
+   "from": "M25",
+   "to": "N24",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C25",
+   "from": "A25",
+   "to": "M25",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt25",
+   "from": "A25",
+   "to": "M25",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body25",
+   "from": "A25",
+   "to": "N25",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf26",
+   "from": "M26",
+   "to": "N25",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C26",
+   "from": "A26",
+   "to": "M26",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt26",
+   "from": "A26",
+   "to": "M26",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body26",
+   "from": "A26",
+   "to": "N26",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf27",
+   "from": "M27",
+   "to": "N26",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C27",
+   "from": "A27",
+   "to": "M27",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt27",
+   "from": "A27",
+   "to": "M27",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body27",
+   "from": "A27",
+   "to": "N27",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf28",
+   "from": "M28",
+   "to": "N27",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C28",
+   "from": "A28",
+   "to": "M28",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt28",
+   "from": "A28",
+   "to": "M28",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body28",
+   "from": "A28",
+   "to": "N28",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf29",
+   "from": "M29",
+   "to": "N28",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C29",
+   "from": "A29",
+   "to": "M29",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt29",
+   "from": "A29",
+   "to": "M29",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body29",
+   "from": "A29",
+   "to": "N29",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf30",
+   "from": "M30",
+   "to": "N29",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C30",
+   "from": "A30",
+   "to": "M30",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt30",
+   "from": "A30",
+   "to": "M30",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body30",
+   "from": "A30",
+   "to": "N30",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf31",
+   "from": "M31",
+   "to": "N30",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C31",
+   "from": "A31",
+   "to": "M31",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt31",
+   "from": "A31",
+   "to": "M31",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body31",
+   "from": "A31",
+   "to": "N31",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rf32",
+   "from": "M32",
+   "to": "N31",
+   "resistance": 27.2
+  },
+  {
+   "type": "branch",
+   "id": "C32",
+   "from": "A32",
+   "to": "M32",
+   "resistance": 1.0,
+   "capacitance": 1e-06
+  },
+  {
+   "type": "branch",
+   "id": "Rt32",
+   "from": "A32",
+   "to": "M32",
+   "resistance": 65.0
+  },
+  {
+   "type": "line",
+   "id": "Body32",
+   "from": "A32",
+   "to": "N32",
+   "radius": 0.25,
+   "segments": 1,
+   "material": "copper"
+  },
+  {
+   "type": "branch",
+   "id": "Rout",
+   "from": "N32",
+   "to": "gif",
+   "resistance": 12.0
+  },
+  {
+   "type": "line",
+   "id": "ligtorgiint",
+   "from": "N16",
+   "to": "torgiint",
+   "radius": 0.01,
+   "segments": 1,
+   "material": "copper"
+  }
+ ],
+ "signal": {
+  "sources": [
+   {
+    "node": "A1",
+    "returnNode": "M1",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A2",
+    "returnNode": "M2",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A3",
+    "returnNode": "M3",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A4",
+    "returnNode": "M4",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A5",
+    "returnNode": "M5",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A6",
+    "returnNode": "M6",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A7",
+    "returnNode": "M7",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A8",
+    "returnNode": "M8",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A9",
+    "returnNode": "M9",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A10",
+    "returnNode": "M10",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A11",
+    "returnNode": "M11",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A12",
+    "returnNode": "M12",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A13",
+    "returnNode": "M13",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A14",
+    "returnNode": "M14",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A15",
+    "returnNode": "M15",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A16",
+    "returnNode": "M16",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A17",
+    "returnNode": "M17",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A18",
+    "returnNode": "M18",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A19",
+    "returnNode": "M19",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A20",
+    "returnNode": "M20",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A21",
+    "returnNode": "M21",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A22",
+    "returnNode": "M22",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A23",
+    "returnNode": "M23",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A24",
+    "returnNode": "M24",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A25",
+    "returnNode": "M25",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A26",
+    "returnNode": "M26",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A27",
+    "returnNode": "M27",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A28",
+    "returnNode": "M28",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A29",
+    "returnNode": "M29",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A30",
+    "returnNode": "M30",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A31",
+    "returnNode": "M31",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   },
+   {
+    "node": "A32",
+    "returnNode": "M32",
+    "waveform": "branchNorton",
+    "imax": 187500.0,
+    "resistance": 1.0,
+    "inductance": 0.0,
+    "capacitance": 1e-06
+   }
+  ],
+  "observeNodes": [
+   "gif",
+   "divf",
+   "divsec",
+   "p1i",
+   "p1f",
+   "p2i",
+   "p2f",
+   "p1m",
+   "torreMe"
+  ],
+  "observeElectrodes": [
+   "atgi_e1",
+   "atdiv_e1"
+  ],
+  "nyquistHz": 5000000.0,
+  "fftPoints": 1024,
+  "transform": "nlt"
+ }
+}

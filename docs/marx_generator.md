@@ -58,4 +58,18 @@ Run `tools/impulse_params.py` on the results for peak, T1 and T2 (IEC 60060-1 de
 
 Limits: spark gaps are closed at t = 0 (no staged erection, no breakdown dynamics), and the string flashover is a chosen state, not a computed event. Compare the two runs to see what the flashover does to the cable and tower.
 
+## LabUAT case: 6 MV generator, divider, porticos, tower mockup
+
+`tools/gen_labuat.py` ports the legacy Matlab study `casos/cepel/labuat.*` (oscillations in the laboratory during an impulse test) to `common/labuat_impulse.json` (insulator-string arc closed from t = 0, as in the legacy study) and `common/labuat_impulse_noarc.json`. The passive geometry (two 220 m poles at 30 m, three porticos with yokes, tower mockup, grounding bonds, divider and generator toroids) is carried over verbatim from the legacy `.est`; the toroids are `ring` elements of 10 chords. The legacy two-resistor Norton generator is replaced by the Marx model above:
+
+| Part | Model |
+|---|---|
+| GI, column (-40.69, -47.97), 24 m | 32 stages of 0.75 m. Stage k: front resistor `Rf` (16 + 12 + gap 0.2 Ω, less the ESR), capacitor branch 1 µF + 1 Ω ESR with the `branchNorton` source (187.5 kV), tail resistors 2 × 130 Ω in parallel across the capacitor, and a 0.25 m-radius body wire; a 33rd 12 Ω front resistor to the output `gif`. Total front 908 Ω, erected capacitance 31.25 nF. |
+| Divider, (-30.69, -47.97), 20 m | Five 1.5 nF units, 120/120/120/200/200 Ω bottom to top (CRO 6000-300 datasheet), the 350 Ω external damping resistor added in series at the top, taps tied to the legacy toroids; legacy secondary arm (165.5 kΩ, 0.4965 µF) kept. `--divider legacy` restores 100 Ω / 1.5 nF. |
+| Poles, porticos, mockup | As the legacy file (aluminium 0.56 m equivalent bundle radius, steel μr = 100 for the structures). |
+
+Assumptions that are not in the datasheet or the legacy files, each a flag of the script: gap resistance 0.2 Ω, capacitor ESR 1 Ω, Marx column as a 0.25 m wire, tail resistors two in parallel per stage, the intermediate GI toroid tied to the middle of the column (as `labuat_gidiv.est`; the full legacy file leaves it floating), no overshoot compensation, ideal ground images (legacy `solo_ideal`). Stage capacitance and voltage come from the legacy 62.5 nF sections (two in series = 31.25 nF = 1 µF / 32) and 6 MV / 32.
+
+Result on the open case (`impulse_params.py`, 5 MHz, 1024 samples): 4.9 MV at the generator output (82 % of 6 MV), T1 about 9 µs and T2 about 62 µs. The 1.2/50 µs of the datasheet is for its rated load; the 220 m pole is a load of about 3 nF behind 908 Ω of front resistance, which stretches the front (T1 ≈ 3 R_f C_b). With the arc closed the wave is chopped: the pole mid-point peaks near 0.9 MV at 1.2 µs. Not yet exposed: branch currents (the legacy `ilsec`, `ilgi`; the earth wires `atdiv_e1` and `atgi_e1` carry the same currents) and the arc impedance.
+
 References for the plane element: Richmond, J. H. (1966), A wire-grid model for scattering by conducting bodies, *IEEE Trans. Antennas Propag.* 14(6), 782-786; Ludwig, A. C. (1987), Wire grid modeling of surfaces, *IEEE Trans. Antennas Propag.* 35(9), 1045-1048. Cited from memory: check the pages before quoting.

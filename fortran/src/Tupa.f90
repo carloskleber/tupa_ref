@@ -47,6 +47,11 @@ module tupa
   !!   (edge vectors, 3D), `cellsU`, `cellsV`, `radius`, `material`. Reuses
   !!   nodes and bars already present, so planes join along shared edges.
   !!
+  !! - `"ring"` — circular conductor, a closed loop of `chords` bars
+  !!   (`mElementRing`, legacy `Anel`): `id`, `centre`, `normal` (default
+  !!   `[0,0,1]`), `ringRadius`, `radius` (conductor), `chords` (>= 3),
+  !!   `material`. Its first vertex is the node named `<id>`.
+  !!
   !! - `"branch"` — lumped series R-L-C branch (`mElementBranch`, ADR 0028,
   !!   theory.md §6): `id`, `from` (node), optional `to` (node; absent =
   !!   remote earth), and `resistance` (Ω), `inductance` (H),
@@ -70,6 +75,7 @@ module tupa
   use mElementLine
   use mElementMesh
   use mElementPlane
+  use mElementRing
   use mElementCatenary
   use mElementChannel
   use mElementBranch
@@ -576,6 +582,19 @@ contains
             mat_id = json_str(elem_obj, "material")
             elem = newElementPlane(trim(id), pOrigin, pU, pV, json_int(elem_obj, "cellsU"), &
                                    json_int(elem_obj, "cellsV"), json_real(elem_obj, "radius"), trim(mat_id))
+            call study%structure%addElement(elem)
+          end block
+        case ("ring")
+          block
+            real(8) :: rCentre(3), rNormal(3)
+            id = json_str(elem_obj, "id")
+            rCentre = jsonVec3(elem_obj, "centre")
+            rNormal = [0.0d0, 0.0d0, 1.0d0]
+            if (json_has(elem_obj, "normal")) rNormal = jsonVec3(elem_obj, "normal")
+            call readConductor(study, elem_obj, radius, mat_id)
+            if (errorRaised()) return
+            elem = newElementRing(trim(id), rCentre, rNormal, json_real(elem_obj, "ringRadius"), radius, &
+                                  json_int(elem_obj, "chords"), trim(mat_id))
             call study%structure%addElement(elem)
           end block
         case default

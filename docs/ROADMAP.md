@@ -850,10 +850,13 @@ solved rod is consistent with its node voltages and the point-source limit.
 Elements and materials that complete the typical tower-footing
 geometries (rods, counterpoises, rings, lumped branches).
 
-1. **`tCircumference` (grounding rings)** — **S**. Legacy `Anel.m`:
+1. **`tCircumference` (grounding rings)** — **S**, **done 2026-10-30** as the
+   `ring` element (`mElementRing`, `test_ring`). Legacy `Anel.m`:
    circle in an arbitrary plane (centre + normal vector + rotation),
    ≥ 3 straight segments, closed loop (exercises loop topology);
-   single-medium constraint enforced.
+   single-medium constraint enforced. First used for the toroids of the
+   LabUAT case (`tools/gen_labuat.py`). Fortran only; the Rust and Julia
+   loaders refuse it; no GUI display yet.
 2. **Tubular conductor** (metallic pipes, steel poles) — **S**.
    *Re-scoped 2026-10-29 (author): a tube is a **cross-section entry**
    ([ADR 0030](adr/0030-cross-section-internal-impedance.md)), not a new

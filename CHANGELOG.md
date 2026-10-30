@@ -9,6 +9,14 @@ numerics, which move result files.
 
 ### Added
 
+- **`ring` element and the LabUAT impulse case** (ROADMAP Phase 12 item 1,
+  [docs/marx_generator.md](docs/marx_generator.md)): a circular conductor of any
+  orientation as a closed polygon of `chords` bars (legacy `Anel`), for
+  grounding rings and toroidal shields; `tools/gen_labuat.py` generating
+  `common/labuat_impulse*.json` (32-stage Marx generator, damped divider, poles,
+  porticos and tower mockup, with and without the insulator-string arc), a port
+  of the legacy LabUAT oscillation study. Fortran only; test `test_ring`.
+
 - **Cross-section internal-impedance entries** ([ADR 0030](docs/adr/0030-cross-section-internal-impedance.md),
   ROADMAP Phase 13 item 2): a top-level `crossSections` array (inline entries or
   `{"file": ...}` database files) and an element field `crossSection` (instead of
