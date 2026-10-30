@@ -1,8 +1,8 @@
 #!/bin/bash
 # Optimised build of the Fortran solver, driven entirely by fpm.
-# SLATEC (git submodule) is a path dependency in fpm.toml, so it is compiled
-# with the project — no separate install, no ~/.local/lib, no network access
-# beyond the one-time fetch of the other dependencies.
+# There is no SLATEC dependency (ADR 0031): the Bessel functions are the in-repo
+# mBessel, so the only external inputs are the fpm dependencies in fpm.toml
+# (fetched once) plus system LAPACK/BLAS.
 # The solver is installed at a stable path: fortran/bin/Tupa
 set -e
 
