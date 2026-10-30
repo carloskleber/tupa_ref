@@ -145,9 +145,12 @@ contains
     integer(4) :: nno, nseg, i, kernelDefault
     integer(4), allocatable :: n1(:), n2(:)
     real(8), allocatable :: p1(:,:), p2(:,:)
+    real(8) :: tStart, tAssembled, tGeometry
 
     call verbose(VERB_VERBOSE, "Assembling structure and computing geometry factors...")
+    tStart = wallSeconds()
     call this%structure%assembleStructure()
+    tAssembled = wallSeconds()
 
     nno  = this%structure%getNodeCount()
     nseg = this%structure%getElectrodeCount()
@@ -182,6 +185,7 @@ contains
       this%geomG, this%geomGi, this%geomRbar, this%geomRbari, &
       this%geomCosTheta, this%geomCosThetaI, pos=this%geomPos, crossMedium=this%crossMedium)
     if (this%geometryKernel /= 0) call setGeometryKernel(kernelDefault)
+    tGeometry = wallSeconds()
 
     if (verbosityLevel() .eq. VERB_VERBOSE) then
       block
@@ -197,6 +201,18 @@ contains
 
     call initMesh(this%mesh, nno, nseg)
     call calcTopology(this%mesh, nseg, n1, n2)
+
+    if (verbosityLevel() .eq. VERB_VERBOSE) then
+      block
+        character(len=160) :: timeLine
+        write(timeLine, '(A,I0,A,I0,A)') " Preparation (", nseg, " segments, ", nno, " nodes):"
+        call emitMessage(MSG_INFO, trim(timeLine))
+        call emitMessage(MSG_INFO, "   structure assembly : " // formatDuration(tAssembled - tStart))
+        call emitMessage(MSG_INFO, "   geometry factors   : " // formatDuration(tGeometry - tAssembled))
+        call emitMessage(MSG_INFO, "   mesh topology      : " // formatDuration(wallSeconds() - tGeometry))
+        call emitMessage(MSG_INFO, "   preparation total  : " // formatDuration(wallSeconds() - tStart))
+      end block
+    end if
 
     this%prepared = .true.
   end subroutine prepareStudy
@@ -518,7 +534,7 @@ contains
   end subroutine injectionPatterns
 
   subroutine solveAtFrequency(this, mesh, omega, sourcePos, retPos, sourceValues, sourceIsVoltage, anyVoltage, &
-                              damping, laplace, lastSrc, info)
+                              damping, laplace, lastSrc, info, tFill, tSolve)
     !! One frequency's fill + solve on the caller's `mesh` (ROADMAP Phase 10
     !! item 4): the study is read-only here (geometry matrices, media), every
     !! write goes to `mesh` and the returned `lastSrc`, so concurrent calls
@@ -537,11 +553,16 @@ contains
     logical, intent(in) :: laplace
     complex(8), allocatable, intent(out) :: lastSrc(:)
     integer(4), intent(out) :: info
+    real(8), intent(out), optional :: tFill, tSolve
+    !! Wall time (s) of the fill and of the factorise+solve
     integer(4), allocatable :: injNodes(:)
     complex(8), allocatable :: patterns(:,:)
+    real(8) :: t0, t1
 
     info = 0
+    t0 = wallSeconds()
     call fillAtFrequency(this, mesh, omega, damping, laplace)
+    t1 = wallSeconds()
 
     call injectionPatterns(sourcePos, retPos, injNodes, patterns)
     if (anyVoltage) then
@@ -551,6 +572,8 @@ contains
       info = injectSignal(mesh, size(injNodes), injNodes, matmul(patterns, sourceValues))
       lastSrc = sourceValues
     end if
+    if (present(tFill))  tFill  = t1 - t0
+    if (present(tSolve)) tSolve = wallSeconds() - t1
   end subroutine solveAtFrequency
 
   subroutine fillAtFrequency(this, mesh, omega, damping, laplace)
@@ -783,6 +806,7 @@ contains
     complex(8), allocatable :: lastSrc(:)
     logical :: anyVoltage, laplace
     type(tMesh) :: meshLocal
+    real(8) :: tScan, tFill, tSolve, tFillSum, tSolveSum
 
     if (.not. this%prepared) call prepareStudy(this)
 
@@ -826,14 +850,20 @@ contains
     ! bit-identical for any thread count. Without -fopenmp the directives are
     ! comments and the loop is the former serial one.
     solveInfo = 0
-    !$omp parallel default(shared) private(k, lastSrc, info, meshLocal)
+    tFillSum = 0.0d0
+    tSolveSum = 0.0d0
+    tScan = wallSeconds()
+    !$omp parallel default(shared) private(k, lastSrc, info, meshLocal, tFill, tSolve) &
+    !$omp   reduction(+:tFillSum, tSolveSum)
     meshLocal = this%mesh
     block
       !$omp do schedule(dynamic)
       do k = 1, nf
         call logFrequency(freqHz(k))
         call solveAtFrequency(this, meshLocal, omegaAxis(k), sourcePos, retPos, sourceCurrents, sourceIsVoltage, &
-                              anyVoltage, damping, laplace, lastSrc, info)
+                              anyVoltage, damping, laplace, lastSrc, info, tFill, tSolve)
+        tFillSum = tFillSum + tFill
+        tSolveSum = tSolveSum + tSolve
         if (info /= 0) then
           !$omp critical (tupaSolveInfo)
           solveInfo = info
@@ -853,6 +883,7 @@ contains
       !$omp end do
     end block
     !$omp end parallel
+    call logScan(wallSeconds() - tScan, nf, tFillSum, tSolveSum)
     if (solveInfo /= 0) then
       call raiseError("tStudy%runSweep: linear solve failed (ZGESV INFO /= 0)")
       return
@@ -916,6 +947,7 @@ contains
     complex(8), allocatable :: vU(:,:), i1U(:,:), i2U(:,:)
     complex(8) :: scale
     integer(4) :: m, info
+    real(8) :: tScan, t0, t1, tFillSum, tSolveSum
 
     if (.not. this%prepared) call prepareStudy(this)
 
@@ -941,14 +973,22 @@ contains
     ! Same threading scheme as `runSweep`: independent frequencies, one
     ! thread-private mesh each, disjoint writes, bit-identical for any thread count.
     solveInfo = 0
-    !$omp parallel default(shared) private(meshLocal, vU, i1U, i2U, scale, m, info, drop)
+    tFillSum = 0.0d0
+    tSolveSum = 0.0d0
+    tScan = wallSeconds()
+    !$omp parallel default(shared) private(meshLocal, vU, i1U, i2U, scale, m, info, drop, t0, t1) &
+    !$omp   reduction(+:tFillSum, tSolveSum)
     meshLocal = this%mesh
     block
       !$omp do schedule(dynamic)
       do k = 1, nf
         call logFrequency(freqHz(k))
+        t0 = wallSeconds()
         call fillAtFrequency(this, meshLocal, omegaAxis(k), damping, laplace)
+        t1 = wallSeconds()
         info = injectSignals(meshLocal, size(injNodes), injNodes, patterns, vU, i1U, i2U)
+        tFillSum = tFillSum + (t1 - t0)
+        tSolveSum = tSolveSum + (wallSeconds() - t1)
         if (info /= 0) then
           !$omp critical (tupaSolveInfo)
           solveInfo = info
@@ -974,6 +1014,7 @@ contains
       !$omp end do
     end block
     !$omp end parallel
+    call logScan(wallSeconds() - tScan, nf, tFillSum, tSolveSum)
     if (solveInfo /= 0) call raiseError("tStudy%runSweepUnits: linear solve failed (ZGESV INFO /= 0)")
   end subroutine runSweepUnits
 
@@ -1088,6 +1129,24 @@ contains
     call emitMessage(MSG_INFO, str)
   end subroutine report
 
+  subroutine logScan(wallTime, nf, fillSum, solveSum)
+    !! Verbose report of one frequency scan: wall time of the loop, and the
+    !! per-frequency fill (`calcZ*`, `calcFreq2`, branch stamps) and
+    !! factorise+solve times summed over all frequencies -- thread-seconds, so
+    !! with several threads their total exceeds the wall time.
+    real(8), intent(in) :: wallTime, fillSum, solveSum
+    integer(4), intent(in) :: nf
+    character(len=160) :: line
+
+    if (verbosityLevel() /= VERB_VERBOSE) return
+    write(line, '(A,I0,A)') " Frequency scan (", nf, " frequencies):"
+    call emitMessage(MSG_INFO, trim(line))
+    call emitMessage(MSG_INFO, "   scan wall time        : " // formatDuration(wallTime))
+    if (nf > 0) call emitMessage(MSG_INFO, "   per frequency (wall)  : " // formatDuration(wallTime / real(nf, 8)))
+    call emitMessage(MSG_INFO, "   matrix fill (summed)  : " // formatDuration(fillSum))
+    call emitMessage(MSG_INFO, "   factorise+solve (sum) : " // formatDuration(solveSum))
+  end subroutine logScan
+
   subroutine logFrequency(freqHz)
     !! Verbose per-frequency progress line; safe to call from the OpenMP loops
     !! (the buffer is local to each call).
@@ -1095,7 +1154,7 @@ contains
     character(len=32) :: line
 
     if (verbosityLevel() /= VERB_VERBOSE) return
-    write(line, '("f = ",EN0.1E2," Hz")') freqHz
+    write(line, '("f = ",EN0.3E2," Hz")') freqHz
     call emitMessage(MSG_INFO, trim(line))
   end subroutine logFrequency
 

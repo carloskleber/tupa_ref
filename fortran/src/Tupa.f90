@@ -1655,48 +1655,6 @@ contains
         formatDuration(real(clockEnd - clockStart, 8) / real(clockRate, 8)))
   end subroutine runFromFile
 
-  function formatDuration(seconds) result(str)
-    !! Render an elapsed wall-clock duration in human-readable form, e.g.
-    !! "1 h 12 min 23.3234 s" (hours/minutes omitted when zero, so a sub-
-    !! minute run just prints "23.3234 s"). Seconds always keep 4 decimal
-    !! digits so short runs (quadrature-only, single-frequency cases) still
-    !! show a meaningful duration instead of rounding to "0 s".
-    real(8), intent(in) :: seconds
-    character(len=:), allocatable :: str
-    integer :: hours, minutes
-    real(8) :: remainder, secs
-    character(len=32) :: buf
-
-    hours     = int(seconds / 3600.0d0)
-    remainder = seconds - real(hours, 8) * 3600.0d0
-    minutes   = int(remainder / 60.0d0)
-    secs      = remainder - real(minutes, 8) * 60.0d0
-
-    ! Guard against F0.4 rounding secs up to "60.0000" right at a minute
-    ! boundary (e.g. secs = 59.99997): carry into minutes/hours instead.
-    if (nint(secs * 10000.0d0) >= 600000) then
-      secs = max(0.0d0, secs - 60.0d0)
-      minutes = minutes + 1
-      if (minutes >= 60) then
-        minutes = minutes - 60
-        hours = hours + 1
-      end if
-    end if
-
-    str = ""
-    if (hours > 0) then
-      write(buf, '(I0,A)') hours, " h"
-      str = str // trim(buf) // " "
-    end if
-    if (hours > 0 .or. minutes > 0) then
-      write(buf, '(I0,A)') minutes, " min"
-      str = str // trim(buf) // " "
-    end if
-    write(buf, '(F0.4,A)') secs, " s"
-    if (buf(1:1) == '.') buf = '0' // adjustl(buf)
-    str = str // trim(adjustl(buf))
-  end function formatDuration
-
   function basenameNoExt(path) result(base)
     !! Last path component of `path` with its extension stripped, used to
     !! derive `<basename>_results.csv`/`.json` output filenames from the
