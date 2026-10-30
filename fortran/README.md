@@ -11,9 +11,9 @@ ifx-compatible.
 
 ```bash
 cd fortran
-./fpmw run -- ../common/marx_single_stage.json   # build (first time: slow) + run a case
-./fpmw test --profile release                    # test suite
-bash build.sh                                    # optimised binary -> bin/Tupa
+./fpmw run -- ../common/case.json   # build (first time: slow) + run a case
+./fpmw test --profile release       # test suite
+bash build.sh                       # optimised binary -> bin/Tupa
 ```
 
 Results go to `results/` (change with `--output-dir DIR`). `./fpmw` is `fpm`

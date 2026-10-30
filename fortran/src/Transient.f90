@@ -42,6 +42,9 @@ module mTransient
   public :: transientResponse, transientResponseSources, transientResponseSignals, tTransientOptions
   public :: sampleTimeAxis, oneSidedFrequencyAxis, tukeyAntialiasFilter, hannHalfWindow
   public :: pchipInterpolate, nltDefaultDamping
+  ! Public so a driver outside this module (e.g. a time-controlled switch by
+  ! compensation) synthesises with exactly this convention
+  public :: spectrumToTimeSeries
 
   type :: tTransientOptions
     !! Opt-in transient-pipeline options (ADR 0015 amendment 2026-09-30,
@@ -834,6 +837,8 @@ contains
     !! P = Σ H·X, rebuild the full spectrum by conjugate symmetry (legacy
     !! `ifourier.m` convention), and inverse-FFT to a real time series.
     !! Shared by every observe node/electrode in `transientResponseSources`.
+    !! Public: NLT undamping (`· e^{ct}`) is left to the caller, as in
+    !! `productToTimeSeries`.
     complex(dp), intent(in) :: product(:)
     !! One-sided response spectrum H(f)·X(f) (summed over sources), size nBins
     real(dp), intent(in) :: filter(:)

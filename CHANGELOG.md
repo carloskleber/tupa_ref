@@ -9,6 +9,13 @@ numerics, which move result files.
 
 ### Added
 
+- **`mTransient::spectrumToTimeSeries` is public** (visibility only, no
+  numerical change): the one-sided spectrum → real time series step (spectral
+  filter, conjugate-symmetric rebuild, inverse FFT; NLT undamping left to the
+  caller) so that a driver outside the module, such as a downstream
+  time-controlled switch by compensation, synthesises with exactly the
+  transient pipeline's convention. Fortran only.
+
 - **`ring` element and the LabUAT impulse case** (ROADMAP Phase 12 item 1,
   [docs/marx_generator.md](docs/marx_generator.md)): a circular conductor of any
   orientation as a closed polygon of `chords` bars (legacy `Anel`), for
