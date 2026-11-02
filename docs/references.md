@@ -98,6 +98,13 @@ Numbered as cited in [theory.md](theory.md).
     Delivery*, vol. 12, no. 1, pp. 172–178, Jan. 1997. DOI: 10.1109/61.568238.
     Grounding-grid harmonic impedance curves; a standard validation case
     reproduced by TAGS.
+123. **Moreno, P.; Gómez, P.; Naredo, J. L.; Guardado, J. L.** — "Frequency
+    Domain Transient Analysis of Electrical Networks Including Non-Linear
+    Conditions", *Int. J. Electrical Power & Energy Systems*, vol. 27, no. 2,
+    pp. 139–146, 2005. DOI: 10.1016/j.ijepes.2004.09.003. Nonlinear and
+    switching elements handled in a frequency-domain (NLT) transient
+    solution — a journal precedent for keeping nonlinear elements outside a
+    linear frequency-domain solve (theory.md §8).
 
 ## HEM refinements and accuracy studies
 

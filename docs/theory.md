@@ -1867,7 +1867,8 @@ passivity enforcement [70]. Such an export is a potential output format,
 not part of the solver. Within Portela's own line of work, Salari [66]
 takes a middle road: a hybrid frequency–time program that couples HEM-type
 electrodes with arresters, switches, corona and soil ionisation, using
-step-response techniques. Nonlinearity therefore does not strictly force a
+step-response techniques. Moreno et al. [123] treat nonlinear conditions
+within an NLT-based frequency-domain transient solution. Nonlinearity therefore does not strictly force a
 move out of the frequency domain, though it does force more than TUPÃ's
 single linear solve.
 
