@@ -17,7 +17,7 @@ from PySide6.QtCore import QEvent, QPointF, Qt, Signal
 from PySide6.QtGui import QColor, QMatrix4x4, QQuaternion, QVector3D
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
-from tupa_gui.data import CatenaryElement, ChannelElement, LineElement, MeshElement, PlaneElement, Study
+from tupa_gui.data import BranchElement, CatenaryElement, ChannelElement, LineElement, MeshElement, PlaneElement, RingElement, Study
 
 # theory.md §2: right-handed, z up, air-soil interface at z = 0.
 # Qt3D's convention is y-up; map study (x, y, z) -> Qt3D (x, z, y) so the
@@ -188,7 +188,7 @@ class GeometryViewer(QWidget):
         # (below) just like declared nodes, and resolve correctly if a
         # `line`/source references one of them by ID.
         for element in study.elements:
-            if isinstance(element, MeshElement):
+            if isinstance(element, (MeshElement, RingElement)):
                 for node_id, position in element.node_positions().items():
                     node_positions[node_id] = _to_qt3d(position)
 
@@ -245,8 +245,10 @@ class GeometryViewer(QWidget):
                     element_entries[element.id] = _Highlightable(materials, CONDUCTOR_COLOR)
                 element_centers[element.id] = chain[len(chain) // 2]
             elif isinstance(element, LineElement):
-                a = node_positions[element.from_node]
-                b = node_positions[element.to_node]
+                a = node_positions.get(element.from_node)
+                b = node_positions.get(element.to_node)
+                if a is None or b is None:
+                    continue
                 entry = self._add_conductor(root, scene, a, b, element.radius, min_visible_radius, element.id)
                 if entry is not None:
                     element_entries[element.id] = entry
@@ -281,7 +283,9 @@ class GeometryViewer(QWidget):
                     element_entries[element.id] = _Highlightable(materials, CONDUCTOR_COLOR)
                 self._add_plane_slab(root, scene, element, 2.0 * element.radius)
                 element_centers[element.id] = _to_qt3d(element.center())
-            else:  # MeshElement (ADR 0020) — one cylinder per bar, all sharing the element's ID
+            elif isinstance(element, BranchElement):
+                continue  # lumped: no geometry
+            else:  # MeshElement / RingElement — one cylinder per bar, all sharing the element's ID
                 materials: list[Qt3DExtras.QPhongMaterial] = []
                 centers: list[QVector3D] = []
                 for from_id, to_id in element.bars():

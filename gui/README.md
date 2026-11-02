@@ -26,7 +26,10 @@ models and the `portela` surge waveform are shown in the tree.
 
 ```bash
 cd gui
-uv sync
+# use the repo-root .venv (shared with the validation scripts), not gui/.venv;
+# --inexact keeps packages that venv already has
+export UV_PROJECT_ENVIRONMENT=../.venv
+uv sync --inexact
 uv run tupa-gui ../common/buried_conductor_short.json
 # optionally open a results JSON (ADR 0012 schema) alongside it:
 uv run tupa-gui ../common/buried_conductor_short.json --results path/to/results.json

@@ -12,19 +12,25 @@ cd "$SCRIPT_DIR"
 
 # Version banner: write src/version_generated.inc (gitignored) and touch
 # Version.F90 only when it changes, so a new commit recompiles just that file
-# (fpm does not track includes, and -D flags would rebuild everything).
+# (fpm does not track includes, and -D flags would rebuild everything). The build
+# date has day granularity for the same reason: it triggers at most one rebuild/day.
 VERSION=$(sed -n 's/^version *= *"\(.*\)"/\1/p' fpm.toml | head -1)
 COMMIT=$(git -C "$SCRIPT_DIR" describe --always --dirty 2>/dev/null || echo unknown)
+BUILD_DATE=$(date +%Y-%m-%d)
 INC=src/version_generated.inc
 NEW="  character(len=*), parameter :: VERSION_STRING = \"$VERSION\"
-  character(len=*), parameter :: COMMIT_STRING = \"$COMMIT\""
+  character(len=*), parameter :: COMMIT_STRING = \"$COMMIT\"
+  character(len=*), parameter :: BUILD_DATE_STRING = \"$BUILD_DATE\""
 if [ ! -f "$INC" ] || [ "$(cat "$INC")" != "$NEW" ]; then
   printf '%s\n' "$NEW" > "$INC"
   touch src/Version.F90
 fi
 
+# -fno-finite-math-only: the geometry code detects NaN/Inf (Geometry.f90 parallelGeometryFactor)
+# and falls back to quadrature; -ffinite-math-only (part of -ffast-math) optimises that
+# check away and the whole solution turns NaN (labuat_impulse).
 fpm install --profile release --prefix . \
-  --flag "-O3 -funroll-loops -ffast-math -finline-functions -ftree-vectorize -march=native -mtune=native -fopenmp -fno-range-check -ffree-line-length-none"
+  --flag "-O3 -funroll-loops -ffast-math -fno-finite-math-only -finline-functions -ftree-vectorize -march=native -mtune=native -fopenmp -fno-range-check -ffree-line-length-none"
 
 # Man page, generated from the binary's --help/--version output
 if command -v help2man >/dev/null 2>&1; then

@@ -16,7 +16,7 @@ import math
 from collections.abc import Callable
 
 import pyqtgraph as pg
-from PySide6.QtWidgets import QCheckBox, QComboBox, QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QComboBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from tupa_gui.data import Results, TransientResults, TransientSignalResult
 
@@ -31,6 +31,30 @@ def _build_entries(results: Results) -> list[tuple[str, list[complex]]]:
         entries.append((f"Longitudinal current i1: {e.id}", e.i1))
         entries.append((f"Transverse current i2: {e.id}", e.i2))
     return entries
+
+
+def _non_finite_count(values) -> int:
+    """Samples that are NaN or infinite (the solver writes `nan` for a failed solve)."""
+    return sum(1 for v in values if not (math.isfinite(v.real) and math.isfinite(v.imag)))
+
+
+def _make_warning_label() -> QLabel:
+    label = QLabel()
+    label.setWordWrap(True)
+    label.setStyleSheet("QLabel { color: #b00020; background: #fdecea; padding: 4px; }")
+    label.setVisible(False)
+    return label
+
+
+def _show_non_finite(label: QLabel, quantity: str, bad: int, total: int) -> None:
+    if bad == 0:
+        label.setVisible(False)
+        return
+    label.setText(
+        f"Warning: {bad} of {total} samples of \"{quantity}\" are NaN/infinite"
+        + (" — nothing can be drawn. The solver produced no valid result for this quantity." if bad == total else ".")
+    )
+    label.setVisible(True)
 
 
 class PlotPanel(QWidget):
@@ -62,6 +86,8 @@ class PlotPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._selector)
+        self._warning = _make_warning_label()
+        layout.addWidget(self._warning)
         layout.addWidget(self._graphics, 1)
 
         self._results: Results | None = None
@@ -84,10 +110,12 @@ class PlotPanel(QWidget):
         self._selector.clear()
         self._magnitude_plot.clear()
         self._phase_plot.clear()
+        self._warning.setVisible(False)
 
     def _plot_current(self) -> None:
         self._magnitude_plot.clear()
         self._phase_plot.clear()
+        self._warning.setVisible(False)
 
         if self._results is None or not self._entries:
             return
@@ -95,7 +123,8 @@ class PlotPanel(QWidget):
         if index < 0:
             return
 
-        _, series = self._entries[index]
+        label, series = self._entries[index]
+        _show_non_finite(self._warning, label, _non_finite_count(series), len(series))
         freq = self._results.frequencies
         magnitude = [abs(v) for v in series]
         phase = [math.degrees(cmath.phase(v)) for v in series]
@@ -173,6 +202,8 @@ class TransientPlotPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._selector)
         layout.addWidget(self._signal_row)
+        self._warning = _make_warning_label()
+        layout.addWidget(self._warning)
         layout.addWidget(self._graphics, 1)
 
         self._results: TransientResults | None = None
@@ -197,6 +228,7 @@ class TransientPlotPanel(QWidget):
         self._rebuild_signal_checks()
         self._plot.clear()
         self._legend.clear()
+        self._warning.setVisible(False)
 
     def checked_signals(self) -> list[int]:
         """Indices of the signals currently shown (all of them for a single-signal file)."""
@@ -229,6 +261,7 @@ class TransientPlotPanel(QWidget):
     def _plot_current(self) -> None:
         self._plot.clear()
         self._legend.clear()
+        self._warning.setVisible(False)
 
         if self._results is None or not self._entries:
             return
@@ -236,7 +269,13 @@ class TransientPlotPanel(QWidget):
         if index < 0:
             return
 
-        _, getter = self._entries[index]
+        quantity, getter = self._entries[index]
+        bad = total = 0
+        for k in self.checked_signals():
+            values = getter(self._results.signals[k])
+            bad += _non_finite_count(values)
+            total += len(values)
+        _show_non_finite(self._warning, quantity, bad, total)
         for k in self.checked_signals():
             colour = _SIGNAL_COLOURS[k % len(_SIGNAL_COLOURS)]
             pen = pg.mkPen(color=colour, width=2)

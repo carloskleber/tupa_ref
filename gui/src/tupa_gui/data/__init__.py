@@ -7,6 +7,7 @@ from .loader import (
     load_transient_results,
 )
 from .model import (
+    BranchElement,
     CatenaryElement,
     ChannelElement,
     ElectrodeCurrent,
@@ -22,6 +23,7 @@ from .model import (
     PlaneElement,
     PortelaSurge,
     Results,
+    RingElement,
     Signal,
     SignalWindow,
     Soil,
@@ -34,6 +36,7 @@ from .model import (
 )
 
 __all__ = [
+    "BranchElement",
     "CatenaryElement",
     "ChannelElement",
     "ElectrodeCurrent",
@@ -49,6 +52,7 @@ __all__ = [
     "Outputs",
     "PortelaSurge",
     "Results",
+    "RingElement",
     "ResultsLoadError",
     "Signal",
     "SignalWindow",

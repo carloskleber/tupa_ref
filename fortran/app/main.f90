@@ -1,5 +1,5 @@
 program main
-  !! TUPÃ electromagnetic field transient solver.
+  !! TUPA electromagnetic field transient solver.
   !!
   !! **Entry point for command-line execution.**
   !!

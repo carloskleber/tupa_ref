@@ -5,7 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QStandardItem, QStandardItemModel
 
-from tupa_gui.data import CatenaryElement, ChannelElement, Excitation, LineElement, PlaneElement, Study
+from tupa_gui.data import CatenaryElement, BranchElement, ChannelElement, Excitation, LineElement, PlaneElement, RingElement, Study
 
 # Qt.UserRole payload on a node/element's tree item: ("node"|"element", id).
 # Lets the controller (main_window) map a tree selection to the matching 3D
@@ -128,6 +128,21 @@ def build_study_model(study: Study) -> tuple[QStandardItemModel, dict[tuple[str,
             item.appendRow(_row("v", str(tuple(e.v))))
             item.appendRow(_row("cellsU", str(e.cells_u)))
             item.appendRow(_row("cellsV", str(e.cells_v)))
+            item.appendRow(_row("radius", f"{e.radius} m"))
+            item.appendRow(_row("material", e.material))
+        elif isinstance(e, BranchElement):
+            item = _row(e.id, f"branch {e.from_node} -> {e.to_node or 'earth'}")
+            item.setData(("element", e.id), ENTITY_ROLE)
+            entity_items[("element", e.id)] = item
+            for label, value in (("resistance", e.resistance), ("inductance", e.inductance), ("capacitance", e.capacitance)):
+                if value is not None:
+                    item.appendRow(_row(label, str(value)))
+        elif isinstance(e, RingElement):
+            item = _row(e.id, f"ring {e.chords} chords @ {tuple(e.centre)}")
+            item.setData(("element", e.id), ENTITY_ROLE)
+            entity_items[("element", e.id)] = item
+            item.appendRow(_row("normal", str(tuple(e.normal))))
+            item.appendRow(_row("ringRadius", f"{e.ring_radius} m"))
             item.appendRow(_row("radius", f"{e.radius} m"))
             item.appendRow(_row("material", e.material))
         else:  # MeshElement (ADR 0020)

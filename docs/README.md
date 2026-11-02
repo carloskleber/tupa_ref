@@ -5,7 +5,8 @@
 | [theory.md](theory.md) | **Normative physics reference**: HEM formulation, conventions, impedance integrals, image method, nodal system, dispersive soil, validation anchors, positioning vs. companion codes and neighbouring model families |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Architectural vision: components, layers, flows, data management, state, extension mechanisms, known debts |
 | [CONVENTIONS.md](CONVENTIONS.md) | Coding and project conventions (absorbs the retired CLAUDE.md) |
-| [ROADMAP.md](ROADMAP.md) | Current-state gap analysis, phased plan, proposals from the open-source comparison, author-interview decisions (formerly `implementation-plan.md`) |
+| [ROADMAP.md](ROADMAP.md) | Current state and the **future plan** (open items per phase, near-term work, open decisions) |
+| [engineering_log.md](engineering_log.md) | What was done in each phase, the decision register and the lessons learned (L-nn); history moved here from the roadmap |
 | [BENCHMARKS.md](BENCHMARKS.md) | Validation anchors, execution status, cross-code benchmark setup, comparison policy, Phase 10 performance measurements |
 | [validation/](validation/) | Case-by-case comparisons against published papers' own figures (digitized plots, not tabulated data), the TAGS cross-code check, the Phase 10 image-model study, internal-consistency checks of voltage/two-node sources, windows and the Phase 11 potential outputs, and the scripts that regenerate them |
 | [DISTRIBUTION.md](DISTRIBUTION.md) | Build chain, dependency inventory, packaging/release, licensing, security surface |

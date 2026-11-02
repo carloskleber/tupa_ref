@@ -9,6 +9,8 @@ from dataclasses import replace
 from pathlib import Path
 
 from .model import (
+    BranchElement,
+    RingElement,
     ElectrodeCurrent,
     Excitation,
     FrequencySweep,
@@ -132,7 +134,9 @@ def load_study(path: str | Path) -> Study:
     except KeyError as exc:
         raise StudyLoadError(f"{path}: missing required field {exc}") from exc
 
-    elements: list[LineElement | CatenaryElement | MeshElement | PlaneElement | ChannelElement] = []
+    elements: list[
+        LineElement | CatenaryElement | MeshElement | PlaneElement | ChannelElement | RingElement | BranchElement
+    ] = []
     for e in raw.get("elements", []):
         etype = e.get("type")
         if etype == "line":
@@ -205,6 +209,29 @@ def load_study(path: str | Path) -> Study:
                     inductance=e.get("inductance"),
                     resistance=e.get("resistance"),
                     calibrate=e.get("calibrate", False),
+                )
+            )
+        elif etype == "ring":
+            elements.append(
+                RingElement(
+                    id=e["id"],
+                    centre=tuple(e["centre"]),
+                    normal=tuple(e.get("normal", (0.0, 0.0, 1.0))),
+                    ring_radius=e["ringRadius"],
+                    radius=e["radius"],
+                    chords=e["chords"],
+                    material=e["material"],
+                )
+            )
+        elif etype == "branch":
+            elements.append(
+                BranchElement(
+                    id=e["id"],
+                    from_node=e["from"],
+                    to_node=e.get("to"),
+                    resistance=e.get("resistance"),
+                    inductance=e.get("inductance"),
+                    capacitance=e.get("capacitance"),
                 )
             )
         else:

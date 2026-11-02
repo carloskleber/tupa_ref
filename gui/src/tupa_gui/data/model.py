@@ -173,6 +173,67 @@ class PlaneElement:
 
 
 @dataclass(frozen=True)
+class RingElement:
+    """Circular conductor (`"type": "ring"`, `fortran/src/element/Ring.f90`): `chords`
+    straight bars inscribed in a circle of `ring_radius` about `centre`, in the plane
+    normal to `normal`. Vertex 0 is the node named `<id>`, the others `<id>-01`, ...
+    (the solver reuses vertices that coincide with existing nodes)."""
+
+    id: str
+    centre: tuple[float, float, float]
+    normal: tuple[float, float, float]
+    ring_radius: float
+    radius: float
+    chords: int
+    material: str
+
+    def vertex(self, k: int) -> tuple[float, float, float]:
+        """k-th vertex: (R sin a, R cos a, 0) rotated from z onto `normal` (Rodrigues), then moved to the centre."""
+        norm = math.sqrt(sum(c * c for c in self.normal))
+        n = [c / norm for c in self.normal]
+        a = 2.0 * math.pi * k / self.chords
+        v = (self.ring_radius * math.sin(a), self.ring_radius * math.cos(a), 0.0)
+        axis = (-n[1], n[0], 0.0)
+        sin_tilt = math.sqrt(axis[0] ** 2 + axis[1] ** 2)
+        if sin_tilt < 1e-12:
+            return tuple(c + d for c, d in zip(self.centre, v))
+        axis = tuple(c / sin_tilt for c in axis)
+        c, s = n[2], sin_tilt
+        cr = (
+            axis[1] * v[2] - axis[2] * v[1],
+            axis[2] * v[0] - axis[0] * v[2],
+            axis[0] * v[1] - axis[1] * v[0],
+        )
+        dot = sum(x * y for x, y in zip(axis, v))
+        return tuple(
+            o + v[i] * c + cr[i] * s + axis[i] * dot * (1.0 - c) for i, o in enumerate(self.centre)
+        )
+
+    def node_id(self, k: int) -> str:
+        return self.id if k == 0 else f"{self.id}-{k:02d}"
+
+    def node_positions(self) -> dict[str, tuple[float, float, float]]:
+        return {self.node_id(k): self.vertex(k) for k in range(self.chords)}
+
+    def bars(self) -> list[tuple[str, str]]:
+        return [(self.node_id(k), self.node_id((k + 1) % self.chords)) for k in range(self.chords)]
+
+
+@dataclass(frozen=True)
+class BranchElement:
+    """Lumped series R + sL + 1/(sC) between two nodes, or from `from_node` to
+    earth when `to_node` is None (`"type": "branch"`). No geometry: the 3D view
+    does not draw it."""
+
+    id: str
+    from_node: str
+    to_node: str | None
+    resistance: float | None
+    inductance: float | None
+    capacitance: float | None
+
+
+@dataclass(frozen=True)
 class Source:
     """One excitation source per driven node: a current injection (ADR
     0010), or an ideal voltage source (ADR 0016) when `is_voltage` is
