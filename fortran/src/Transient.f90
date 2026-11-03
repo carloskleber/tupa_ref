@@ -41,7 +41,7 @@ module mTransient
   private
   public :: transientResponse, transientResponseSources, transientResponseSignals, tTransientOptions
   public :: sampleTimeAxis, oneSidedFrequencyAxis, tukeyAntialiasFilter, hannHalfWindow
-  public :: pchipInterpolate, nltDefaultDamping
+  public :: pchipInterpolate, nltDefaultDamping, smoothedWaveform
   ! Public so a driver outside this module (e.g. a time-controlled switch by
   ! compensation) synthesises with exactly this convention
   public :: spectrumToTimeSeries
@@ -61,6 +61,10 @@ module mTransient
     !! "fft" (s = jω) or "nlt" (s = c + jω, item 5)
     real(dp) :: nltDamping = 0.0_dp
     !! NLT damping c (1/s); 0 selects `nltDefaultDamping`
+    real(dp) :: riseTime = 0.0_dp
+    !! Excitation rise time (s), ADR 0032: the sampled waveform is smoothed
+    !! by a causal triangular kernel of base 2*riseTime (delay riseTime)
+    !! before the NLT damping; 0 = off
     character(len=16) :: transferFunction = "full"
     !! "full" (solve every FFT bin) or "interpolated" (solve `scanFreqHz`,
     !! pchip onto the bins, item 1)
@@ -152,6 +156,40 @@ contains
       end if
     end do
   end function tukeyAntialiasFilter
+
+  function smoothedWaveform(sig, t, riseTime) result(y)
+    !! Excitation samples `sig%waveform(t)` smoothed by a causal triangular
+    !! kernel of base 2*`riseTime` (unit area, peak delay `riseTime`), the
+    !! kernel evaluated at 16 sub-samples per interval. A hard step at t = 0
+    !! otherwise leaves a band-limited front whose pre-ringing wraps to the
+    !! record end, where the NLT undamping multiplies it by e^{cT} (ADR 0032).
+    !! `riseTime` = 0 returns the plain samples.
+    class(tSignal), intent(in) :: sig
+    real(dp), intent(in) :: t(:)
+    real(dp), intent(in) :: riseTime
+    real(dp) :: y(size(t))
+    integer, parameter :: nSub = 16
+    integer :: j, jMax
+    real(dp) :: dt, w, u, wt, wSum
+
+    if (riseTime <= 0.0_dp) then
+      y = sig%waveform(t)
+      return
+    end if
+    dt = t(2) - t(1)
+    w = riseTime / dt                      ! kernel half-width in samples
+    jMax = ceiling(2.0_dp * w * nSub)
+    y = 0.0_dp
+    wSum = 0.0_dp
+    do j = 0, jMax
+      u = real(j, dp) / nSub               ! lag in samples
+      wt = max(0.0_dp, 1.0_dp - abs(u - w) / w)
+      if (wt <= 0.0_dp) cycle
+      y = y + wt * sig%waveform(t - u * dt)
+      wSum = wSum + wt
+    end do
+    y = y / wSum
+  end function smoothedWaveform
 
   function hannHalfWindow(n) result(w)
     !! Falling half of a Hann window over `n` samples (ROADMAP Phase 9 item
@@ -547,6 +585,10 @@ contains
         return
       end if
     end if
+    if (opts%riseTime < 0.0_dp .or. (opts%riseTime > 0.0_dp .and. opts%riseTime * 2.0_dp * nyquistHz < 1.0_dp)) then
+      call raiseError("transientResponse: riseTime must be 0 (off) or at least one sample interval")
+      return
+    end if
     if (opts%nltDamping < 0.0_dp) then
       call raiseError("transientResponse: nltDamping must be >= 0 (0 = default ln(N^2)/T)")
       return
@@ -571,7 +613,7 @@ contains
 
     allocate(injectedCurrents(nSrc, nSamples), excitation(nSamples, nSrc))
     do iSrc = 1, nSrc
-      injectedCurrents(iSrc, :) = signals(iSrc)%sig%waveform(t) * taper
+      injectedCurrents(iSrc, :) = smoothedWaveform(signals(iSrc)%sig, t, opts%riseTime) * taper
       if (allocated(timeWindow)) injectedCurrents(iSrc, :) = injectedCurrents(iSrc, :) * timeWindow
       if (nlt) then
         excitation(:, iSrc) = cmplx(injectedCurrents(iSrc, :) * damp, 0.0_dp, kind=dp)

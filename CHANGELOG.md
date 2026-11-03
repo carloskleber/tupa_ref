@@ -9,6 +9,14 @@ numerics, which move result files.
 
 ### Added
 
+- **`signal.riseTime`** ([ADR 0032](docs/adr/0032-excitation-rise-time.md)):
+  optional causal triangular smoothing (base 2·`riseTime`, delay `riseTime`) of
+  the sampled excitation, before the tail taper, window and NLT damping. It
+  removes the end-of-record artefact of the NLT with step-like sources
+  (`branchNorton`: LabUAT, `marx_lab_2MV`), together with a smaller
+  `nltDamping` (c·T ≈ 6; the default is unchanged). Off by default, results
+  unchanged. Fortran only; `smoothedWaveform` is public, test in `test_transient`.
+
 - **`mTransient::spectrumToTimeSeries` is public** (visibility only, no
   numerical change): the one-sided spectrum → real time series step (spectral
   filter, conjugate-symmetric rebuild, inverse FFT; NLT undamping left to the

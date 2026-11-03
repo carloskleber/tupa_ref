@@ -458,7 +458,7 @@ lossy-ground induced voltages and LEMP.
 
 Raised by the LabUAT investigation (log INV-2026-11-02):
 
-1. **Tame the NLT record end in the LabUAT cases.** The 1.6e10 V peaks are an
+1. **Tame the NLT record end in the LabUAT cases** — *done 2026-11-03 for the solver (ADR 0032, `signal.riseTime` + `nltDamping` at c·T ≈ 6; `labuat_impulse_noarc` 4096 points, 4 min, finite and monotone to the last sample, peak 4.64 MV); still open: usable-fraction field/warning, GUI marker, Rust/Julia port, golden fixtures.* Original item: The 1.6e10 V peaks are an
    end-of-window artefact (about the last 25 % of the record; amplitude ∝ N²;
    the first ~60 % is physical, peak ≈ 4.8 MV — log INV-2026-11-02). Try the
    spectral Hann window (`signal.window`), a smaller `nltDamping` and a longer

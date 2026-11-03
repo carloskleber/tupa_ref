@@ -3279,8 +3279,8 @@
    "atgi_e1",
    "atdiv_e1"
   ],
-  "nyquistHz": 5000000.0,
-  "fftPoints": 1024,
-  "transform": "nlt"
+  "nyquistHz": 5e+06,
+  "fftPoints": 4096,
+  "transform": "fft"
  }
 }

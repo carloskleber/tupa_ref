@@ -1815,7 +1815,23 @@ and a spectral window acts on the *damped* spectrum, so it confines the
 late-record growth to the last few samples but smooths fronts spanning
 only a few samples differently than under the FFT. Where the record is
 wrap-around-limited, NLT is 6–10× closer to a long-record reference over
-the first half. Note the two sweep
+the first half.
+
+*Step-like sources and the record end ([ADR 0032](adr/0032-excitation-rise-time.md)).*
+A hard step (`branchNorton`, `step`) has a band-limited reconstruction whose
+pre-ringing wraps to the last samples of the periodic record, where the
+undamping $e^{ct}$ multiplies it by up to $N^2$: the last 10–25 % of the record
+of the Marx cases came out at $10^{10}$–$10^{11}$ V. Two remedies, which work
+together: `signal.riseTime` smooths the sampled excitation by a causal
+triangular kernel (a real gap closes in finite time; a symmetric kernel does not
+help, it leaves a jump at $t=0$), and a smaller `nltDamping`, $cT\approx 6$
+instead of $\ln N^2$ (the default assumes leakage near machine precision; the
+price is a wrap-around offset $\propto e^{-cT}$ times the late response). On
+`marx_lab_2MV` this brings the error against a 4× longer record to
+$\le 10^{-4}$ of peak over the first 90 % of the record, against several
+percent for the plain FFT, whose wrap-around bias does not shrink.
+
+Note the two sweep
 modes serve different purposes and use different axes: *harmonic response*
 (log-spaced, real $\omega$) and *transient* (linearly spaced $s_k$, as the
 IFFT/NLT grid requires). With the scan-fed transient (Phase 9 item 1) the two

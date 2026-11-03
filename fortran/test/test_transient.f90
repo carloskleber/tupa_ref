@@ -43,6 +43,8 @@ program test_transient
   complex(dp), allocatable :: yq(:)
   real(dp) :: peak, errNlt, errFft
   integer(4) :: nCompare, k
+  type(tStepSignal) :: stepSig
+  real(dp), allocatable :: tStep(:), yStep(:)
 
   study%title = "Phase 6 transient test - buried conductor (Portela 1997 parameters)"
   call study%structure%addNode(newNode("Node_1", [0.0d0, 0.0d0, -depth]))
@@ -246,6 +248,19 @@ program test_transient
                maxval(abs(respA - respB)) < 1.0d-8 * maxval(abs(respA)), "")
   call test_ok("spectral window leaves the excitation untouched", &
                maxval(abs(injectedCurrent - surge%waveform(t) * tailTaper(nSamples))) < 1.0d-12 * imax, "")
+  opts = tTransientOptions()
+
+  call test_init("ADR 0032: causal rise-time smoothing of the excitation")
+  stepSig%imax = 1.0_dp
+  tStep = sampleTimeAxis(1.0d6, 256)            ! dt = 0.5 us
+  yStep = smoothedWaveform(stepSig, tStep, 2.0d-6)   ! 4 samples
+  call test_ok("riseTime = 0 returns the plain samples", &
+               maxval(abs(smoothedWaveform(stepSig, tStep, 0.0_dp) - stepSig%waveform(tStep))) == 0.0_dp, "")
+  call test_ok("smoothed step starts at zero (causal kernel)", abs(yStep(1)) < 1.0d-12, "")
+  call test_ok("smoothed step is monotone non-decreasing", all(yStep(2:) >= yStep(:255) - 1.0d-14), "")
+  call test_ok("smoothed step reaches the final value after 2 x riseTime", &
+               all(abs(yStep(10:) - 1.0_dp) < 1.0d-12), "")
+  call test_ok("half the final value at the delay riseTime (sample 5)", abs(yStep(5) - 0.5_dp) < 2.0d-2, "")
   opts = tTransientOptions()
 
   call test_init("Phase 9 item 5: Numerical Laplace Transform")

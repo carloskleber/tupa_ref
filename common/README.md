@@ -392,7 +392,13 @@ Semantics:
   - `transform`: `"fft"` (default) or `"nlt"` (Numerical Laplace
     Transform, s = c + jω); `nltDamping` sets c (1/s), default ln(N²)/T.
     `"nlt"` cannot be combined with `"interpolated"`. NLT output is reliable
-    over the early part of the record only (theory.md §8).
+    over the early part of the record only (theory.md §8). With a step-like
+    excitation (`branchNorton`, `step`) add `riseTime` and set `nltDamping` to
+    about 6/T (ADR 0032).
+  - `riseTime`: excitation rise time in seconds (default 0 = off). Each
+    sampled excitation is smoothed by a causal triangular kernel of base
+    2·`riseTime` (delay `riseTime`) before the taper, window and NLT damping;
+    at least one sample interval 1/(2·`nyquistHz`).
   - `totalVoltage`: `true` reports every `observeNodes` voltage as the total
     voltage φ + s∫A_z^i dz of the lightning channel's incident field instead of
     the scalar potential φ (default `false`; theory.md §4.6.3, ADR 0028

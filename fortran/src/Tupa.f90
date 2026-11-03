@@ -828,6 +828,13 @@ contains
             return
           end if
         end if
+        if (json_has(signal_obj, "riseTime")) then
+          opts%riseTime = json_real(signal_obj, "riseTime")
+          if (opts%riseTime < 0.0d0) then
+            call raiseError("mTupa: signal.riseTime must be >= 0")
+            return
+          end if
+        end if
         if (json_has(signal_obj, "transferFunction")) then
           str = json_str(signal_obj, "transferFunction")
           select case (trim(str))
