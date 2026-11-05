@@ -29,6 +29,12 @@ module mElementLine
     !! Pointer to the start node (resolved during assembly)
     type(tNode), pointer :: nodeEnd => null()
     !! Pointer to the end node (resolved during assembly)
+    real(8) :: coatingRadius = 0.0d0
+    !! Outer radius of a coaxial coating layer (m); 0 = bare (theory.md §4.3)
+    character(len=256) :: idCoatingMaterial = ''
+    !! User-assigned ID of the coating medium
+    class(tMaterial), allocatable :: coatingMaterial
+    !! Coating medium copy (resolved during assembly)
     integer(4) :: lumpSegment = 0
     !! 1-based segment of the chain that carries a lumped series R-L-C
     !! (0 = none). It is added to that segment's internal impedance, so the
@@ -122,6 +128,20 @@ contains
       end if
       allocate(this%material, source=mat)
 
+      if (this%coatingRadius > 0.0d0) then
+        if (this%coatingRadius <= this%radius) then
+          call raiseError("tLine '" // trim(this%id) // "': coating outer radius must exceed the conductor radius")
+          return
+        end if
+        mat => structure%findMaterial(trim(this%idCoatingMaterial))
+        if (.not. associated(mat)) then
+          call raiseError("tLine '" // trim(this%id) // "': coating material '" // &
+            trim(this%idCoatingMaterial) // "' not found")
+          return
+        end if
+        allocate(this%coatingMaterial, source=mat)
+      end if
+
       pStart = structure%nodes(idxStart)%p
       pEnd   = structure%nodes(idxEnd)%p
 
@@ -147,6 +167,10 @@ contains
         electrode = newElectrode(trim(buf), nodeIdx(k), nodeIdx(k + 1))
         electrode%radius = this%radius
         electrode%material => this%material
+        if (this%coatingRadius > 0.0d0) then
+          electrode%coatingRadius = this%coatingRadius
+          electrode%coatingMaterial => this%coatingMaterial
+        end if
         if (k == this%lumpSegment) then
           electrode%lumpResistance  = this%lumpResistance
           electrode%lumpInductance  = this%lumpInductance

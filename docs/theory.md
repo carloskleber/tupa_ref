@@ -446,6 +446,26 @@ coating of outer radius $r_c$, in **series** with the bare-conductor soil
 leakage — reducing to the bare case as $r_c \to r_0$. A reference
 implementation should do this rather than port the placeholder.
 
+*Implemented (Fortran, 2026-11-05).* A `line`/`catenary` takes
+`coating: {outerRadius, material}`. For a segment of length $l$ the leakage
+current $I_t$ crosses the layer before reaching the medium, so the mean
+potential of the conductor surface exceeds that of the layer's outer surface
+by $I_t/(y_c l)$:
+
+$$Z_t(a,a) = \frac{c_E\,(e^{-\gamma r_c} g_{\text{self}}(l, r_c) \pm e^{-\gamma d_i} g_i)}{l^2}
+ + \frac{\ln(r_c/r_0)}{2\pi (\sigma_c + s\varepsilon_c)\, l}.$$
+
+The external self term is evaluated at $r_c$, where the leakage emerges;
+$Z_\ell$ keeps $r_0$ (the layer is non-magnetic and carries no longitudinal
+current); the mutual terms are unchanged, which is the thin-layer
+assumption ($r_c \ll l$ and $r_c \ll$ the distance to other segments; a
+warning is issued above $r_c = l/4$). The layer medium is any material, so
+$s = j\omega$ or the NLT's $c + j\omega$ both apply. Checks in
+`test_coating`: a layer of the soil's own medium reproduces the bare rod
+(1.7 % with 15 segments); a conductive layer adds the shell resistance
+$\ln(r_c/r_0)/(2\pi\sigma_c L)$ to the bare rod of radius $r_c$; an
+insulating layer makes the rod a capacitor $2\pi\varepsilon_c L/\ln(r_c/r_0)$.
+
 ### 4.4 Catenary spans
 
 Curved conductors enter the model as chains of straight segments, so every

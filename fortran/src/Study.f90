@@ -22,7 +22,7 @@ module mStudy
   use mCrossSection, only: tCrossSection, CS_TABLE
   use mResult
   use mObservation, only: tObservation, tObservationResults
-  use mGeometry, only: buildGeometryMatrices, setGeometryKernel, getGeometryKernel
+  use mGeometry, only: buildGeometryMatrices, setGeometryKernel, getGeometryKernel, selfGeometryFactor
   use mGeometryCache, only: geomCacheStats
   use mImpedance, only: internalImpedance, internalImpedanceLaplace
   use mError, only: raiseError
@@ -169,6 +169,14 @@ contains
         this%geomPos(i) = 1 ! air
       else
         this%geomPos(i) = 2 ! soil
+      end if
+    end do
+
+    do i = 1, nseg
+      if (this%structure%electrodes(i)%coatingRadius > 0.25d0 * this%geomLength(i)) then
+        call emitMessage(MSG_WARNING, "Coating of segment '" // trim(this%structure%electrodes(i)%id) // &
+          "' is thicker than a quarter of the segment length: the thin-layer assumption fails; use more segments")
+        exit
       end if
     end do
 
@@ -619,9 +627,13 @@ contains
           else
             zint = segmentInternalImpedance(this, i, omega)
           end if
-          call calcZSelf(mesh, i, this%geomPos(i), &
-            this%geomRbar(i,i), this%geomRbari(i,i), this%geomLength(i), &
-            zint, this%geomG(i,i), this%geomGi(i,i), this%geomCosThetaI(i,i))
+          if (this%structure%electrodes(i)%coatingRadius > 0.0d0) then
+            call fillCoatedSelf(this, mesh, i, zint, omega, sLap, laplace)
+          else
+            call calcZSelf(mesh, i, this%geomPos(i), &
+              this%geomRbar(i,i), this%geomRbari(i,i), this%geomLength(i), &
+              zint, this%geomG(i,i), this%geomGi(i,i), this%geomCosThetaI(i,i))
+          end if
         else
           call calcZMutual(mesh, i, j, this%geomPos(i), this%geomPos(j), &
             this%geomRbar(i,j), this%geomRbari(i,j), &
@@ -644,6 +656,37 @@ contains
       end do
     end if
   end subroutine fillAtFrequency
+
+  subroutine fillCoatedSelf(this, mesh, i, zint, omega, sLap, laplace)
+    !! Self term of a segment inside a coaxial coating layer (theory.md §4.3,
+    !! ROADMAP Phase 13 item 3). The leakage current crosses the layer, of
+    !! admittance per metre y_c = 2π·W_c/ln(r_c/r0) with W_c = σ_c + sε_c,
+    !! before it enters the soil or air: `Ztrans(i,i)` gains the series term
+    !! 1/(y_c·l) and its external part is evaluated at the outer radius r_c.
+    !! `Zlong` keeps the conductor radius r0.
+    class(tStudy), intent(in) :: this
+    type(tMesh), intent(inout) :: mesh
+    integer(4), intent(in) :: i
+    complex(8), intent(in) :: zint, sLap
+    real(8), intent(in) :: omega
+    logical, intent(in) :: laplace
+    real(8) :: r0, rc, l
+    complex(8) :: wc, zCoat
+
+    r0 = this%geomRadius(i)
+    rc = this%structure%electrodes(i)%coatingRadius
+    l  = this%geomLength(i)
+    if (laplace) then
+      wc = this%structure%electrodes(i)%coatingMaterial%admittanceLaplace(sLap)
+    else
+      wc = this%structure%electrodes(i)%coatingMaterial%admittance(omega)
+    end if
+    zCoat = log(rc / r0) / (2.0d0 * PI * wc * l)
+    call calcZSelf(mesh, i, this%geomPos(i), &
+      this%geomRbar(i,i), this%geomRbari(i,i), l, &
+      zint, this%geomG(i,i), this%geomGi(i,i), this%geomCosThetaI(i,i), &
+      gT=selfGeometryFactor(l, rc), dT=rc, zCoat=zCoat)
+  end subroutine fillCoatedSelf
 
   subroutine solveWithVoltageSources(mesh, sourcePos, retPos, injNodes, patterns, sourceValues, isVoltage, &
                                      lastSrc, info)

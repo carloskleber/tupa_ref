@@ -264,7 +264,12 @@ Application-tier features (ADR 0018). Item 1 (`catenary`) is closed (log).
    offline; the legacy ACSR spreadsheet is candidate seed data and the C++
    bundle/L-profile models a possible catalogue kind.
 3. **Coaxial encasement layer — insulated, concrete-encased and
-   semiconducting coatings** — **M–L**. *Widened 2026-10-29 (author):
+   semiconducting coatings** — **M–L**. *Fortran done 2026-11-05 for `line`
+   and `catenary` (theory.md §4.3, `test_coating`: validation items 1, 2 and
+   the capacitive limit of 3). **Open:** `mesh` bars, Rust and Julia parity,
+   a comparison with Sunde's propagation constant (item 3 proper) and the
+   measured-benefit trend (item 4); the concrete-foundation
+   equivalent-cylinder helper.* *Widened 2026-10-29 (author):
    one mechanism covers an insulated wire, a steel bar inside concrete
    (rebar, foundation cage, Ufer electrode) and a semiconducting layer.
    It is staged as a thin coaxial layer here, and a finite volume later

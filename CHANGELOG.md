@@ -9,6 +9,30 @@ numerics, which move result files.
 
 ### Added
 
+- **Quasi-stationary (DC) point** (`"frequencies": {"dc": true}`, optional
+  `"dcFrequency"` in Hz, default 1e-3): prepends one solve at a frequency low
+  enough that ωL ≪ R and displacement currents vanish, giving the DC limit
+  (resistance, GPR) with relative error of order (ω/ω_c)². `min`/`max`/
+  `pointsPerDecade` may be omitted for a DC-only study; `dcFrequency` must lie
+  below `min`. It is a true solve at that ω (reported at `dcFrequency`), not an
+  ω = 0 special case: below about 1e-5 Hz the air-side conditioning degrades
+  (`rod_air` loses its imaginary part at 1e-6 Hz). Fortran only; example
+  `common/rod_dc.json`, test `test_dc`. `tools/plot_dc.py <case> <results.csv>`
+  plots the solve at the lowest frequency (the DC point) along each contiguous
+  chain of `line`/`catenary` segments: node voltage, longitudinal current
+  `(I1−I2)/2` and transversal current `I1+I2` per segment, one figure per chain. The GUI has the same view as a **Profile (DC)** tab
+  (`gui/src/tupa_gui/view/profile_panel.py`, pyqtgraph, no new dependency):
+  chain and frequency selectors, opened automatically for a study with
+  `frequencies.dc`; its loader accepts a `frequencies` block without
+  `min`/`max`.
+
+- **Coating layer on `line`/`catenary`** (`"coating": {outerRadius, material}`,
+  theory.md §4.3, ROADMAP Phase 13 item 3): insulated wires, concrete-encased
+  bars and semiconducting layers. The layer admittance
+  `2π(σ_c + sε_c)/ln(r_c/r₀)` enters in series with the leakage path
+  (Sunde's coated buried wire), replacing no existing behaviour; uncoated
+  cases are unchanged. Fortran only; test in `test_coating`.
+
 - **`signal.riseTime`** ([ADR 0032](docs/adr/0032-excitation-rise-time.md)):
   optional causal triangular smoothing (base 2·`riseTime`, delay `riseTime`) of
   the sampled excitation, before the tail taper, window and NLT damping. It

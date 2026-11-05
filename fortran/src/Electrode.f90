@@ -28,6 +28,12 @@ module mElectrode
     class(tMaterial), pointer :: material => null()
     !! Conductor material (points into the owning element's material);
     !! null for a series-loaded segment
+    real(8) :: coatingRadius = 0.0d0
+    !! Outer radius r_c (m) of a coaxial coating layer around the conductor
+    !! (insulation, concrete, semiconducting screen; ROADMAP Phase 13 item 3,
+    !! theory.md §4.3); 0 = bare conductor
+    class(tMaterial), pointer :: coatingMaterial => null()
+    !! Medium (σ_c, ε_c) of the coating layer; null when `coatingRadius` = 0
     logical :: loaded = .false.
     !! True for a segment whose internal-impedance slot carries the
     !! lightning-channel loading z_ch = R' + jωL' (theory.md §4.5) instead of

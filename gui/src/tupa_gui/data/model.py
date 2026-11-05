@@ -250,9 +250,14 @@ class FrequencySweep:
     `pointsPerDecade` is converted to a total point count by the solver-side
     reader, not here."""
 
-    min: float
-    max: float
-    points_per_decade: float
+    min: float | None = None
+    max: float | None = None
+    points_per_decade: float | None = None
+    dc: bool = False
+    """Quasi-stationary (DC) point ahead of the log axis; `min`/`max`/
+    `pointsPerDecade` may then be absent (a DC-only study)."""
+    dc_frequency: float | None = None
+    """Frequency (Hz) of the DC point; the solver defaults to 1e-3 when absent."""
 
 
 @dataclass(frozen=True)

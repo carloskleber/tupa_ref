@@ -20,6 +20,7 @@ from tupa_gui.data import (
 )
 
 from .plot_panel import PlotPanel, TransientPlotPanel
+from .profile_panel import ProfilePanel
 from .tree import ENTITY_ROLE, build_study_model
 from .viewer3d import GeometryViewer
 
@@ -35,9 +36,13 @@ class MainWindow(QMainWindow):
         self._viewer = GeometryViewer()
         self._plot_panel = PlotPanel()
         self._transient_plot_panel = TransientPlotPanel()
+        self._profile_panel = ProfilePanel()
+        self._study: Study | None = None
+        self._results: Results | None = None
         self._results_tabs = QTabWidget()
         self._results_tabs.addTab(self._plot_panel, "Frequency-domain")
         self._results_tabs.addTab(self._transient_plot_panel, "Transient")
+        self._results_tabs.addTab(self._profile_panel, "Profile (DC)")
         # (kind, id) -> tree item, rebuilt on every display_study; lets a 3D
         # click select the matching tree row (selection sync is bidirectional).
         self._tree_entity_items: dict[tuple[str, str], object] = {}
@@ -86,6 +91,8 @@ class MainWindow(QMainWindow):
         self._tree.expandAll()
         self._tree.selectionModel().currentChanged.connect(self._on_tree_selection_changed)
         self._viewer.load_study(study)
+        self._study = study
+        self._profile_panel.load(self._study, self._results)
 
     def _on_tree_selection_changed(self, current, _previous) -> None:
         entity = current.data(ENTITY_ROLE)
@@ -117,7 +124,10 @@ class MainWindow(QMainWindow):
 
     def display_results(self, results: Results) -> None:
         self._plot_panel.load_results(results)
-        self._results_tabs.setCurrentWidget(self._plot_panel)
+        self._results = results
+        self._profile_panel.load(self._study, self._results)
+        dc = self._study is not None and self._study.frequencies is not None and self._study.frequencies.dc
+        self._results_tabs.setCurrentWidget(self._profile_panel if dc else self._plot_panel)
 
     def display_transient_results(self, results: TransientResults) -> None:
         self._transient_plot_panel.load_results(results)

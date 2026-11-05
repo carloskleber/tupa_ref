@@ -342,7 +342,7 @@ contains
   ! Self-impedance calculation (using image theory)
   ! =====================================================================
 
-  subroutine calcZSelf(mesh, i, pos, d, di, l, zint, g, gi, cosThetaI)
+  subroutine calcZSelf(mesh, i, pos, d, di, l, zint, g, gi, cosThetaI, gT, dT, zCoat)
     !! Compute the self-impedance of a cylindrical segment with its own image
     !! (theory.md §4.3, §5; ADR 0009). Sets `mesh%Zlong(i,i)` and
     !! `mesh%Ztrans(i,i)`:
@@ -373,7 +373,13 @@ contains
     complex(8), intent(in) :: zint
     !! Internal (skin-effect) impedance of the segment
     type(tMesh), intent(inout) :: mesh
-    complex(8) :: prop, cE, cM, fprop, fpropi, s
+    real(8), intent(in), optional :: gT, dT
+    !! Coated segment (theory.md §4.3): geometry factor and direct distance of
+    !! the transversal term, evaluated at the coating's outer radius r_c
+    !! where the leakage leaves the layer; `Zlong` keeps `g`, `d`
+    complex(8), intent(in), optional :: zCoat
+    !! Series impedance `1/(y_c·l)` of the coating layer, added to `Ztrans(i,i)`
+    complex(8) :: prop, cE, cM, fprop, fpropi, s, fpropT
 
     if (pos == 1) then
       prop = mesh%propAir; cE = mesh%cEAir;  cM = mesh%cMAir;  s = mesh%gammaAir
@@ -383,7 +389,13 @@ contains
     fprop  = exp(-d  * prop)
     fpropi = exp(-di * prop)
 
-    mesh%Ztrans(i, i) = cE * (fprop * g + s * fpropi * gi) / (l * l)
+    if (present(gT) .and. present(dT)) then
+      fpropT = exp(-dT * prop)
+      mesh%Ztrans(i, i) = cE * (fpropT * gT + s * fpropi * gi) / (l * l)
+    else
+      mesh%Ztrans(i, i) = cE * (fprop * g + s * fpropi * gi) / (l * l)
+    end if
+    if (present(zCoat)) mesh%Ztrans(i, i) = mesh%Ztrans(i, i) + zCoat
     mesh%Zlong(i, i)  = cM * (fprop * g + s * cosThetaI * fpropi * gi) + zint
   end subroutine calcZSelf
 

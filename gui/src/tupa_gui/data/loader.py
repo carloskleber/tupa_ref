@@ -250,7 +250,13 @@ def load_study(path: str | Path) -> Study:
     frequencies = None
     if "frequencies" in raw:
         f = raw["frequencies"]
-        frequencies = FrequencySweep(min=f["min"], max=f["max"], points_per_decade=f["pointsPerDecade"])
+        frequencies = FrequencySweep(
+            min=f.get("min"),
+            max=f.get("max"),
+            points_per_decade=f.get("pointsPerDecade"),
+            dc=bool(f.get("dc", False)),
+            dc_frequency=f.get("dcFrequency"),
+        )
 
     outputs = None
     if "outputs" in raw:

@@ -435,6 +435,8 @@ contains
           elem = newElementLine(trim(id), trim(from_id), trim(to_id), &
                                 radius, nseg, trim(mat_id))
           if (json_has(elem_obj, "lumped")) call setLineLumped(elem, json_child(elem_obj, "lumped"), nseg)
+          if (json_has(elem_obj, "coating")) call setLineCoating(elem, json_child(elem_obj, "coating"))
+          if (errorRaised()) return
           call study%structure%addElement(elem)
         case ("catenary")
           id      = json_str(elem_obj, "id")
@@ -449,6 +451,8 @@ contains
           nseg    = readSegments(elem_obj, study%maxSegmentLength, segLen)
           elem = newElementCatenary(trim(id), trim(from_id), trim(to_id), &
                                     sag, radius, nseg, trim(mat_id))
+          if (json_has(elem_obj, "coating")) call setLineCoating(elem, json_child(elem_obj, "coating"))
+          if (errorRaised()) return
           call study%structure%addElement(elem)
         case ("branch")
           block
@@ -1153,12 +1157,39 @@ contains
   end subroutine parseObservation
 
   function readFrequencyAxis(freq_obj) result(freqHz)
-    !! Log-spaced axis of a "frequencies" block (`min`/`max`/
-    !! `pointsPerDecade`, ADR 0013): nPoints = round(ppd·log10(max/min)) + 1.
+    !! Axis of a "frequencies" block (ADR 0013): log-spaced `min`/`max`/
+    !! `pointsPerDecade`, nPoints = round(ppd·log10(max/min)) + 1.
+    !!
+    !! Quasi-stationary (DC) point: `"dc": true` prepends one solve at the
+    !! very low frequency `dcFrequency` (Hz, default 1e-3), where ωL ≪ R and
+    !! the displacement currents vanish, so the result is the DC limit
+    !! (resistance, ground-potential rise) to a relative error of order
+    !! (ω/ω_c)². It is a true solve at that ω, not an ω = 0 special case, and
+    !! is reported at `dcFrequency`. With `"dc": true` the `min`/`max`/
+    !! `pointsPerDecade` triple may be omitted (a DC-only study).
     type(tJsonValue), pointer, intent(in) :: freq_obj
     real(8), allocatable :: freqHz(:)
-    real(8) :: fMin, fMax, pointsPerDecade
+    real(8), allocatable :: logAxis(:)
+    real(8) :: fMin, fMax, pointsPerDecade, fDc
     integer :: nPoints
+    logical :: dc, haveAxis
+
+    dc = .false.
+    if (json_has(freq_obj, "dc")) dc = json_getbool(freq_obj, "dc")
+    fDc = 1.0d-3
+    if (json_has(freq_obj, "dcFrequency")) fDc = json_real(freq_obj, "dcFrequency")
+    if (dc .and. .not. (fDc > 0.0d0)) then
+      call raiseError("mTupa: frequencies.dcFrequency must be positive (Hz)")
+      allocate(freqHz(0))
+      return
+    end if
+
+    haveAxis = json_has(freq_obj, "min") .or. json_has(freq_obj, "max") .or. &
+               json_has(freq_obj, "pointsPerDecade")
+    if (dc .and. .not. haveAxis) then
+      freqHz = [fDc]
+      return
+    end if
 
     fMin = json_real(freq_obj, "min")
     fMax = json_real(freq_obj, "max")
@@ -1169,7 +1200,17 @@ contains
       return
     end if
     nPoints = nint(pointsPerDecade * log10(fMax / fMin)) + 1
-    freqHz = logFrequencyAxis(fMin, fMax, max(2, nPoints))
+    logAxis = logFrequencyAxis(fMin, fMax, max(2, nPoints))
+    if (dc) then
+      if (fDc >= fMin) then
+        call raiseError("mTupa: frequencies.dcFrequency must be below frequencies.min")
+        allocate(freqHz(0))
+        return
+      end if
+      freqHz = [fDc, logAxis]
+    else
+      freqHz = logAxis
+    end if
   end function readFrequencyAxis
 
   subroutine parseSlotTerminals(obj, slot)
@@ -1210,6 +1251,23 @@ contains
       v(k) = json_value_real(item)
     end do
   end function jsonVec3
+
+  subroutine setLineCoating(elem, coating)
+    !! Coaxial coating layer of a `line`/`catenary` ("coating": {outerRadius,
+    !! material}; theory.md §4.3, ROADMAP Phase 13 item 3). The material is
+    !! any `materials` entry; it is resolved at assembly.
+    class(tElement), intent(inout) :: elem
+    type(tJsonValue), pointer, intent(in) :: coating
+
+    select type (elem)
+    class is (tLine)
+      elem%coatingRadius = json_real(coating, "outerRadius")
+      elem%idCoatingMaterial = json_str(coating, "material")
+      if (elem%coatingRadius <= 0.0d0) then
+        call raiseError("mTupa: coating.outerRadius of '" // trim(elem%id) // "' must be positive")
+      end if
+    end select
+  end subroutine setLineCoating
 
   subroutine setLineLumped(elem, lumped, nseg)
     !! Embed a lumped series R-L-C in one segment of a `line` element

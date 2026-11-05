@@ -6,6 +6,7 @@ from .loader import (
     load_study,
     load_transient_results,
 )
+from .profile import Chain, Profile, build_profiles
 from .model import (
     BranchElement,
     CatenaryElement,
@@ -36,6 +37,9 @@ from .model import (
 )
 
 __all__ = [
+    "Chain",
+    "Profile",
+    "build_profiles",
     "BranchElement",
     "CatenaryElement",
     "ChannelElement",

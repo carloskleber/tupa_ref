@@ -169,9 +169,12 @@ def build_study_model(study: Study) -> tuple[QStandardItemModel, dict[tuple[str,
     frequencies = _row("Frequencies")
     if study.frequencies is not None:
         f = study.frequencies
-        frequencies.appendRow(_row("min", f"{f.min} Hz"))
-        frequencies.appendRow(_row("max", f"{f.max} Hz"))
-        frequencies.appendRow(_row("pointsPerDecade", str(f.points_per_decade)))
+        if f.dc:
+            frequencies.appendRow(_row("dc", f"quasi-stationary point at {f.dc_frequency or 1e-3} Hz"))
+        if f.min is not None:
+            frequencies.appendRow(_row("min", f"{f.min} Hz"))
+            frequencies.appendRow(_row("max", f"{f.max} Hz"))
+            frequencies.appendRow(_row("pointsPerDecade", str(f.points_per_decade)))
     else:
         frequencies.setText("Frequencies  (none)")
     root.appendRow(frequencies)
