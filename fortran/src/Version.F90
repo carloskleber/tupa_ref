@@ -1,9 +1,9 @@
 module mVersion
   !! Program name, version and git commit, for the startup banner and `--version`.
   !!
-  !! `build.sh` writes the gitignored `version_generated.inc` (version from
-  !! `fpm.toml`, commit from `git describe`, build date); without it (plain `fpm build`) the
-  !! values fall back to "unknown". Kept as an include rather than `-D` flags so a
+  !! `build.sh` rewrites `version_generated.inc` (version from `fpm.toml`, commit
+  !! from `git describe`, build date). The committed default holds "unknown", so a plain
+  !! `fpm build` (any compiler, ifx included; no `__has_include`) works as is. Kept as an include rather than `-D` flags so a
   !! new commit recompiles only this file, not the whole dependency tree.
   implicit none
   private
@@ -12,13 +12,7 @@ module mVersion
   character(len=*), parameter :: PROGRAM_NAME = "TUPA"
     !! Program name, without accents for ensure international compatibility.
 
-#if __has_include("version_generated.inc")
 #include "version_generated.inc"
-#else
-  character(len=*), parameter :: VERSION_STRING = "unknown"
-  character(len=*), parameter :: COMMIT_STRING = "unknown"
-  character(len=*), parameter :: BUILD_DATE_STRING = "unknown"
-#endif
 
 contains
 

@@ -471,14 +471,14 @@ Raised by the LabUAT investigation (log INV-2026-11-02):
    `marx_generator.md` and in the results (a field or a warning), and consider a
    GUI marker for the unreliable tail. Then add golden fixtures for the
    laboratory cases (Phase 10e).
-2. **Audit the NaN-dependent code.** `ieee_is_nan` alone did not rescue the
+2. **Audit the NaN-dependent code** — *partly done 2026-11-11: `parallelGeometryFactor` now tests every denominator and log argument before use (no result-NaN test), regression `test_finite_math`; `Bessel` z=0 NaN is by contract (never called with ω=0); open: `channel_loaded` transient fixture still differs under `-ffinite-math-only`, and `test_bessel`/`test_impedance` assert NaN/Inf results so cannot run under that flag.* Original item: `ieee_is_nan` alone did not rescue the
    closed-form fallback under `-ffinite-math-only`; find every NaN/Inf-based
    guard (`Geometry.f90`, `Bessel.f90`, `Channel*`) and make it independent of
    the flag, or document why the flag is required. Add a regression test that
    runs under the release flags (the golden suite is run with `-O2`, L-02).
-3. **ifx portability.** Replace `__has_include` in `Version.F90` (generate the
+3. **ifx portability** — *done 2026-11-11: `version_generated.inc` is committed with "unknown" defaults and `Version.F90` includes it unconditionally (this also fixes an ICE in gcc 13's `__has_include`).* Original item: Replace `__has_include` in `Version.F90` (generate the
    file or use a plain include) so `fpm --compiler ifx` builds the repo as is.
-4. **Make `build.sh` executable** (`chmod +x`) and decide whether the fast-math
+4. **Make `build.sh` executable** — *done 2026-11-11 (mode 755); the `-fno-finite-math-only` note stays in `build.sh`.* Original item: (`chmod +x`) and decide whether the fast-math
    release path needs `-fno-finite-math-only` documented in DISTRIBUTION.md.
 
 ---
