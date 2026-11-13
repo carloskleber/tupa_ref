@@ -188,7 +188,10 @@ Delivered: log entry P10d ([ADR 0028](adr/0028-induced-voltages-and-lumped-branc
    [83], Barker [84], Piantini [93]); conductive coupling through the line's
    grounding against Napolitano [92] (needs buried electrodes but no Phase 14
    work); an inclined-channel case against Natsui [91]; a sagged-line
-   induced-voltage case against Stracqualursi [96].
+   induced-voltage case against Stracqualursi [96]. Further candidates: the
+   Tampa 1979 measurements [124, 125] as a measured anchor; the closed form
+   of [126] as a check for the inclined channel; [127] for a tall struck
+   object.
 
 ### Phase 10e — Impulse laboratory — open remainder
 
@@ -435,8 +438,9 @@ lossy-ground induced voltages and LEMP.
    the §5 single-interface premise; route: layered-earth Green's
    functions via quasi-static complex images (Li, Chen & Wang [33]; Sunde
    [41] background). Explicitly out of MVP scope (theory.md §5, §10.1).
-   Time-domain and full-wave counterparts for cross-checking: Fan & Li [103]
-   and Nazari et al. [104].
+   Layered-media Green's functions: Michalski & Mosig [130]. Time-domain and
+   full-wave counterparts for cross-checking: Fan & Li [103] and Nazari et
+   al. [104].
 2. **Finite conductive and dielectric volumes (concrete footings,
    backfill)** — **L**, research. *Added 2026-10-29 (author), stage 2 of
    Phase 13 item 3.* A concrete pad or pile is a bounded region of a third

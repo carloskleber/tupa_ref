@@ -747,8 +747,10 @@ CIGRE review [76] covers return-stroke models and fields, and its companion
 [77] the coupling models. Rachidi et al. [78, 79] treat the lossy ground.
 The dipole fields are Master et al. [80], and the TL model comes from
 Uman & McLain [81]. The coupling equations go back to Agrawal et al. [82],
-and Rachidi's review [85] is their modern statement. Field data come from
-Rubinstein et al. [83] and Barker et al. [84]. [86–99] cover what the
+and Rachidi's review [85] is their modern statement; Paolone et al. [129]
+review and validate the approach. Field data come from
+Rubinstein et al. [83] and Barker et al. [84], and Master et al. [124, 125]
+give theory and measurements for the same configuration. [86–99] cover what the
 perfect-ground anchor leaves out: corona, lossy and dispersive ground,
 inclined channels, grounding, sag and terrain. Several printed equations in
 these papers are wrong; the verified forms are used below and the errata are
@@ -798,7 +800,7 @@ current is zero for $z' > vt$):
 | Transmission line (TL) [81] | $i(0,\,t - z'/v)$ | no net charge removed |
 | Modified TL (MTL) [75, 76] | $e^{-z'/\lambda}\, i(0,\,t - z'/v)$ | $\lambda \approx$ 1.5–2 km (1.7 km in [75]) accounts for the corona-sheath charge |
 | Travelling current source (TCS) | $i(0,\,t + z'/c)$ | source climbs at $v$, current falls at $c$ |
-| MULS [80] | uniform + breakdown pulse $e^{-z'/\lambda_p}$ + corona current | with equal decay constants it equals MTL apart from the uniform current [76] |
+| MULS [80] | uniform + breakdown pulse $e^{-z'/\lambda_p}$ + corona current | with equal decay constants it equals MTL apart from the uniform current [76, 128] |
 | Diendorfer–Uman (DU) | two discharge processes ($\tau_{bd} \approx 0.6$ µs, $\tau_c \approx 5$ µs) | most elaborate; more parameters |
 
 **Channel-base current.** Both [75] and [76] use a sum of Heidler-type
@@ -2068,7 +2070,7 @@ relative to each:
 | LEMP + transmission-line coupling (MTL/TCS fields, Agrawal/Taylor/Rusck equations) | Time (or frequency + FFT) | Return-stroke model gives the field from the channel-base current, and a telegrapher equation with a distributed source gives the line voltage | The reference procedure of the induced-voltage literature [75–79, 82, 85]; network codes (LIOV-EMTP, LIV-ATP) extend it to arresters, transformers and grounding [92, 94, 95]; a HEM line (§4.6.3) solves the same problem as a thin-wire structure, with the line–channel reaction, conductive coupling through the grounding and any 3-D wire layout (sag included [96]), at the price of segments instead of a 1-D grid; the perfect-ground base case is the validation anchor | [75–79, 82, 85, 92, 94–96] |
 | FDTD–PEEC hybrid | Time | 1-D FDTD for the line + PEEC for tower and lightning channel | Models the lightning-channel↔tower coupling that HEM-class tools (TUPÃ included) neglect; relevant for tower-surge, not grounding, accuracy | [25] |
 | PEEC–MTL hybrid | Time | PEEC near the strike and the towers, MTL along the weakly coupled middle of the line, joined by a mixed-potential (scalar + vector potential) scattering source | The induced-voltage counterpart of the row above; within 5 % of triggered-lightning peaks on a distribution line. TUPÃ treats the whole line with segments instead, which costs more and needs no interface between two models | [101] |
-| Full-wave MoM (NEC-4 class) | Frequency | Sommerfeld-integral treatment of the interface, sub-segment current expansion | The accuracy oracle above HEM: [20] and [23] use it as reference; no geometry-factor shortcut, so far costlier; NEC-2 tower studies [50] show the non-TEM effects (transient footing impedance, sub-TEM shield-wire coupling) EMT models compress | [20,23,50] |
+| Full-wave MoM (NEC-4 class) | Frequency | Sommerfeld-integral treatment of the interface, sub-segment current expansion | The accuracy oracle above HEM: [20] and [23] use it as reference; no geometry-factor shortcut, so far costlier; NEC-2 tower studies [50] show the non-TEM effects (transient footing impedance, sub-TEM shield-wire coupling) EMT models compress; Burke & Miller [131] treat wires near and through a lossy interface | [20,23,50,131] |
 | EMT line-level analysis (multistory towers, LEMP-corrected) | Time (EMT programs) | Towers as TL/multistory circuit models calibrated from full-wave analyses [50]; grounding as macromodels; LEMP field-to-line coupling addable [52] | The consumer layer above TUPÃ for line lightning performance: component-coupling neglect is validated (< a few % on peaks, less than soil-parameter uncertainty [51]), but frequency-dependent grounding [51] and LEMP-induced voltages [52] must be represented — plain EMT underestimates insulator voltages by up to ~58 %; model choices swing outage rates by up to ~70 % [54]; nonuniform spans (wide river crossings, tall towers) break the cascaded-uniform-line recipe, which can go numerically unstable — HEM segments over the catenary handle them natively [58]; frequency-dependent ground in the line model itself is now available in free EMT through the ULM in ATP [106], and a wideband footing model with dispersive soil cuts computed outage rates by 29–55 % [105] | [50,51,52,54,58,105,106] |
 | Rational models / FDNE for EMT | s-domain → time | Vector fitting / matrix-pencil approximation of $Z_g(\omega)$, passivity-enforced, plugged into ATP/EMTP/PSCAD | A *consumer* of TUPÃ's output, not a competitor; effective length drives realization order and robustness; the route dates back to Heimbach & Grcev's rational-function EMTP incorporation [64], ~25–30 years before [26,27]; the fitting and passivity machinery is vector fitting [69] and its textbook extension [70] | [26,27,64,69,70] |
 

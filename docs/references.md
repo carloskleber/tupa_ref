@@ -568,6 +568,11 @@ below) as the sources of its dispersive-soil routines:
     retained) — precedes by ~25–30 years the FDNE/rational-model EMT-export
     route of [26,27]. A distinct paper from the same author pair's later
     journal article [18] despite the similar author order and topic.
+131. **Burke, G. J.; Miller, E. K.** — "Modeling Antennas near to and
+    Penetrating a Lossy Interface", *IEEE Trans. Antennas and Propagation*,
+    vol. 32, no. 10, pp. 1040–1049, Oct. 1984. DOI: 10.1109/TAP.1984.1143220.
+    Thin-wire antennas near or through a lossy ground interface, in the NEC
+    family of full-wave codes.
 
 ## Excitation waveforms (addendum)
 
@@ -627,6 +632,11 @@ below) as the sources of its dispersive-soil routines:
     is far more sensitive to the soil model than insulator overvoltages
     are. All three models pass a Kramers–Kronig causality check. The paper
     prints Δᵢ as "11.71 S/m", but [66] gives mS/m.
+130. **Michalski, K. A.; Mosig, J. R.** — "Multilayered Media Green's
+    Functions in Integral Equation Formulations", *IEEE Trans. Antennas and
+    Propagation*, vol. 45, no. 3, pp. 508–519, Mar. 1997. DOI:
+    10.1109/8.558666. Layered-medium Green's functions for integral-equation
+    solvers; background for the multi-layer soil of ROADMAP Phase 15.
 
 ## Rational macromodeling and EMT interchange
 
@@ -924,6 +934,40 @@ perfect-ground anchor.
     the horizontal field is the component most affected, and irregular
     ground under the line gave induced voltages up to about five times the
     flat-ground value.
+124. **Master, M. J.; Uman, M. A.** — "Lightning Induced Voltages on Power
+    Lines: Theory", *IEEE Trans. Power Apparatus and Systems*, vol. PAS-103,
+    no. 9, pp. 2502–2518, Sep. 1984. DOI: 10.1109/TPAS.1984.318405. Theory of
+    the voltage induced on a line by a nearby stroke, paired with the
+    measurements of [125].
+125. **Master, M. J.; Uman, M. A.; Beasley, W.; Darveniza, M.** — "Lightning
+    Induced Voltages on Power Lines: Experiment", *IEEE Trans. Power
+    Apparatus and Systems*, vol. PAS-103, no. 9, pp. 2519–2529, Sep. 1984.
+    DOI: 10.1109/TPAS.1984.318406. Measured induced voltages on an
+    experimental line (Tampa, 1979) compared with the theory of [124]: a
+    measured anchor for the perfect-ground base case.
+126. **Matsubara, I.; Sekioka, S.** — "Analytical Formulas for Induced Surges
+    on a Long Overhead Line Caused by Lightning With an Arbitrary Channel
+    Inclination", *IEEE Trans. Electromagnetic Compatibility*, vol. 51, no. 3,
+    pp. 733–740, Aug. 2009. DOI: 10.1109/TEMC.2009.2025901. Closed-form
+    induced voltage for an inclined channel: a check for inclined-channel
+    cases such as [91].
+127. **Baba, Y.; Rakov, V. A.** — "Voltages Induced on an Overhead Wire by
+    Lightning Strikes to a Nearby Tall Grounded Object", *IEEE Trans.
+    Electromagnetic Compatibility*, vol. 48, no. 1, pp. 212–224, Feb. 2006.
+    DOI: 10.1109/TEMC.2006.870807. Reference for strikes to a tall struck
+    object.
+128. **Rachidi, F.; Nucci, C. A.** — "On the Master, Uman, Lin, Standler and
+    the Modified Transmission Line Lightning Return Stroke Current Models",
+    *J. Geophysical Research: Atmospheres*, vol. 95, no. D12,
+    pp. 20389–20393, Nov. 1990. DOI: 10.1029/JD095iD12p20389. Relates the
+    engineering return-stroke models; with equal decay constants the MULS
+    model equals the MTL model (theory.md §4.6.1).
+129. **Paolone, M.; Rachidi, F.; Borghetti, A.; Nucci, C. A.; Rubinstein, M.;
+    Rakov, V. A.; Uman, M. A.** — "Lightning Electromagnetic Field Coupling to
+    Overhead Lines: Theory, Numerical Simulations, and Experimental
+    Validation", *IEEE Trans. Electromagnetic Compatibility*, vol. 51, no. 3,
+    pp. 532–547, Aug. 2009. DOI: 10.1109/TEMC.2009.2025958. Review and
+    validation of the Agrawal/LIOV field-to-line coupling approach.
 
 ## Neighbouring methods and channel physics (addendum)
 
