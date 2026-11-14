@@ -8,9 +8,9 @@ module, so a reviewer can audit kernel against kernel. Fortran stays the
 implementation of record; Julia is a third conforming implementation and
 the interactive/scripting route (REPL, notebooks, parameter studies).
 
-Contributed by acslima as a compact prototype (2026-09-29,
-[#1](https://github.com/carloskleber/tupa_ref/pull/1)) and realigned with
-the Fortran/Rust code on 2026-09-30 ([History](#history)).
+Contributed by acslima as a compact prototype
+([#1](https://github.com/carloskleber/tupa_ref/pull/1)) and then realigned
+with the Fortran/Rust code ([History](#history); engineering log P8J).
 
 Dependencies: `JSON`, `SpecialFunctions` (AMOS `zbesi` Bessel functions —
 the same routine as SLATEC `ZBESI` in the Fortran code — and `erfc`),
@@ -131,7 +131,7 @@ the wrong type is an error (the Fortran reader yields 0).
 
 ## Conformance status
 
-> **ROADMAP Phase 10 (ADR 0024) — met 2026-10-01** (single-integral
+> **ROADMAP Phase 10 (ADR 0024) — met** (single-integral
 > geometry kernel, `Γ(ω)` image coefficients, `numerics` block with
 > `maxSegmentLength`). The three regenerated harmonic fixtures,
 > `portela1997_ideal` and the harmonic half of `portelaMesh` now run at
@@ -139,7 +139,7 @@ the wrong type is an error (the Fortran reader yields 0).
 > not ported (sweeps stay serial). Phases 9 and 10b still lag (see "Follow-along
 > rule").
 
-Measured on 2026-10-01 (Linux, Julia 1.13.1, AMD Ryzen 5 8500G). Rule of
+Measured for engineering-log entry P8J (Linux, Julia 1.13.1, AMD Ryzen 5 8500G). Rule of
 the golden fixtures: 1e-6 relative on the row scale `max(1e-6, |re|, |im|)`,
 rows keyed by `(frequency_hz, quantity, id)` (`test/conformance.jl`, same as
 `rust/tests/conformance.rs`).
@@ -152,7 +152,7 @@ rows keyed by `(frequency_hz, quantity, id)` (`test/conformance.jl`, same as
 | `portela1997_transient_signals` | `portela1997_transient_signals_expected.csv` (ADR 0026) | 1e-6 — **match** (transient shape with the `signal` column) |
 | `portela1997_transient_{interpolated,hann,hann_time,multi,nlt}` | `*_expected.csv` (ROADMAP Phase 9) | **lag** — not implemented; the loader rejects the Phase 9 `signal` fields (below) |
 
-**Cross-check on every runnable `common/` case** (re-measured 2026-10-01
+**Cross-check on every runnable `common/` case** (re-measured for Phase 10
 with the Phase 10 defaults), against fresh runs of the Fortran
 (`fpm --profile release` via `build.sh`, `OMP_NUM_THREADS=1`) and Rust
 (`cargo build --release`) executables. Harmonic: worst row deviation under
@@ -245,7 +245,7 @@ the conformance table above.
   `transferFunction` is present; `test/runtests.jl` lists the five Phase 9
   cases in `PHASE9_LAG` (the fixture guard accepts them, and
   `test/physics.jl` checks the loader refuses them). These test edits were
-  made without running Julia; the suite has since been run (2026-10-01) and
+  made without running Julia; the suite has since been run and
   passes. Porting guide: `rust/src/transient.rs` (same structure as the Fortran
   `mTransient`, ~300 lines), plus the `admittance_laplace`/
   `calc_param_laplace`/`internal_impedance_laplace` counterparts; remove
@@ -280,7 +280,7 @@ the conformance table above.
   internal impedance in `study.rs`; `injection_patterns` and the dipole
   constraint of `solve_with_voltage_sources`.
 - **ROADMAP Phase 10** ([ADR 0024](../docs/adr/0024-phase10-numerics.md)) —
-  **ported 2026-10-01**, items 1–3 and 6 (item 4, the threaded sweep, is not
+  **ported**, items 1–3 and 6 (item 4, the threaded sweep, is not
   ported). `geometry_factor_1d` (`src/Impedance.jl`) is the default kernel,
   switched by `GeometryOptions.kernel` (`:single`/`:double`; CLI `--kernel`,
   `numerics.kernel`); `image_coefficients` and the `gamma_air`/`gamma_soil`
@@ -314,7 +314,7 @@ The contributed prototype (single file, ~200 lines) solved harmonic and
 transient studies and brought the ADR 0021 anti-alias filter, but used a
 fixed 64×64 midpoint rule for the geometry factors (~0.09 % from Fortran)
 and lacked voltage sources, `outputs` filtering, the sweep writers and
-reference validation. The 2026-09-30 realignment:
+reference validation. The realignment (engineering log P8J):
 
 - split the code into one file per Fortran module and ported the Fortran
   algorithms line by line (adaptive `dqag_k15`, closed-form parallel

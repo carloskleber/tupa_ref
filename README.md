@@ -85,9 +85,10 @@ are still open — see [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 | | |
 | --- | --- |
 | [docs/README.md](docs/README.md) | Documentation index |
-| [docs/theory.md](docs/theory.md) | Normative physics reference |
+| [docs/theory.md](docs/theory.md) | Normative physics reference: index of the chapters, with a [reader's guide](docs/theory/guide.md) and a [worked example](docs/theory/worked-example.md) |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Components, layers, flows, data management |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Gap analysis, phased plan, decisions |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Current state and plan |
+| [docs/engineering_log.md](docs/engineering_log.md) | What was done and when, evidence, lessons learned |
 | [docs/CONVENTIONS.md](docs/CONVENTIONS.md) | Coding and project conventions |
 | [docs/BENCHMARKS.md](docs/BENCHMARKS.md) | Validation status and benchmark policy |
 | [docs/GLOSSARY.md](docs/GLOSSARY.md) | Terminology |
@@ -296,7 +297,7 @@ GPLv3 — see [LICENSE](LICENSE).
 Fortran is the reference implementation; Rust follows it to the 1e-6
 conformance rule on every golden fixture; Julia is a lag-guarded third port
 (it refuses the schema features it does not implement rather than ignoring
-them). State as of 2026-10-01 (Phase 11, Fortran package 0.7.0 plus unreleased work).
+them). Measured at Phase 11 (engineering log P11); later Fortran-only features are not in this table.
 
 | Feature | Fortran (`fortran/`) | Rust (`rust/`) | Julia (`julia/`) |
 | --- | --- | --- | --- |
@@ -312,6 +313,6 @@ them). State as of 2026-10-01 (Phase 11, Fortran package 0.7.0 plus unreleased w
 | `channels` block in the results JSON | ✔ | ✔ | — |
 | Grounding-safety outputs (Phase 11, ADR 0027): `observation` block — surface potentials, GPR, touch and step voltage, step map — and `<case>_potentials.*` | ✔ (harmonic) | ✔ (harmonic) | lag (refuses the block) |
 | Golden fixtures in `common/` met at 1e-6 | all but `channel_loaded` (its fixture predates the case's later 2048-sample setting; fails in Fortran and Rust alike until regenerated) | all but `channel_loaded` (same) | harmonic ones (`grid`, `portela1997`, `portela1997_ideal`, `rod`, `portelaMesh`); the Phase 9 transient and Phase 10b channel ones lag (`julia/README.md`) |
-| Test suite (2026-10-01) | 19 programs; 18 pass, `test_common_cases` fails on the stale `channel_loaded` fixture only | 112 tests; all pass but `channel_loaded` | 253 tests, all pass |
-| Linear algebra / quadrature | LAPACK, SLATEC | in-repo LU, line-by-line GK 7/15 port, no external numerics | LAPACK LU via `LinearAlgebra`, line-by-line GK 7/15 port |
+| Test suite | 19 programs; 18 pass, `test_common_cases` fails on the stale `channel_loaded` fixture only | 112 tests; all pass but `channel_loaded` | 253 tests, all pass |
+| Linear algebra / quadrature | LAPACK; in-repo GK 7/15 and Bessel (ADR 0031) | in-repo LU, line-by-line GK 7/15 port, no external numerics | LAPACK LU via `LinearAlgebra`, line-by-line GK 7/15 port |
 | Role | reference; also builds the CLI used by the GUI | conformance port (ADR 0022) | contributed prototype, follow-along port (Phase 8J) |

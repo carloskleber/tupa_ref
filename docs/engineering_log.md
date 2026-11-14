@@ -13,7 +13,7 @@ format follows the pyelektra engineering log. Prose is English
 | What was delivered, with what evidence, and what did we learn? | **this log** |
 | What is left to do, and in what order? | [ROADMAP.md](ROADMAP.md) (future only; the past is one line per phase) |
 | Why was it decided that way? | [adr/](adr/) and §5 below (decision register) |
-| How does the physics work? | [theory.md](theory.md) |
+| How does the physics work? | [theory.md](theory.md) (index) and the chapters in [theory/](theory/) |
 | Current state at a glance? | [ROADMAP.md §1](ROADMAP.md) and the root [README](../README.md) |
 
 Golden rule: **state and plan are not duplicated here.** The log records the
@@ -32,9 +32,10 @@ the evidence, not people.
 1. **When**: on closing a phase or item (and whenever an investigation ends),
    add an entry in §6 and, if something reusable was learned, a lesson `L-nn`
    (or add the origin to an existing one).
-2. **Entry ID**: `P<phase>[letter]` for roadmap phases (`P10b`), `M1` for the
-   maintenance track, `GUI-n`, `INV-yyyy-mm-dd` for investigations outside a
-   phase.
+2. **Entry ID**: `P<phase>[letter]` for roadmap phases (`P10b`), `Mn` for the
+   maintenance track, `GUI-n`, and `<TAG>-yyyy-mm-dd` for dated work outside a
+   phase: `INV` for an investigation, `DOC` for documentation, or a short
+   feature tag (`DC`).
 3. **Entry template** (fixed order, omit what does not apply):
 
    ```
@@ -51,14 +52,18 @@ the evidence, not people.
 5. Entries are append-only; a correction of fact is a new entry that
    references the old one.
 6. Absolute dates (YYYY-MM-DD).
+7. **This is the only place for dates and history.** Other documents state
+   what is true now and cite an entry ID. The exceptions are the `Date` line
+   and dated amendment headings of an ADR, and the release headings of the
+   CHANGELOG (L-18).
 
 ## 3. Index
 
 | Section | Content |
 | --- | --- |
-| [§4](#4-lessons-learned) | Lessons `L-01 … L-17` |
+| [§4](#4-lessons-learned) | Lessons `L-01 … L-19` |
 | [§5](#5-decision-register) | Decisions, in the order they were taken |
-| [§6](#6-record-by-phase) | Record by phase: P0–P7, P8, P8J, P9, P10, P10b–e, P11–P15, M1, GUI, investigations |
+| [§6](#6-record-by-phase) | Record by phase: P0–P7, P8, P8J, P9, P10, P10b–e, P11–P15, M1–M2, GUI, investigations, documentation |
 
 ---
 
@@ -228,8 +233,8 @@ the evidence, not people.
 #### L-15 — Pick the binary by mtime; fpm build dirs accumulate
 
 - **Rule**: after a build, check `ls -l bin/Tupa` for a fresh mtime, and use a
-  scratch `--prefix` for experiment builds. `build.sh` is not executable —
-  run it as `bash build.sh`.
+  scratch `--prefix` for experiment builds. (`build.sh` was not executable
+  when this was written; it is since M2.)
 - **Origin**: INV-2026-11-02 (a "rebuilt" binary dated 10:15 was still the old
   one); an `--output-dir` given as a relative path from the wrong directory
   left a stray directory in the repo root.
@@ -249,6 +254,38 @@ the evidence, not people.
   `Version.F90`; built from a patched scratch copy). M1 already noted that
   steps 1–4 (SLATEC removal) unblock the `ifx` build.
 - **Applies when**: touching the preprocessor-dependent files.
+
+#### L-18 — One home per kind of information; dates only in the log
+
+- **Rule**: the model goes in the theory, state and plan in the roadmap,
+  history and lessons in this log, decisions in the ADRs, measured deviations
+  in `validation/`. A normative or planning document is written in the
+  present tense, with no "done on", "reviewed on … settled on …" or "not
+  yet". When an item is finished its text leaves the roadmap and an entry is
+  added here. In `references.md`, each section's numbered list must be
+  consecutive, because the renderer renumbers ordered lists: a new reference
+  is appended in a block at the end, never inserted into an older section.
+- **Origin**: DOC-2026-11-14 (theory.md had grown to 2100 lines with status
+  notes, dated corrections and legacy anecdotes mixed into the model; several
+  statements had gone stale without anyone noticing — "cross-media coupling
+  is neglected" and "tubular conductor not yet implemented" survived the
+  phases that changed them; the roadmap kept "Original item:" text beside
+  dated outcomes; reference [123] had been inserted after [18] and would
+  render as 19).
+- **Applies when**: closing a phase, editing the theory, adding a reference.
+
+#### L-19 — A 3-D view fails silently; verify rendering by pixels
+
+- **Rule**: after a change to the GUI's 3-D view, take a screenshot of the
+  running window and sample pixels: the clear colour at the centre of the
+  viewer means the renderer is alive and the scene is empty. Rule out object
+  ownership (garbage collection of Qt3D wrappers) before blaming layouts or
+  the platform; `gc.collect()` blanking a good scene, or `gc.disable()`
+  curing a bad one, is the decisive test.
+- **Origin**: GUI-1 (the PySide6/Qt3D garbage-collection bug of 2026-07-09,
+  documented in `gui/README.md`, Troubleshooting: no exception and no log,
+  only an empty viewport).
+- **Applies when**: touching `gui/` rendering code.
 
 ---
 
@@ -283,6 +320,9 @@ authoritative text is in the ADR; this is the quick index.
 | 2026-10-29 | Armoured cables: armour is an ordinary HEM electrode, interior stamped like `branch`; per-segment co-located interior | P13 item 4 |
 | 2026-10-29 | `plane` bars as strips of a continuous sheet (`sheet` kind) | P13 item 5 |
 | 2026-11-02 | Release flags keep `-fno-finite-math-only` | INV-2026-11-02, L-01 |
+| 2026-11-03 | Optional excitation rise time; `nltDamping` default unchanged, c·T ≈ 6 recommended for step-like sources | INV-2026-11-03, ADR 0032 |
+| 2026-11-05 | The DC limit is a true solve at a low frequency (default 1 mHz), not an ω = 0 special case | DC-2026-11-05 |
+| 2026-11-14 | Theory split into chapters under `theory/` with stable § numbers; dates and history only in this log; roadmap holds state and plan | DOC-2026-11-14, L-18 |
 
 ---
 
@@ -587,6 +627,24 @@ authoritative text is in the ADR; this is the quick index.
   `Z_int` at complex `s`, so a pole-residue kind sits beside the table.
 - **Refs**: ADR 0030.
 
+#### P13 item 3 — Coating layer on `line` and `catenary` (Fortran done 2026-11-05)
+
+- **Delivered**: `coating: {outerRadius, material}` — a thin coaxial layer
+  (insulation, concrete encasement, semiconducting compound) whose radial
+  admittance `2π(σ_c + sε_c)/ln(r_c/r₀)` is in series with the leakage path;
+  the external transversal self term is evaluated at `r_c`, `Z_ℓ` keeps `r₀`,
+  mutual terms unchanged; a warning above `r_c = l/4`. Cases
+  `common/buried_coated_half*.json`.
+- **Evidence**: `test_coating` — a layer of the soil's own medium reproduces
+  the bare rod (1.7 % with 15 segments); a conductive layer adds the shell
+  resistance `ln(r_c/r₀)/(2πσ_c L)` to the bare rod of radius `r_c`; an
+  insulating layer gives the capacitance `2πε_c L/ln(r_c/r₀)`.
+- **Decisions**: one mechanism for the three uses (2026-10-29); the legacy
+  insulated-cable branch is a placeholder and was not ported (ADR 0017
+  finding 10); finite volumes later (Phase 15 item 2).
+- **Open**: roadmap Phase 13 item 3 (`mesh` bars, ports, Sunde comparison).
+- **Refs**: theory.md §4.3.
+
 #### P14 — Air–soil coupling (Fortran done 2026-10-19, opt-in)
 
 - **Delivered**: mutual impedance between segments in different media
@@ -608,6 +666,25 @@ authoritative text is in the ADR; this is the quick index.
   Rust had already replaced it. Steps 1–4 unblock the `ifx` build.
 - **Lesson**: L-07, L-17.
 - **Refs**: ADR 0031.
+
+#### M2 — Flag-independent geometry guards, portable version include (2026-11-11)
+
+- **Delivered**: `parallelGeometryFactor` tests every denominator and
+  logarithm argument before use instead of testing the result for NaN;
+  regression `test_finite_math`; `version_generated.inc` is committed with
+  "unknown" defaults and `Version.F90` includes it unconditionally, so
+  `fpm --compiler ifx` builds the repository as it is (this also avoids an
+  internal compiler error in gcc 13's `__has_include`); `build.sh` is
+  executable and keeps the `-fno-finite-math-only` note.
+- **Evidence**: the regression `test_finite_math`.
+- **Decisions**: the deliberate NaN of the Bessel ratio at z = 0 stays, by
+  contract (the routine is never called with ω = 0).
+- **Open**: the `channel_loaded` transient still differs under
+  `-ffinite-math-only`; `test_bessel` and `test_impedance` assert NaN/Inf
+  results and cannot run under that flag (roadmap, Maintenance and near-term
+  item 2).
+- **Lesson**: L-01, L-17. Closes near-term items 2 (partly), 3 and 4 raised
+  by INV-2026-11-02.
 
 ### Legacy and project decisions
 
@@ -701,3 +778,90 @@ authoritative text is in the ADR; this is the quick index.
   try (roadmap near-term item 1): the spectral Hann window (`signal.window`),
   a smaller `nltDamping`, a longer window with the usable part cropped.
 - **Lesson**: L-01 to L-05, L-15 to L-17.
+
+#### INV-2026-11-03 — NLT record end with step-like sources (solver side closed)
+
+- **Follows**: INV-2026-11-02, whose list of options (spectral window, smaller
+  damping, longer window) this entry settles.
+- **Cause**: a hard current step (`branchNorton`, 187 kA at t = 0) has a
+  band-limited reconstruction whose pre-ringing lands on the last samples of
+  the periodic record, where the undamping factor is largest. The spectral
+  window and the band-edge filter act on the damped spectrum and only confine
+  the growth to the last few samples.
+- **Delivered**: `signal.riseTime` (causal triangular smoothing of the sampled
+  excitation, base 2·`riseTime`, delay `riseTime`; `smoothedWaveform`), with a
+  recommended `nltDamping` of c·T ≈ 6 for step-like sources.
+- **Evidence**: on `marx_lab_2MV` (2048 samples, node N10) the error against
+  a 4× longer record is at most 0.014 % of peak over the first 90 % of the
+  record and 1 % in the last 10 %, against 3e7 % there with the default
+  damping (table in ADR 0032); the plain FFT stays
+  at several percent of wrap-around bias. `labuat_impulse_noarc` with 4096
+  points runs in 4 min, finite and monotone to the last sample, peak 4.64 MV.
+- **Decisions**: the `nltDamping` default is not changed (it would move every
+  NLT result); a symmetric kernel was rejected (it leaves a jump at t = 0).
+- **Open**: roadmap near-term item 1 (usable-fraction report, GUI marker,
+  ports).
+- **Lesson**: L-04, L-05.
+- **Refs**: ADR 0032; theory.md §8.3, §8.6.
+
+#### DC-2026-11-05 — Quasi-stationary (DC) point
+
+- **Delivered**: `"frequencies": {"dc": true}` with optional `dcFrequency`
+  (default 1e-3 Hz): one solve prepended to the sweep at a frequency low
+  enough that ωL ≪ R and displacement currents vanish; `min`/`max` may be
+  omitted for a DC-only study. `common/rod_dc.json`, `test_dc`,
+  `tools/plot_dc.py`, and a **Profile (DC)** tab in the GUI (voltage,
+  longitudinal and transversal current along each chain of segments).
+- **Evidence**: `test_dc`; the one-segment rod reproduces the hand value
+  30.887 Ω of the worked example in the theory to five digits.
+- **Decisions**: a true solve at that frequency, reported at `dcFrequency`,
+  not an ω = 0 special case; below about 1e-5 Hz the air-side conditioning
+  degrades (`rod_air` loses its imaginary part at 1e-6 Hz).
+- **Refs**: theory.md §6.
+
+#### INV-2026-09-30 — Reduced-form equations of theory.md §6 corrected
+
+- **Finding**: the printed `i₂` of the reduced form was in the
+  out-of-segment convention of Portela's paper, and the `Z_g` bracket was
+  printed in a non-symmetric form, `+½(C−D)Z_t⁻¹B`.
+- **Fix**: both restated in the both-into-segment convention; the forms now
+  in §6 reproduce the augmented solve to round-off on random test systems.
+  (This note stood inside the theory text until DOC-2026-11-14.)
+
+### Documentation
+
+#### DOC-2026-11-14 — Theory split into chapters; history moved out of the docs
+
+- **Delivered**:
+  - `theory.md` is now an index; the chapters are in `docs/theory/`
+    (`s01` … `s10`, with §4.5 and §4.6 in their own files), each with a
+    summary, derivation steps and "check yourself" items. New: a reader's
+    guide (prerequisites, reading paths, notation), a worked example (a
+    buried rod by hand against `common/rod_dc.json`) and five diagrams
+    (`figures/theory-*.svg`). Section numbers are unchanged, so every
+    "theory.md §n" citation in code and ADRs still resolves.
+  - Text moved out of the theory: status and dates to this log and the
+    roadmap; legacy-code details to ADR 0017 findings 10–12; the GK-weights
+    story stays in L-06.
+  - Text brought up to date: tubular conductors and other sections as
+    cross-section entries (ADR 0030), the coating layer, cross-medium
+    coupling as an option (§5 and §5.1 merged into one account), the DC
+    point, `riseTime`, and the comparison table of §10.
+  - Roadmap reduced to state and plan; finished items became entries here
+    (P13 item 3, M2, INV-2026-11-03, DC-2026-11-05).
+  - Reference-library review of the sources added after 2026-10-15:
+    references [124]–[143]; [123] moved to the same block so each list
+    renders with its own numbers. Left out as outside the scope
+    (structural, reliability, insulation strength, arrester models,
+    software manuals): the tower-weight reports, IEC 60071, TB 440, the ZnO
+    papers, the air-gap papers, the COMSOL and ATP manuals. The next review
+    starts from sources added after 2026-11-14.
+- **Decisions** (author, 2026-11-14): chapters instead of one file; dates
+  removed from every document and README except ADR date lines, ADR
+  amendment headings and CHANGELOG releases; teaching aids as listed.
+- **Findings on the way**: the hand calculation of the one-segment rod
+  matches the solver to five digits (30.887 Ω); two theory statements were
+  stale (L-18); new validation candidates entered the roadmap (strike to a
+  tall object beside a line, Baba & Rakov [131]; a wire crossing the
+  interface, Burke & Miller [134]).
+- **Lesson**: L-18, L-19.

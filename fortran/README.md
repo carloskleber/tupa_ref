@@ -64,8 +64,8 @@ fpm build --flag "-ffree-line-length-none -fno-range-check -fopenmp"
 
 `bash build.sh` does an optimised `fpm install` to `fortran/bin/Tupa`.
 
-On a toolchain where the plain command does not build or link (verified
-2026-10-01 with gfortran 13, fpm 0.12, Ubuntu, shared LAPACK), the tests need
+On a toolchain where the plain command does not build or link (seen
+with gfortran 13, fpm 0.12, Ubuntu, shared LAPACK), the tests need
 long source lines allowed, OpenMP for the threaded sweep, and LAPACK kept on
 the link line:
 
@@ -75,7 +75,8 @@ fpm test --profile release \
   --link-flag "-Wl,--no-as-needed -llapack -lblas"
 ```
 
-All 18 test programs pass under it (2026-10-01). `test_parallel` checks that a
+The test programs pass under it, except the known cases listed in
+[ROADMAP §3, Maintenance](../docs/ROADMAP.md). `test_parallel` checks that a
 sweep is bit-identical for 1 and N threads; run the suite a few times with
 `OMP_NUM_THREADS=4` after touching `runSweep` or anything it calls.
 

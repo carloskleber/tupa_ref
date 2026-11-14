@@ -47,7 +47,7 @@ release.
 
 - **Distribution form**: source only, built by fpm. No package-registry
   publishing planned; no binary artifacts.
-- **Release process** (proposed 2026-07-05, delegated by the author):
+- **Release process** (proposed, delegated by the author; ADR 0018):
   semantic versioning; **0.1.0** when the Phase 2 validation milestone
   passes (Portela-curve case within tolerance, [BENCHMARKS.md](BENCHMARKS.md));
   annotated git tags plus a `CHANGELOG.md` per release; `version` in

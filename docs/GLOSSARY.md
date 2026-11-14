@@ -92,7 +92,8 @@ entries.
 
 ## Symbols
 
-Mathematical symbols as used in [theory.md](theory.md), with the Fortran
+Mathematical symbols as used in [theory.md](theory.md) (units in the
+[reader's guide](theory/guide.md#notation)), with the Fortran
 identifier(s) that hold them. Types live in `fortran/src/`: `tMesh`
 (Mesh.f90), `tStudy` (Study.f90), `tMaterial` family (Material.f90),
 `mGeometry` (Geometry.f90), `mImpedance` (Impedance.f90).
@@ -121,7 +122,7 @@ identifier(s) that hold them. Types live in `fortran/src/`: `tMesh`
 | $Z_\ell$ | Longitudinal impedance matrix | §4, §6 | `tMesh%Zlong` |
 | $Z_{int}$ | Internal (skin-effect) impedance | §4.3 | `mImpedance%internalImpedance` |
 | $\rho$ | Bessel-ratio argument in $Z_{int}$ | §4.3 | local `rho` in `mImpedance%internalImpedance` |
-| $I_0, I_1$ | Modified Bessel functions (first kind) | §4.3 | SLATEC `zbesi`; local `ratio` in `mImpedance%internalImpedance` |
+| $I_0, I_1$ | Modified Bessel functions (first kind) | §4.3 | `mBessel%besselI0OverI1` (ADR 0031); local `ratio` in `mImpedance%internalImpedance` |
 
 ### Air-soil interface / image method (§5)
 
@@ -175,8 +176,9 @@ identifier(s) that hold them. Types live in `fortran/src/`: `tMesh`
   (`fortran/Tupa.md` is its config).
 - **feh** — fortran-error-handler library; all fatal errors route through
   `mError%raiseError`.
-- **SLATEC** — legacy public-domain numerical library; used for the complex
-  Bessel function `ZBESI` (built from the author's fork by `build.sh`).
+- **SLATEC** — legacy public-domain numerical library, formerly used for the
+  complex Bessel function `ZBESI`; replaced by the in-repo `mBessel`
+  (ADR 0031).
 - **ZGESV** — LAPACK dense complex linear solver (LU with partial
   pivoting); the only solver used (ADR 0003).
 - **Gauss–Kronrod 7/15** — the adaptive quadrature rule pair in

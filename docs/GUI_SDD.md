@@ -204,7 +204,7 @@ does not track Qt3D `QNode` parentage as ownership, so the view layer must
 hold Python references to every Qt3D scene object or the scene is silently
 emptied by the next Python GC cycle.
 
-## 8. Decisions (author, 2026-07-05)
+## 8. Decisions
 
 1. **PySide6 vs. PyQt6** — **PySide6**, for its LGPL license fit with GPLv3.
 2. **3D library** — **Qt3D** (not PyVista/VTK): see §4 for the trade-off
