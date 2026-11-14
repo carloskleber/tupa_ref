@@ -72,7 +72,7 @@ surges with 2 µs and 10 µs fronts. The `torre*` cases have a single signal.
 | `torre2.json` | Cross frame: four 5 m arms at 40 m and at 20 m joined by 20 m verticals, 20 m mast, 10 m rod, injection lead on top | 10 kS/m (near-ideal) | 1 kA, 10 µs, lead top | 75 | 12 s |
 
 Run times are the wall time of the whole CLI run (sweep plus transient),
-release build, `OMP_NUM_THREADS=1`, measured 2026-10-01 with the Phase 10
+release build, `OMP_NUM_THREADS=1`, measured with the Phase 10
 defaults on a 4-core container (before Phase 10, on an AMD Ryzen 5 8500G:
 2 s, 6 s, 3 min, 26 min, 4 min, 104 s, 2 min, 31 s, 24 min, 20 s in table
 order — not the same machine, so the ratios are indicative). With the
@@ -268,7 +268,7 @@ Semantics:
   `segments` follows the target alone. `numerics` reproduces the earlier
   results with `{ "kernel": "double", "imageModel": "ideal" }`. The CLI
   defaults (`--kernel`, `--image-model`) apply to studies that do not state
-  their own. The Julia port reads it too (since 2026-10-01).
+  their own. The Julia port reads it too.
   For a `mesh` the target is applied to `length/rows` rather than the true bar
   length `length/(rows − 1)`, so it is undershot there in all three
   implementations (ADR 0024 §8); `line` and `catenary` are exact.

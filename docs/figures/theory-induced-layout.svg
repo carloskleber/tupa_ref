@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 390" width="700" height="390" font-family="Helvetica, Arial, sans-serif" font-size="14">
+<title>Layout of the lightning-induced voltage base case</title>
+<defs>
+<marker id="a" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#1f4e79"/></marker>
+<marker id="r" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#b03a2e"/></marker>
+<marker id="k" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#333"/></marker>
+</defs>
+<rect width="100%" height="100%" fill="#ffffff"/>
+
+<text x="20" y="28" font-size="15" font-weight="bold" fill="#222">Induced-voltage base case: channel beside a matched line (not to scale)</text>
+<polygon points="40,330 660,330 560,230 140,230" fill="#e6e6e6" stroke="#777"/>
+<text x="50" y="350" fill="#555">perfect ground, z = 0</text>
+<line x1="250" y1="300" x2="250" y2="60" stroke="#b03a2e" stroke-width="5"/>
+<line x1="250" y1="60" x2="250" y2="40" stroke="#b03a2e" stroke-width="5" stroke-dasharray="4 5"/>
+<text x="262" y="70" fill="#b03a2e" font-weight="bold">channel (3 km, loaded wire, speed v)</text>
+<line x1="234" y1="170" x2="234" y2="110" stroke="#b03a2e" stroke-width="2" marker-end="url(#r)"/>
+<text x="180" y="145" fill="#b03a2e">i(z, t)</text>
+<circle cx="250" cy="300" r="5" fill="#b03a2e"/><text x="150" y="318" fill="#222">source at the base</text>
+<line x1="170" y1="200" x2="600" y2="200" stroke="#1f4e79" stroke-width="4"/>
+<text x="400" y="190" fill="#1f4e79" font-weight="bold">line: 1 km, h = 10 m</text>
+<line x1="170" y1="200" x2="170" y2="256" stroke="#1f4e79" stroke-width="3"/><line x1="600" y1="200" x2="600" y2="256" stroke="#1f4e79" stroke-width="3"/>
+<rect x="163" y="240" width="14" height="24" fill="#fff" stroke="#1f4e79" stroke-width="2"/><rect x="593" y="240" width="14" height="24" fill="#fff" stroke="#1f4e79" stroke-width="2"/>
+<text x="92" y="258" fill="#1f4e79">riser + R</text><text x="614" y="258" fill="#1f4e79">R</text>
+<line x1="250" y1="300" x2="330" y2="256" stroke="#555" stroke-width="1.5" stroke-dasharray="5 4"/>
+<text x="296" y="296" fill="#555">d = 50 m</text>
+<line x1="385" y1="205" x2="385" y2="254" stroke="#555" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="20" y="376" fill="#222">The channel acts on the line only through the mutual terms Zₜ, Zℓ. The line is not struck.</text>
+</svg>

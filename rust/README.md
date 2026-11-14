@@ -59,7 +59,7 @@ cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test --r
 
 ## Conformance status
 
-Measured on 2026-10-01 against the fixtures regenerated for ROADMAP Phase 10
+Measured against the fixtures regenerated for ROADMAP Phase 10 (engineering log P10)
 (Linux, `rustc 1.97`; every fixture below, including the ones of earlier
 phases, was re-checked then).
 Tolerance and comparison rule: 1e-6 relative on the row scale
@@ -76,9 +76,9 @@ Tolerance and comparison rule: 1e-6 relative on the row scale
 | `portela1997_ideal` (Phase 10 item 2: `numerics.imageModel: "ideal"`) | `portela1997_ideal_expected.csv` | **match** (2e-17) |
 | `portelaMesh` (Phase 10 item 6: 185 nodes / 200 electrodes, harmonic with `outputs` filter, and scan-fed transient) | `portelaMesh_expected.csv`, `portelaMesh_transient_expected.csv` | **match** (1e-6; `portela_mesh_*` tests) |
 | `portela1997_transient_{interpolated,hann,hann_time,multi,nlt}` (ROADMAP Phase 9) | `*_expected.csv` (transient shape, Fortran output) | **match** — worst 1.5e-8 (`nlt`), 3e-12 the others, under the transient rule (below); `tests/conformance.rs::check_transient_case` |
-| `portela1997_transient`, `silva2025_*_transient` | none | vs fresh Fortran runs (2026-09-30, after Phase 9): 3e-12 and 2e-9 (`silva2025_rho100_transient`) under the transient rule |
+| `portela1997_transient`, `silva2025_*_transient` | none | vs fresh Fortran runs (after Phase 9): 3e-12 and 2e-9 (`silva2025_rho100_transient`) under the transient rule |
 | `silva2025_*`, `grcev_*`, `lima_*`, `poljak_fig4`, `rod_air`, … | none | load, validate, assemble; sweeps run |
-| `channel_{unloaded,loaded,tower,tower_gap}` (ROADMAP Phase 10b, ADR 0025: `channel` element, two-node sources; `channel_loaded` runs the calibration) | `channel_*_expected.csv`; `channel_tower*` also `*_transient_expected.csv` | **match** under the 1e-6 rules (`tests/conformance.rs`: `check_harmonic` and the transient comparison; 2026-10-01) |
+| `channel_{unloaded,loaded,tower,tower_gap}` (ROADMAP Phase 10b, ADR 0025: `channel` element, two-node sources; `channel_loaded` runs the calibration) | `channel_*_expected.csv`; `channel_tower*` also `*_transient_expected.csv` | **match** under the 1e-6 rules (`tests/conformance.rs`: `check_harmonic` and the transient comparison) |
 | `grid_safety` (ROADMAP Phase 11, ADR 0027: `observation` block — surface potentials, GPR, touch and step voltage, step map) | `grid_safety_expected.csv` (harmonic), `grid_safety_potentials_expected.csv` (observation shape `frequency_hz,quantity,id,x,y,z,re,im`) | **match** (2e-8 of the Fortran potentials; `grid_safety_matches_fixtures`) |
 | `linha*`, `torre*` (ADR 0023: `catenary` element, `portela` waveform) | none | load, validate, assemble; vs fresh Fortran runs: `linha1` 3e-10, `linha4` 1e-5 (quadrature-tolerance level, same with zero sag) — see `common/README.md` |
 

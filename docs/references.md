@@ -98,13 +98,7 @@ Numbered as cited in [theory.md](theory.md).
     Delivery*, vol. 12, no. 1, pp. 172–178, Jan. 1997. DOI: 10.1109/61.568238.
     Grounding-grid harmonic impedance curves; a standard validation case
     reproduced by TAGS.
-123. **Moreno, P.; Gómez, P.; Naredo, J. L.; Guardado, J. L.** — "Frequency
-    Domain Transient Analysis of Electrical Networks Including Non-Linear
-    Conditions", *Int. J. Electrical Power & Energy Systems*, vol. 27, no. 2,
-    pp. 139–146, 2005. DOI: 10.1016/j.ijepes.2004.09.003. Nonlinear and
-    switching elements handled in a frequency-domain (NLT) transient
-    solution — a journal precedent for keeping nonlinear elements outside a
-    linear frequency-domain solve (theory.md §8).
+
 
 ## HEM refinements and accuracy studies
 
@@ -579,7 +573,7 @@ below) as the sources of its dispersive-soil routines:
     double-exponential surge (front exponential replaced by
     $e^{-(\alpha t)^2}$), ported as `mSignal`'s `tDoubleExpSignal` with
     `jones = .true.` (theory.md §8). Bibliographic details to be checked
-    against the paper (added 2026-09-30 from the code comment's
+    against the paper (added from the code comment's
     "R.D. Jones 1977").
 
 ## Portela-school lineage
@@ -760,7 +754,7 @@ listed at the end of theory.md §4.6.5; the corrected forms are the ones used.
 
 ## Lightning-induced voltages (addendum): coupling origins, measurements, ground and terrain
 
-Library additions of 2026-10-12 to 2026-10-15 that extend the §4.6 source set:
+Sources that extend the §4.6 source set:
 the original coupling derivation and its first field test, the coupling review,
 measurements, and the effects (lossy and dispersive ground, corona, channel
 inclination, grounding, terrain, sag) that §4.6.3–§4.6.4 list as outside the
@@ -989,7 +983,7 @@ perfect-ground anchor.
 
 ## Cables, encased electrodes and wire-grid surfaces (ROADMAP Phases 12–13, 15)
 
-Added 2026-10-29 with the conductor and cable track (ROADMAP Phase 12 item 2,
+Sources for the conductor and cable track (ROADMAP Phase 12 item 2,
 Phase 13 items 3–5, Phase 15 item 2). DOIs checked against Crossref on the
 same day.
 
@@ -1114,8 +1108,149 @@ number when a phase picks them up):
   currents) as the reference solve for the `sheet` bar-radius decision,
   and as a possible later surface element.
 
+## Lightning parameters, return-stroke models, numerics and line performance (addendum)
+
+123. **Moreno, P.; Gómez, P.; Naredo, J. L.; Guardado, J. L.** — "Frequency
+    Domain Transient Analysis of Electrical Networks Including Non-Linear
+    Conditions", *Int. J. Electrical Power & Energy Systems*, vol. 27, no. 2,
+    pp. 139–146, 2005. DOI: 10.1016/j.ijepes.2004.09.003. Nonlinear and
+    switching elements handled in a frequency-domain (NLT) transient
+    solution — a journal precedent for keeping nonlinear elements outside a
+    linear frequency-domain solve (theory.md §8).
+124. **Berger, K.; Anderson, R. B.; Kröninger, H.** — "Parameters of
+    Lightning Flashes", *Electra*, no. 41, pp. 23–37, 1975. No DOI. The Monte
+    San Salvatore current statistics for downward flashes (log-normal
+    distributions, 95/50/5 % values). The source of the peak-current and
+    steepness percentiles that [75, 76] tabulate and theory.md §4.6.1 uses.
+125. **Rakov, V. A.; Uman, M. A.** — *Lightning: Physics and Effects*,
+    Cambridge University Press, 2003. ISBN 0-521-58327-6. The standard
+    lightning-physics text. Background for the return-stroke speed, channel
+    and current parameters of theory.md §4.5; its Table 4.4 reproduces
+    Berger's negative-flash statistics [124].
+126. **Nucci, C. A.; Diendorfer, G.; Uman, M. A.; Rachidi, F.; Ianoz, M.;
+    Mazzetti, C.** — "Lightning Return Stroke Current Models With Specified
+    Channel-Base Current: A Review and Comparison", *J. Geophysical
+    Research*, vol. 95, no. D12, pp. 20395–20408, 1990. DOI:
+    10.1029/JD095iD12p20395. The original comparison of the BG, TL, MULS,
+    TCS and MTL models with one channel-base current, which [76] summarises.
+    Its channel-base current is not the two-term set of [75].
+127. **Lin, Y. T.; Uman, M. A.; Standler, R. B.** — "Lightning Return Stroke
+    Models", *J. Geophysical Research*, vol. 85, no. C3, pp. 1571–1583,
+    1980. DOI: 10.1029/JC085iC03p01571. Shows that the Bruce–Golde and TL
+    models fail on two-station field records and introduces the three-part
+    current (breakdown pulse, uniform current, corona current) that [80]
+    modifies into MULS. Its eq. (12) carries two printed errors, corrected in
+    [128].
+128. **Rachidi, F.; Nucci, C. A.** — "On the Master, Uman, Lin, Standler and
+    the Modified Transmission Line Lightning Return Stroke Current Models",
+    *J. Geophysical Research*, vol. 95, no. D12, pp. 20389–20393, 1990. DOI:
+    10.1029/JD095iD12p20389. Proof that MULS without its uniform current is
+    the MTL model when the two decay constants are equal (theory.md §4.6.1
+    table).
+129. **Master, M. J.; Uman, M. A.** — "Lightning Induced Voltages on Power
+    Lines: Theory", *IEEE Trans. Power Apparatus and Systems*, vol. PAS-103,
+    no. 9, pp. 2502–2518, Sept. 1984. DOI: 10.1109/TPAS.1984.318405. The
+    first application of the Agrawal equations [82] to a power line, with
+    MULS fields and a wave-tilt horizontal field over lossy ground. Explains
+    the polarity of the induced surge by the bearing of the stroke; its
+    computed amplitudes fall well below the measured ones of [130].
+130. **Master, M. J.; Uman, M. A.; Beasley, W.; Darveniza, M.** —
+    "Lightning Induced Voltages on Power Lines: Experiment", *IEEE Trans.
+    Power Apparatus and Systems*, vol. PAS-103, no. 9, pp. 2519–2529, Sept.
+    1984. DOI: 10.1109/TPAS.1984.318406. The Tampa measurements on a 460 m
+    unenergised line (90 flashes, 349 strokes); polarity depends on the
+    bearing of the stroke.
+131. **Baba, Y.; Rakov, V. A.** — "Voltages Induced on an Overhead Wire by
+    Lightning Strikes to a Nearby Tall Grounded Object", *IEEE Trans.
+    Electromagnetic Compatibility*, vol. 48, no. 1, pp. 212–224, Feb. 2006.
+    DOI: 10.1109/TEMC.2006.870807. FDTD voltages on a 1200 m matched wire
+    (10 m high, 498 Ω) for strikes to a 100 m object and to flat ground at
+    40–200 m, with a tabulated comparison against Rusck's formula. With
+    realistic reflection coefficients the tall object raises the induced
+    voltage. A candidate anchor in which tower, channel and line are one HEM
+    system (theory.md §4.6.3).
+132. **Matsubara, I.; Sekioka, S.** — "Analytical Formulas for Induced Surges
+    on a Long Overhead Line Caused by Lightning With an Arbitrary Channel
+    Inclination", *IEEE Trans. Electromagnetic Compatibility*, vol. 51,
+    no. 3, pp. 733–740, Aug. 2009. DOI: 10.1109/TEMC.2009.2025901.
+    Closed-form Rusck-model voltage and current on an infinite line for an
+    inclined channel, with vertical-channel simplifications. A candidate
+    oracle for the inclined-channel case (theory.md §4.6.3). The approximate
+    peak formula (36) reads a factor 2 low when re-derived from its own
+    eq. (33); check before use.
+133. **Paolone, M.; Rachidi, F.; Borghetti, A.; Nucci, C. A.; Rubinstein, M.;
+    Rakov, V. A.; Uman, M. A.** — "Lightning Electromagnetic Field Coupling
+    to Overhead Lines: Theory, Numerical Simulations, and Experimental
+    Validation", *IEEE Trans. Electromagnetic Compatibility*, vol. 51, no. 3,
+    pp. 532–547, Aug. 2009. DOI: 10.1109/TEMC.2009.2025958. Review of the
+    Agrawal/LIOV approach over lossy ground with its experimental
+    validations (EMP simulators, reduced-scale model [93], natural and
+    triggered lightning). Its eq. (8) misplaces the radical of Sunde's
+    ground impedance, and it calls the 460 m line of [130] "500 m".
+134. **Burke, G. J.; Miller, E. K.** — "Modeling Antennas Near to and
+    Penetrating a Lossy Interface", *IEEE Trans. Antennas and Propagation*,
+    vol. 32, no. 10, pp. 1040–1049, Oct. 1984. DOI: 10.1109/TAP.1984.1143220.
+    The moment-method (NEC) treatment of wires above, below and crossing a
+    lossy half-space with Sommerfeld-integral kernels. The full-wave
+    reference for the cross-medium coupling of theory.md §5.1.
+135. **Michalski, K. A.; Mosig, J. R.** — "Multilayered Media Green's
+    Functions in Integral Equation Formulations", *IEEE Trans. Antennas and
+    Propagation*, vol. 45, no. 3, pp. 508–519, Mar. 1997. DOI:
+    10.1109/8.558666. Review of the Green's functions of plane-stratified
+    media in mixed-potential form, by the transmission-line analogy. The
+    formal basis of the layered-soil route (ROADMAP Phase 15 item 1), beside
+    the complex-image shortcut of [33].
+136. **Moreno, P.; Ramirez, A.** — "Implementation of the Numerical Laplace
+    Transform: A Review", *IEEE Trans. Power Delivery*, vol. 23, no. 4,
+    pp. 2599–2609, Oct. 2008. DOI: 10.1109/TPWRD.2008.923404. IEEE task-force
+    review of the NLT: history, truncation (window) and discretisation
+    (aliasing) errors, and rules for the damping constant, including
+    $c = \ln(N^2)/T$ (theory.md §8.6). Complements [17].
+137. **Nagaoka, N.; Ametani, A.** — "A Development of a Generalized
+    Frequency-Domain Transient Program — FTP", *IEEE Trans. Power Delivery*,
+    vol. 3, no. 4, 1988. DOI: 10.1109/61.194010. A general frequency-domain
+    transient program with a nodal admittance formulation, in which switches
+    and nonlinear elements enter as initial-condition sources. An early
+    precedent for [123] (theory.md §8.7).
+138. **Dommel, H. W.** — "Digital Computer Solution of Electromagnetic
+    Transients in Single- and Multiphase Networks", *IEEE Trans. Power
+    Apparatus and Systems*, vol. PAS-88, no. 4, pp. 388–399, Apr. 1969. DOI:
+    10.1109/TPAS.1969.292459. The founding EMTP paper: Bergeron's method for
+    lines and the trapezoidal rule for lumped elements, giving companion
+    models and a nodal system. The time-domain framework that consumes
+    TUPÃ's output (theory.md §10.1).
+139. **Martí, J. R.** — "Accurate Modelling of Frequency-Dependent
+    Transmission Lines in Electromagnetic Transient Simulations", *IEEE
+    Trans. Power Apparatus and Systems*, vol. PAS-101, no. 1, pp. 147–157,
+    Jan. 1982. DOI: 10.1109/TPAS.1982.317332. The frequency-dependent line
+    model of EMT programs: characteristic impedance and propagation function
+    fitted with real poles and zeros. The same real-pole idea as the
+    pole–residue internal-impedance entries (theory.md §4.3) and the rational
+    models of [26, 27, 69]. Its eqs. (3)–(4) are swapped in print.
+140. **CIGRE Working Group 33.01** — *Guide to Procedures for Estimating the
+    Lightning Performance of Transmission Lines*, CIGRE Technical Brochure
+    63, 1991. No DOI. Stroke parameters, striking distance and shielding,
+    and the backflash method: the classical line-performance procedure that
+    uses a footing impedance as input.
+141. **CIGRE Working Group C4.23** — *Procedures for Estimating the Lightning
+    Performance of Transmission Lines – New Aspects*, CIGRE Technical
+    Brochure 839, 2021. ISBN 978-2-85873-544-0. Successor of [140]: lightning
+    location data, attachment models, and tower and earth-electrode
+    modelling (its ch. 5 is the companion of [72]).
+142. **IEEE Working Group on Estimating the Lightning Performance of
+    Transmission Lines** — "Estimating Lightning Performance of Transmission
+    Lines II — Updates to Analytical Models", *IEEE Trans. Power Delivery*,
+    vol. 8, no. 3, pp. 1254–1267, July 1993. DOI: 10.1109/61.252651. The
+    analytical basis of the FLASH program and IEEE Std 1243: stroke
+    incidence, shielding failure, tower and footing models and a validation
+    on 23 lines.
+143. **Hileman, A. R.** — *Insulation Coordination for Power Systems*,
+    Marcel Dekker, 1999. Book-length treatment of insulation coordination,
+    with the backflash and shielding-failure calculations in which a
+    tower-footing impedance is used.
+
 Companion codes of the same model family, useful as executable cross-checks
-(all inspected July 2026):
+(inspection recorded in ADR 0017):
 
 - **TAGS** (*Transient Analysis of Grounding Systems*, formerly HP-HEM) —
   <https://github.com/pedrohnv/transient-analysis-grounding-systems>, C99,
@@ -1136,10 +1271,9 @@ Companion codes of the same model family, useful as executable cross-checks
 
 ## Related implementation notes
 
-- Two private legacy TUPÃ implementations exist, re-inspected side by side in
-  July 2026 (both outside this repository):
+- Two private legacy TUPÃ implementations exist, re-inspected side by side (ADR 0017; both outside this repository):
   - the **original Matlab code** (`mom_matlab`) — the implementation behind
-    the dissertation [3] and, since July 2026, the **model reference of
+    the dissertation [3] and, by ADR 0017, the **model reference of
     record**: where the two legacy codes disagree, the Matlab decides. It
     already contains the frequency-dependent image reflection coefficient
     Γ(ω) (ideal images are a runtime switch), all three solver layouts of
