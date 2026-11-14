@@ -9,10 +9,11 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cd "$SCRIPT_DIR"
+git update-index --skip-worktree src/version_generated.inc 2>/dev/null || true
 
-# Version banner: write src/version_generated.inc (gitignored) and touch
+# Version banner: write src/version_generated.inc (tracked, skip-worktree) and touch
 # Version.F90 only when it changes, so a new commit recompiles just that file
-# (fpm does not track includes, and -D flags would rebuild everything). The build
+# (the committed default is "unknown"; build.sh marks it skip-worktree so builds do not dirty git status) (fpm does not track includes, and -D flags would rebuild everything). The build
 # date has day granularity for the same reason: it triggers at most one rebuild/day.
 VERSION=$(sed -n 's/^version *= *"\(.*\)"/\1/p' fpm.toml | head -1)
 COMMIT=$(git -C "$SCRIPT_DIR" describe --always --dirty 2>/dev/null || echo unknown)

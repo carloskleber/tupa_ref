@@ -38,6 +38,8 @@ module mGeometry
   !! Collinearity/touching-endpoint tolerance used inside the closed-form
   !! parallel-segment formula, matching the Matlab reference's default
   !! `NUMP` global (`inicvars.m`).
+  real(8), parameter :: TINY_DEN = 1.0d-300
+  !! Smallest denominator magnitude accepted by the closed-form parallel kernel.
 
 contains
 
@@ -249,18 +251,40 @@ contains
         ! calls for a single straight vertical rod crossing the interface).
         g = (la + lb) * log(la + lb) - la * log(la) - lb * log(lb)
       else
+        ! Flag-independent degeneracy guards (ROADMAP near-term item 2): every
+        ! denominator and log argument is tested *before* it is used, so no
+        ! NaN/Inf is ever produced and the check survives -ffinite-math-only
+        ! (-ffast-math), which optimises away a test on the result.
+        if (abs(xi1) <= TINY_DEN .or. abs(x2 - xi1) <= TINY_DEN .or. &
+            abs(x2 - xi2) <= TINY_DEN .or. abs(xi2) <= TINY_DEN) then
+          g = 0.0d0; ok = .false.; return
+        end if
+        if (.not. (isPosFinite((x2 - xi2) / (x2 - xi1)) .and. isPosFinite(-(x2 - xi1) / xi1) &
+                   .and. isPosFinite(-xi2 / (x2 - xi2)))) then
+          g = 0.0d0; ok = .false.; return
+        end if
         g = x2 * log((x2 - xi2) / (x2 - xi1)) + xi1 * log(-(x2 - xi1) / xi1) &
           + xi2 * log(-xi2 / (x2 - xi2))
       end if
     else
+      if (.not. (isPosFinite(d21 + l21) .and. isPosFinite(d22 + l22) .and. isPosFinite(d11 - xi1) &
+                 .and. isPosFinite(d12 - xi2) .and. isPosFinite(d22 - l22) .and. isPosFinite(d21 - l21))) then
+        g = 0.0d0; ok = .false.; return
+      end if
       g = d11 - d12 - d21 + d22 + x2 * log((d22 + l22) / (d21 + l21)) &
         + xi1 * log((d11 - xi1) / (d21 - l21)) + xi2 * log((d22 - l22) / (d12 - xi2))
     end if
 
-    ok = (g == g) .and. (abs(g) < huge(1.0d0))
-    !! NaN never equals itself; Inf fails the huge() bound. Mirrors
-    !! barraquad's isnan(fg) fallback-to-quadrature check.
+    ok = .true.
   end subroutine parallelGeometryFactor
+
+  pure logical function isPosFinite(x) result(r)
+    !! x is a positive, finite log argument. Plain comparisons on finite
+    !! operands: valid under -ffinite-math-only (no NaN/Inf is ever formed).
+    real(8), intent(in) :: x
+    r = x > tiny(1.0d0) .and. x < huge(1.0d0)
+  end function isPosFinite
+
 
   ! =====================================================================
   ! Distances and direction cosines
