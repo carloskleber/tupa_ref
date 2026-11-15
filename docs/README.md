@@ -1,23 +1,32 @@
 # TUPÃ documentation
 
-| Document | Purpose |
-| --- | --- |
-| [theory.md](theory.md) | **Normative physics reference**: HEM formulation, conventions, impedance integrals, image method, nodal system, dispersive soil, validation anchors, positioning vs. companion codes and neighbouring model families |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Architectural vision: components, layers, flows, data management, state, extension mechanisms, known debts |
-| [CONVENTIONS.md](CONVENTIONS.md) | Coding and project conventions (absorbs the retired CLAUDE.md) |
-| [ROADMAP.md](ROADMAP.md) | Current state and the **future plan** (open items per phase, near-term work, open decisions) |
-| [engineering_log.md](engineering_log.md) | What was done in each phase, the decision register and the lessons learned (L-nn); history moved here from the roadmap |
-| [BENCHMARKS.md](BENCHMARKS.md) | Validation anchors, execution status, cross-code benchmark setup, comparison policy, Phase 10 performance measurements |
-| [validation/](validation/) | Case-by-case comparisons against published papers' own figures (digitized plots, not tabulated data), the TAGS cross-code check, the Phase 10 image-model study, internal-consistency checks of voltage/two-node sources, windows and the Phase 11 potential outputs, and the scripts that regenerate them |
-| [DISTRIBUTION.md](DISTRIBUTION.md) | Build chain, dependency inventory, packaging/release, licensing, security surface |
-| [GLOSSARY.md](GLOSSARY.md) | Main model and software terms |
-| [references.md](references.md) | Bibliography, numbered as cited in the theory doc |
-| [GUI_SDD.md](GUI_SDD.md) | **Proposal** (not accepted as an ADR): shared GUI frontend design — tree/3D input view, 1D/2D output plots. Phases G0/G1 implemented in [../gui/](../gui/README.md) |
-| [adr/](adr/) | Architecture Decision Records |
-| [object-model.plantuml](object-model.plantuml) | Class diagram of the language-agnostic object model |
+Each kind of information has one home. If you are about to write something
+down, this table says where it goes; the other documents link to it instead
+of repeating it.
 
-Reading order for newcomers: root [README](../README.md) → GLOSSARY →
-ARCHITECTURE → theory.md; contributors add CONVENTIONS and ROADMAP.
+| Kind of information | Document |
+| --- | --- |
+| **The model** (physics, equations, conventions, validation anchors) | [theory.md](theory.md) — index of the chapters in [theory/](theory/), with a [reader's guide](theory/guide.md) and a [worked example](theory/worked-example.md). Normative |
+| **State and plan** (what exists now, what is open, in what order) | [ROADMAP.md](ROADMAP.md) |
+| **History and lessons** (what was done, when, with what evidence; lessons `L-nn`; decision register) | [engineering_log.md](engineering_log.md) — the only place for dates |
+| **Decisions** (why it was decided that way) | [adr/](adr/), index below |
+| **Measured comparisons** (against papers, other codes, closed forms) | [validation/](validation/README.md); status and policy in [BENCHMARKS.md](BENCHMARKS.md) |
+| **What changes for users** between releases | [../CHANGELOG.md](../CHANGELOG.md) |
+| **Software structure** (components, flows, data, extension points, debts) | [ARCHITECTURE.md](ARCHITECTURE.md); class diagram in [object-model.plantuml](object-model.plantuml); the Fortran run sequence in [fortran_workflow.md](fortran_workflow.md) |
+| **Rules** (coding, documentation, testing) | [CONVENTIONS.md](CONVENTIONS.md) |
+| **Build, dependencies, release, licensing** | [DISTRIBUTION.md](DISTRIBUTION.md) |
+| **Terms and symbols** (and the code identifier of each symbol) | [GLOSSARY.md](GLOSSARY.md) |
+| **Bibliography** | [references.md](references.md), numbered as cited in the theory |
+| **Input format and cases** (the public contract) | [../common/README.md](../common/README.md) |
+| **Per-implementation build, test and conformance status** | [../fortran/README.md](../fortran/README.md), [../rust/README.md](../rust/README.md), [../julia/README.md](../julia/README.md), [../gui/README.md](../gui/README.md) |
+| **Impulse-laboratory application** | [marx_generator.md](marx_generator.md), [marx_generator_requirements.md](marx_generator_requirements.md) |
+| **GUI design proposal** | [GUI_SDD.md](GUI_SDD.md) (not an ADR; phases G0/G1 implemented in `gui/`) |
+
+Reading order for newcomers: root [README](../README.md) → the theory's
+[reader's guide](theory/guide.md) and [worked example](theory/worked-example.md)
+→ [GLOSSARY](GLOSSARY.md) → [ARCHITECTURE](ARCHITECTURE.md). Contributors add
+[CONVENTIONS](CONVENTIONS.md), the [ROADMAP](ROADMAP.md) and the lessons of
+the [engineering log](engineering_log.md).
 
 ## ADR index
 
@@ -37,10 +46,10 @@ ARCHITECTURE → theory.md; contributors add CONVENTIONS and ROADMAP.
 | [0012](adr/0012-results-json-schema.md) | Results JSON schema v0 (harmonic sweep) | Accepted |
 | [0013](adr/0013-input-schema-sources-frequencies-outputs.md) | Input schema: `sources`/`frequencies`/`outputs` blocks | Accepted |
 | [0014](adr/0014-fft-implementation.md) | In-repo double-precision radix-2 FFT | Accepted |
-| [0015](adr/0015-time-domain-signal-schema.md) | Input schema: `signal`; transient results schema v0 (amended: Heidler `terms`; 2026-09-30 Phase 9: `sources`, `window`, `transferFunction`, `transform`/`nltDamping`, `sine`, transient fixtures) | Accepted |
+| [0015](adr/0015-time-domain-signal-schema.md) | Input schema: `signal`; transient results schema v0 (amended: Heidler `terms`; Phase 9: `sources`, `window`, `transferFunction`, `transform`/`nltDamping`, `sine`, transient fixtures) | Accepted |
 | [0016](adr/0016-voltage-sources-by-superposition.md) | Voltage sources by unit-injection superposition; `voltage` in sources | Accepted |
-| [0017](adr/0017-legacy-reinspection-findings.md) | Legacy re-inspection findings (July 2026) | Recorded |
-| [0018](adr/0018-author-interview-decisions-2026-07.md) | Author-interview decisions (2026-07-05) | Accepted |
+| [0017](adr/0017-legacy-reinspection-findings.md) | Legacy re-inspection findings | Recorded |
+| [0018](adr/0018-author-interview-decisions-2026-07.md) | Author-interview decisions | Accepted |
 | [0019](adr/0019-air-medium-hardcoded-vacuum.md) | Air medium hardcoded as vacuum (no JSON `air` block) | Accepted |
 | [0020](adr/0020-grid-mesh-element.md) | Grid/mesh element (`"type": "mesh"`) and FIFO element order | Accepted |
 | [0021](adr/0021-transient-antialias-filter.md) | Optional anti-aliasing filter for transient synthesis | Accepted |
@@ -50,10 +59,11 @@ ARCHITECTURE → theory.md; contributors add CONVENTIONS and ROADMAP.
 | [0025](adr/0025-lightning-channel-and-two-node-sources.md) | Lightning channel element (`"type": "channel"`), two-node sources (`returnNode`, transient `quantity`) and speed calibration | Accepted |
 | [0026](adr/0026-independent-transient-signals.md) | Independent transient signals (`signal.signals`): one transfer function, one response set per signal; multi-terminal solve | Accepted |
 | [0027](adr/0027-observation-potentials-and-safety-outputs.md) | Grounding-safety outputs: the `observation` block (points, surface grid, touch, step) and `<case>_potentials.*` results | Accepted |
+| [0028](adr/0028-induced-voltages-and-lumped-branch.md) | Lightning-induced voltages: the lumped `branch` element and the Nucci anchor | Accepted |
+| [0029](adr/0029-cross-medium-coupling.md) | Air–soil cross-medium coupling by a transmitted-field term (opt-in) | Accepted |
+| [0030](adr/0030-cross-section-internal-impedance.md) | Cross-section internal-impedance entries (`crossSections`, equivalent radius) | Accepted |
+| [0031](adr/0031-remove-slatec-native-bessel.md) | Remove SLATEC: native I₀/I₁ ratio for the internal impedance | Accepted |
+| [0032](adr/0032-excitation-rise-time.md) | Optional excitation rise time (`signal.riseTime`) against the NLT record-end artefact | Accepted |
 
-Language-specific build documentation stays with each implementation
-(e.g. [../fortran/README.md](../fortran/README.md),
-[../rust/README.md](../rust/README.md)); FORD API docs are
-generated from the Fortran sources (`fortran/Tupa.md`). The shared JSON
-cases and schema live in [../common/](../common/README.md). The solver-
-agnostic GUI ([GUI_SDD.md](GUI_SDD.md)) lives in [../gui/](../gui/README.md).
+FORD API documentation is generated from the Fortran sources
+(`fortran/Tupa.md`).

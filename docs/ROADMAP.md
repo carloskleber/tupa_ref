@@ -2,23 +2,23 @@
 
 Reference electromagnetic transient solver (HEM / Method of Moments).
 Fortran implementation first; object model and test cases shared with the
-Julia port (Phase 8J, `julia/`) and the Rust implementation (Phase 8, `rust/`; see
-[ADR 0002](adr/0002-language-agnostic-object-model.md)).
+Rust implementation (`rust/`) and the Julia port (`julia/`)
+([ADR 0002](adr/0002-language-agnostic-object-model.md)).
 
-This roadmap supersedes the earlier `implementation-plan.md` /
-`IMPLEMENTATION_PLAN.md`. It is based on a side-by-side analysis of this
-repository against the legacy (private) implementations and the theory
-consolidated in [theory.md](theory.md). Since July 2026 the **original
-Matlab code** (the dissertation implementation) is the **model reference of
-record** — the re-inspection findings live in
-[ADR 0017](adr/0017-legacy-reinspection-findings.md) (§8 below is a stub),
-and the author-interview decisions of 2026-07-05 in
-[ADR 0018](adr/0018-author-interview-decisions-2026-07.md) (§9 stub).
+This document holds two things: the **current state** (§1) and the **plan**
+(§3 onward). It holds no history. What was done, when, with what evidence and
+what was learned is in the [engineering log](engineering_log.md); why
+something was decided is in the [ADRs](adr/); the model is in
+[theory.md](theory.md). When an item here is finished, it is removed from
+this file and recorded in the log.
 
 **MVP scope**: tower-footing grounding under lightning. Full transmission
-lines and substation grids are the follow-on application tier (ADR 0018).
-The project's primary role is a **scientifically citable reference
-implementation**; usability as an engineering tool is secondary.
+lines and substation grids are the follow-on application tier
+([ADR 0018](adr/0018-author-interview-decisions-2026-07.md)). The project's
+primary role is a **scientifically citable reference implementation**;
+usability as an engineering tool is secondary. The original Matlab code is
+the model reference of record
+([ADR 0017](adr/0017-legacy-reinspection-findings.md)).
 
 ---
 
@@ -27,65 +27,74 @@ implementation**; usability as an engineering tool is secondary.
 | Area | State |
 | --- | --- |
 | Object model | `tStudy → tStructure → tElement/tMaterial → tNode/tElectrode`, `tMesh`; FORD-documented |
-| Geometry layer | `Geometry.f90`: mean/image distances, direct+image geometry factors (`g`, closed-form `g_self`; mHEM single-integral quadrature by default since Phase 10, the nested 2-D path selectable as oracle), direction cosines; quadrature cache |
-| Impedance fill | ADR 0009 interface: `calcZSelf`/`calcZMutual` apply all theory factors internally — image parcels carry the frequency-dependent `Γ(ω)` by default since Phase 10 (ideal ±1 selectable); solid-conductor Bessel internal impedance (native `mBessel` since 2026-10-29, ADR 0031) or a declared cross-section entry (`crossSections`, ADR 0030); embedded `lumped` R-L-C in a `line` segment (Phase 10e) |
-| Solver | Augmented `Zeq` assembly + `ZGESV` (ADR 0003); multi-RHS variant for superposition (ADR 0016); frequencies solved in parallel on thread-private meshes, bit-identical to serial (Phase 10 item 4) |
-| Sources | Current injections at named nodes (ADR 0010); ideal voltage sources via unit-injection superposition, mixable with current sources (ADR 0016); several simultaneous transient injections, each with its own waveform (Phase 9 item 4) |
-| Materials | `tLinear`, `tPortelaSoil` (ADR 0007), `tVisacroAlipioSoil` (mean set, theory.md §7); air hardcoded to vacuum (ADR 0019); `tCrossSection` (`poleResidue` / `table` internal-impedance entries, ADR 0030, Fortran only) |
-| Elements | `line`, `catenary`, `mesh` (ADR 0020), `channel` (ADR 0025), `branch` (ADR 0028), `plane` wire-grid rectangle (Phase 10e) |
-| Sweep & results | `runSweep` (OpenMP over frequencies) + `tResult` storage, `inputImpedance`/`maxVoltageMagnitude`; CSV/JSON writers (ADR 0012) with `outputs` filtering; surface potentials, GPR, touch and step voltage from the solved currents (`observation` block, `mPotentials`, `<case>_potentials.*`, Phase 11, ADR 0027) |
-| Time domain | `mSignal` (Heidler — legacy 6-term [38] and standard parametrised form [37, 39]; double-exp ± Jones; Portela concave front; switched-on sine), tail taper, in-repo FFT (ADR 0014), transfer-function transient driver (`mTransient`) with opt-in scan-fed (pchip-interpolated) transfer function, half-Hann window (spectral or time placement), multiple injections and Numerical Laplace Transform (Phase 9, ADR 0015 amendment 2026-09-30) |
-| JSON I/O | json-fortran parser (ADR 0006, superseded-in-place 2026-08-01); schema v1: structure + `sources`/`frequencies`/`outputs` (ADR 0013) + `signal` (ADR 0015) + voltage sources/Heidler terms (ADR 0016/0015 amendment) + `mesh` composite element (ADR 0020) + optional `signal.antialiasStart` (ADR 0021) + optional `observation` block (ADR 0027) + `catenary` element and `portela` waveform (ADR 0023) + `signal.sources`/`window`/`transferFunction`/`transform`/`nltDamping` and the `sine` waveform (ADR 0015 amendment 2026-09-30); the optional `numerics` block (`kernel`, `imageModel`, `maxSegmentLength`, `crossMedium` — ADR 0029) and optional `segments` (ADR 0024); pre-run reference validation (`validateStudyReferences`) and CLI verbosity levels |
-| Cases & tests | `common/` regression fixtures (golden; four harmonic — `portela1997`, `rod`, `grid`, `portela1997_ideal` — five transient since Phase 9, and the 32 × 32 m `portelaMesh` harmonic + scan-fed transient since Phase 10; **all regenerated once for Phase 10**; `grid_safety` harmonic + observation since Phase 11) plus ten cases imported from the legacy Matlab case library (`linha*.json`, `torre*.json`, ADR 0023), 19 test programs under `fpm test --profile release` — all green except `test_common_cases` on the `channel_loaded` fixture, which predates the case's later change to 2048 samples and fails in Fortran and Rust alike until regenerated (re-run 2026-10-01, gfortran 13; `test_impedance`'s coincident-segment divergence check is defeated by `-ffast-math`, as before). Plain `fpm test` needs `-ffree-line-length-none` and, on shared LAPACK, `--no-as-needed -llapack -lblas` (fortran/README.md) |
-| Validation | [`docs/validation/`](validation/README.md): digitized published-curve comparisons — Grcev et al. 2018 Fig. 12 (6 cases), Lima et al. 2020 Figs. 6/7, Poljak & Doric 2006 Fig. 4, Silva et al. 2025 Figs. 3/4 (harmonic + transient) — accepted as the release-bar oracle (§4) |; since Phase 10 also the cross-code check against TAGS ([`validation/tags-xval.md`](validation/tags-xval.md): ≤ 0.3 % below 1 MHz on six cases) and the effect of the `Γ(ω)` default on every comparison ([`phase10-image-model.md`](validation/phase10-image-model.md))
-| GUI | Python/PySide6 view-only module (`gui/`, ADR 0011): study tree, 3-D view, results/transient plots |
-| Other implementations | **Julia port (`julia/`, contributed 2026-09-29, realigned 2026-09-30, Phase 8J)** — module-by-module mirror of the Fortran code, golden fixtures met at 1e-6 and every runnable `common/` case within 1e-6 of Rust/Fortran (bar two round-off rows Rust shares); **Rust port (`rust/`, 2026-09-30, [ADR 0022](adr/0022-rust-implementation.md))** — harmonic conformance met on the three golden fixtures at 1e-6, transient path implemented, Phase 8 item 1 (Fortran fixture widening) still open; **Phase 10 update 2026-10-01: Rust implements the whole phase and matches every regenerated fixture (worst 1.3e-10 harmonic, 1.5e-8 NLT); Julia ported items 1–3 and 6 the same day** (single-integral kernel, Γ(ω) images, `numerics` block; the five harmonic fixtures it can run match at 1e-6, worst 2.4e-10; the threaded sweep stays unported) — it still lags on Phase 9 and Phase 10b |
+| Geometry layer | mean and image distances, direct and image geometry factors (single-integral quadrature by default, nested 2-D path selectable as oracle, closed forms for self and parallel pairs), direction cosines, quadrature cache (theory.md §4.1–4.2) |
+| Impedance fill | all theory factors applied inside `calcZSelf`/`calcZMutual` (ADR 0009); image terms with `Γ(ω)` by default, ideal ±1 selectable (ADR 0024); internal impedance from the solid-conductor Bessel formula (native `mBessel`, ADR 0031) or a declared cross-section entry (ADR 0030); `lumped` R-L-C in a `line` segment; `coating` layer on `line`/`catenary`; opt-in cross-medium coupling (ADR 0029) |
+| Solver | augmented `Zeq` assembly + `ZGESV` (ADR 0003); multi-RHS for superposition (ADR 0016); frequencies in parallel, bit-identical to serial; quasi-stationary DC point (`frequencies.dc`) |
+| Sources | current injections at named nodes (ADR 0010); two-node sources (ADR 0025); ideal voltage sources by superposition (ADR 0016); several transient injections or independent signals (ADR 0026) |
+| Materials | `tLinear`, `tPortelaSoil` (ADR 0007), `tVisacroAlipioSoil` (mean set); air is vacuum (ADR 0019); `tCrossSection` entries (`poleResidue`, `table`) |
+| Elements | `line`, `catenary`, `mesh` (ADR 0020), `channel` (ADR 0025), `branch` (ADR 0028), `plane` wire grid, `ring` |
+| Sweep and results | `runSweep` + `tResult`; CSV/JSON writers with `outputs` filtering (ADR 0012); surface potentials, GPR, touch and step voltage (`observation`, ADR 0027) |
+| Time domain | waveforms (Heidler, double exponential ± Jones, Portela, sine, step, `branchNorton`), `riseTime` smoothing (ADR 0032), tail taper, band-edge filter (ADR 0021), Hann window, per-bin or scan-fed transfer function, FFT (ADR 0014) or NLT (theory.md §8) |
+| Input format | JSON schema v1, described in [common/README.md](../common/README.md); pre-run reference validation; CLI verbosity levels |
+| Cases and tests | golden fixtures in `common/` (harmonic, transient, potentials) compared at 1e-6; cases imported from the legacy library (ADR 0023); the Fortran test programs run under `fpm test --profile release`. Known failures are listed in §3 "Maintenance" |
+| Validation | [validation/](validation/README.md): digitised published curves (Grcev, Lima, Poljak, Silva), the TAGS cross-code check, the channel and induced-voltage anchors; status in [BENCHMARKS.md](BENCHMARKS.md) |
+| GUI | Python/PySide6 view-only module (`gui/`, ADR 0011): study tree, 3-D view, results, transient and DC-profile plots |
+| Rust | conforming on the golden fixtures through Phases 9–11 and 10b; lag list in Phase 8 item 10 and [rust/README.md](../rust/README.md) |
+| Julia | conforming on the harmonic fixtures and the Phase 10 kernel; lag list in Phase 8J item 9 and [julia/README.md](../julia/README.md) |
 
-History (what was done, decisions, lessons) lives in the
-[engineering log](engineering_log.md); this roadmap keeps the state and the
-**future plan**. The early gap analysis (nine gaps against the legacy pipeline)
-is closed — see log entries P0–P3 and lessons L-08.
+Which language implements which feature is stated once, in the conformance
+tables of [rust/README.md](../rust/README.md) and
+[julia/README.md](../julia/README.md). "Fortran only" below means the other
+loaders refuse the input with an explicit error (log L-12).
 
 ---
 
 ## 2. Guiding principles
 
 - **Theory doc is normative** — code conforms to [theory.md](theory.md);
-  papers are mapped through its §2 conventions table (ADR 0008).
+  papers are mapped through its §2 conventions (ADR 0008).
 - **Correctness before performance** — every physics routine lands with a test
   against an analytical value or a published curve.
 - **Reference quality** — prefer the simple, auditable path (full `Zeq` solve,
   ADR 0003) over optimisations until validated.
 - **Language-agnostic contracts** — JSON schema + `common/` cases are the
   cross-implementation interface (ADR 0002, 0006).
-
+- **One home per kind of information** — model in the theory, state and plan
+  here, history and lessons in the log, decisions in the ADRs (log L-18).
 
 ---
 
 ## 3. Phases
 
 Item numbers are stable — code comments cite them ("ROADMAP Phase 3
-item 4"). A phase that is finished is a single line pointing to its entry in
-the [engineering log](engineering_log.md), which keeps the original item
-numbers; only open work is detailed here.
+item 4"). A finished phase or item appears here only as a pointer to its
+entry in the [engineering log](engineering_log.md), which keeps the original
+item numbers. Only open work is detailed. Effort is rated S/M/L (S ≈ days,
+M ≈ a focused week-scale task, L = new theory or object-model work).
 
-### Closed phases
+### Closed phases and items
 
-| Phase | Subject | Closed | Log entry |
-| --- | --- | --- | --- |
-| 0 | Convention audit and cleanup | 2026-07 | P0 |
-| 1 | Geometry layer | 2026-07 | P1 |
-| 2 | End-to-end single-frequency solve | 2026-07 | P2 |
-| 3 | Frequency sweep, results, output | 2026-07 | P3 |
-| 4 | Dispersive soil | 2026-07 | P4 |
-| 5 | JSON I/O and common cases | 2026-07 | P5 |
-| 6 | Sources and time domain | 2026-07 | P6 |
-| 7 | Sources, signals and composite elements | 2026-09-30 | P7 |
-| 9 | Transient pipeline completion | 2026-09-30 | P9 |
-| 10 | Reference kernel, image model, performance (v0.6.0) | 2026-10-01 | P10 |
-| 10c | Independent transient signals | 2026-10-01 | P10c |
-| 12.3 | Series RLC (= `branch`, pulled into 10d) | 2026-10-12 | P10d |
-| 13.1 | `catenary` | 2026-09-30 | P13 item 1 |
+| Phase | Subject | Log entry |
+| --- | --- | --- |
+| 0 | Convention audit and cleanup | P0 |
+| 1 | Geometry layer | P1 |
+| 2 | End-to-end single-frequency solve | P2 |
+| 3 | Frequency sweep, results, output | P3 |
+| 4 | Dispersive soil | P4 |
+| 5 | JSON I/O and common cases | P5 |
+| 6 | Sources and time domain | P6 |
+| 7 | Sources, signals and composite elements | P7 |
+| 9 | Transient pipeline completion | P9 |
+| 10 | Reference kernel, image model, performance | P10 |
+| 10c | Independent transient signals | P10c |
+| 12 item 1 | `ring` element (Fortran) | P12 item 1 |
+| 12 item 3 | Series RLC (= `branch`) | P10d |
+| 13 item 1 | `catenary` | P13 item 1 |
+| 13 item 2 | Cross-section internal impedance (Fortran) | P13 item 2 |
+| 13 item 3 | Coating layer on `line`/`catenary` (Fortran) | P13 item 3 |
+| — | Quasi-stationary DC point (Fortran, GUI) | DC-2026-11-05 |
+| — | NLT record end with step-like sources (Fortran) | INV-2026-11-03 |
+| — | Flag-independent geometry guards, portable version include | M2 |
 
 ### Phase 8 — Rust implementation — **items 2–8 done; items 1 and 9 open**
 
@@ -98,7 +107,7 @@ Delivered and decided: log entry P8 ([ADR 0022](adr/0022-rust-implementation.md)
    itself; a small voltage-source case; a single-cell `mesh` case; reduced
    `portela` and `alipio-visacro` soil cases; `rod_air` once its air-side
    physics is signed off; the Fortran-side structure dump; **cut the
-   conformance tag** (proposed v0.6.0, now on the Phase 10 fixture set).
+   conformance tag** (on the current fixture set).
    This closes Milestone 8b and gives the Julia port a sharper target.
    Write the ADR. Regenerate the stale `channel_loaded` fixture (log L-13).
 9. **Cross-implementation report** — **S**, **partial**. `docs/validation/
@@ -155,72 +164,73 @@ conformance tag; item 5 refreshed; item 7 report including Julia.
 
 ### Phase 9 — open remainders
 
-Delivered: log entry P9. Left open: voltage sources in the transient driver and
-the multi-RHS per-frequency solve (current injections only today); the single
-exponential and impulse/step waveforms, ported when a case needs them.
+Voltage sources in the transient driver and the multi-RHS per-frequency solve
+(current injections only today); the single exponential and impulse
+waveforms, ported when a case needs them.
 
 ### Phase 10 — open remainders
 
-Delivered: log entry P10. Left open: a TAGS **time-domain** comparison, which is
-the precondition for revisiting the NLT default (not flipped, ADR 0024 §7); the
-mesh segment target undershoots in all three implementations (ADR 0024 §8).
+A TAGS **time-domain** comparison, which is the precondition for revisiting
+the NLT default (ADR 0024 §7); the mesh segment target undershoots in all
+three implementations (ADR 0024 §8).
 
 ### Phase 10b — Lightning channel — open remainder
 
-Delivered: log entry P10b. **Open:** the Ishii reduced-scale induced-voltage
-case as reproduced by Pokharel et al. (all-air geometry) — the measured waveform
-exists here only as a description, so it needs a digitised figure; the Julia
-port. Out of scope: field vectors from the channel (Phase 11 remainder),
-induced voltages over lossy ground (Phase 10d), the HEM option of an enlarged
-transversal radius (theory.md §4.5, optional).
+The Ishii reduced-scale induced-voltage case as reproduced by Pokharel et al.
+(all-air geometry): it needs the measured waveform as a digitised figure. The
+Julia port. Optional: the HEM option of an enlarged transversal radius
+(theory.md §4.5).
 
 ### Phase 10d — Induced voltages — open remainder
 
-Delivered: log entry P10d ([ADR 0028](adr/0028-induced-voltages-and-lumped-branch.md)).
-
-4. **Open remainder**: a total-voltage option for harmonic output and for
-   incident sources other than the loaded channel; the lossy-ground
-   horizontal-field correction (Norton / Cooray–Rubinstein, Phase 14 item 2
-   territory — Cooray–Rubinstein is the first target, Tossani et al. [89]); a
+4. A total-voltage option for harmonic output and for incident sources other
+   than the loaded channel; the lossy-ground horizontal-field correction
+   (Cooray–Rubinstein first, Tossani et al. [89]; theory.md §4.6.4); a
    branch-current output; the Rust and Julia ports.
-5. **Candidates, unscheduled** (2026-10-15 library review, theory.md §4.6.3,
-   §9 item 9): a measured anchor from field or scale-model data (Rubinstein
-   [83], Barker [84], Piantini [93]); conductive coupling through the line's
-   grounding against Napolitano [92] (needs buried electrodes but no Phase 14
-   work); an inclined-channel case against Natsui [91]; a sagged-line
-   induced-voltage case against Stracqualursi [96]. Further candidates: the
-   Tampa 1979 measurements [124, 125] as a measured anchor; the closed form
-   of [126] as a check for the inclined channel; [127] for a tall struck
-   object.
+5. **Candidates, unscheduled** (theory.md §4.6.3, §9 item 9):
+   - a measured anchor from field or scale-model data: Rubinstein [83],
+     Barker [84], Piantini [93], or the Tampa line of Master et al.
+     [129, 130] with the validations reviewed by Paolone et al. [133];
+   - **a strike to a tall object beside the line** against Baba & Rakov
+     [131]: same wire height and matched termination as the Nucci case, a
+     100 m object, tabulated FDTD and Rusck values. Tower, channel and line
+     are one system, so it needs no new code, only a case and a comparison
+     script — **S**, the cheapest next anchor;
+   - an inclined-channel case against Natsui [91] and the closed forms of
+     Matsubara & Sekioka [132] (mind the factor 2 in their eq. (36),
+     references.md);
+   - conductive coupling through the line's grounding against Napolitano
+     [92] (needs buried electrodes and the cross-medium option);
+   - a sagged-line induced-voltage case against Stracqualursi [96].
 
 ### Phase 10e — Impulse laboratory — open remainder
 
-Delivered: log entry P10e ([marx_generator.md](marx_generator.md)).
-
-3. **Branch current in the transient driver** — API only; expose it in JSON and
-   the writers (also the Phase 10d item 4 remainder).
+3. **Branch current in the transient driver** — API only; expose it in JSON
+   and the writers (also the Phase 10d item 4 remainder).
 - A charged embedded capacitor (series EMF in a `lumped` segment).
-- Golden fixtures for the laboratory cases (`marx_lab_2MV*`, `labuat_impulse*`),
-  once the near-term items below settle the LabUAT amplitudes.
-- Rust and Julia follow-along: their loaders refuse `plane`, `lumped` and the
-  new waveforms.
+- Golden fixtures for the laboratory cases (`marx_lab_2MV*`,
+  `labuat_impulse*`), now that the record-end artefact is controlled (log
+  INV-2026-11-03); they need `riseTime` in the ports first, or Fortran-only
+  fixtures.
+- Rust and Julia follow-along: `plane`, `lumped`, the `step` and
+  `branchNorton` waveforms, `riseTime`.
 
 ### Phase 11 — Grounding-safety outputs — open remainder
 
-Delivered: log entry P11 ([ADR 0027](adr/0027-observation-potentials-and-safety-outputs.md)).
-**Open:** the electric field vector (`−∇ψ − jωA`) and path voltages along an
-arbitrary route (the legacy `camposdif`/`calctensoes` line integral); transient
-maps — the potential is linear in the solved currents, so a per-site transfer
-function through the Phase 9 driver is the natural next step; showing the
-potentials in the GUI; the Julia port.
+The electric field vector (`−∇ψ − jωA`) and path voltages along an arbitrary
+route (the legacy `camposdif`/`calctensoes` line integral); transient maps —
+the potential is linear in the solved currents, so a per-site transfer
+function through the transient driver is the natural next step (theory.md
+§3.1); showing the potentials in the GUI; the Julia port.
 
 ### Phase 12 — Tower-footing electrode library
 
-1. **`ring`** — done 2026-10-30 (log P12 item 1); open: Rust and Julia loaders.
+1. **`ring`** — Fortran and GUI done; open: Rust and Julia loaders.
 2. **Tubular conductor** (metallic pipes, steel poles) — **S**.
-   *Re-scoped 2026-10-29 (author): a tube is a **cross-section entry**
-   ([ADR 0030](adr/0030-cross-section-internal-impedance.md)), not a new
-   element and not a wall-thickness field on `tLine`.* A pipe or pole is a
+   A tube is a **cross-section entry**
+   ([ADR 0030](adr/0030-cross-section-internal-impedance.md), theory.md
+   §4.3), not a new element and not a wall-thickness field on `tLine`. A
+   pipe or pole is a
    `line`/`catenary` that names a tube entry in `crossSection`.
    - **Entry.** A `poleResidue` fit of the Schelkunoff external-return
      formula (theory.md §4.3 [40]) with `equivalentRadius = r₀`. The
@@ -250,78 +260,40 @@ potentials in the GUI; the Julia port.
 3. **Series RLC element** — done as Phase 10d item 1.
 4. **Remaining dispersive-soil parameter sets** (§7 P5) — **S–M**.
    *Relatively conservative*/*conservative* Alipio–Visacro sets and
-   `tLongmireSmithSoil` (Longmire & Smith [15] per Cavka et al. [16]).
-
+   `tLongmireSmithSoil` (Longmire & Smith [15] per Cavka et al. [16];
+   theory.md §7.4).
 
 ### Phase 13 — Line and substation tier: conductors and cables
 
-Application-tier features (ADR 0018). Item 1 (`catenary`) is closed (log).
+Application-tier features (ADR 0018).
 
-2. **Generic internal impedance models (OPGW)** — Fortran done 2026-10-29
-   (log P13 item 2, [ADR 0030](adr/0030-cross-section-internal-impedance.md)).
-   **Open:** Rust and Julia parity; an NLT transient comparison test; complex
-   pole pairs, for stranded and steel-cored conductors with resonances; the
-   **`matrix` kind** for multi-conductor sections (item 4); the **`sheet` kind**
-   (item 5); tube entries (Phase 12 item 2). Where no measured data exists,
-   conductor subdivision (de Arizon & Dommel [73]) can compute R(f), X(f) tables
-   offline; the legacy ACSR spreadsheet is candidate seed data and the C++
-   bundle/L-profile models a possible catalogue kind.
-3. **Coaxial encasement layer — insulated, concrete-encased and
-   semiconducting coatings** — **M–L**. *Fortran done 2026-11-05 for `line`
-   and `catenary` (theory.md §4.3, `test_coating`: validation items 1, 2 and
-   the capacitive limit of 3). **Open:** `mesh` bars, Rust and Julia parity,
-   a comparison with Sunde's propagation constant (item 3 proper) and the
-   measured-benefit trend (item 4); the concrete-foundation
-   equivalent-cylinder helper.* *Widened 2026-10-29 (author):
-   one mechanism covers an insulated wire, a steel bar inside concrete
-   (rebar, foundation cage, Ufer electrode) and a semiconducting layer.
-   It is staged as a thin coaxial layer here, and a finite volume later
-   (Phase 15 item 2).* The legacy insulated-cable branch is an acknowledged
-   placeholder (it drops soil conduction and ignores the coating; flagged
-   TODO in the legacy code), so do **not** port it.
-   - **Model.** A layer of outer radius `r_c` and medium (σ_c, ε_c) around a
-     conductor of radius `r₀` (or `r_eq`). Its radial admittance per metre,
-     `y_c = 2π(σ_c + sε_c)/ln(r_c/r₀)`, sits **in series** with the leakage
-     path (Sunde's coated buried wire [41], theory.md §4.3). The leakage
-     current of a segment crosses the layer before it enters the medium.
-     - Only the self term changes: `Z_t(a,a) += 1/(y_c·l)`, normalised as
-       in theory.md §6. This needs checking against the `Z_t` scaling there
-       before coding.
-     - The external transversal terms use `r_c`, because the leakage
-       emerges at the layer surface. `Z_ℓ` keeps `r₀`: the layer is μ₀ and
-       the current stays in the conductor.
-     - Mutual terms are unchanged. That is the thin-layer assumption
-       (`r_c ≪ l`, and `r_c` ≪ the distance to other segments).
-   - **Material.** Any `tMaterial` with an admittance, so a dispersive
-     model is accepted for concrete as for soil. The Laplace path follows.
-   - **Schema** (proposed). An element field
-     `coating: { "outerRadius": …, "material": "<id>" }` on `line`,
-     `catenary` and `mesh` bars. A concrete foundation with a rebar cage
-     takes the cage as an equivalent cylinder, `r_eq = (n·r·R^{n−1})^{1/n}`
-     (n bars of radius r on a circle of radius R, the bundle GMR), inside a
-     layer of the foundation radius.
-   - **Parameter ranges.**
-     - Insulation: σ_c ≈ 0, ε_r 2.3–4. Purely capacitive.
-     - Concrete: σ_c roughly 10⁻³–5·10⁻² S/m depending on moisture, ε_r
-       about 5–15, dispersive. Concrete is more conductive than resistive
-       soil, which is the reason encasement lowers footing resistance
-       (Ufer [115], Fagan & Lee [116], Wiener [122]).
-     - Semiconducting screens and ground-enhancing compounds [110, 117]
-       fall in between.
-   - **Validity.** Thin layer only. Warn when `r_c > l/4`, alongside the
-     ADR 0030 short-segment check. Pad and pile footings of 0.5–1.5 m
-     radius violate the assumption and belong to Phase 15 item 2.
-   - **Validation.**
-     1. Identity: a layer with the surrounding medium's own (σ, ε) must
-        reproduce the bare conductor, to O((r_c/l)²).
-     2. DC: an encased rod against the two-shell closed form
-        `ln(r_c/r₀)/(2πσ_c L) + R_rod(r_c, σ_soil)`.
-     3. Insulated wire: Sunde's propagation constant for a coated buried
-        wire [41].
-     4. Trend check against the measured encasement benefit [115, 116, 122].
-   - **Reuse.** The same layer forms the jacket on a cable armour (item 4).
-4. **Insulated and multipolar cables (armoured)** — **L**. *Elaborated
-   2026-10-29 (author).* Target types, all three in scope: single-core
+2. **Generic internal impedance models** — Fortran done (theory.md §4.3,
+   ADR 0030). **Open:** Rust and Julia parity; an NLT transient comparison
+   test; complex pole pairs, for stranded and steel-cored conductors with
+   resonances; the **`matrix` kind** for multi-conductor sections (item 4);
+   the **`sheet` kind** (item 5); tube entries (Phase 12 item 2). Where no
+   measured data exists, conductor subdivision (de Arizon & Dommel [73]) can
+   compute R(f), X(f) tables offline; the legacy ACSR spreadsheet is
+   candidate seed data and the C++ bundle/L-profile models a possible
+   catalogue kind.
+3. **Coaxial encasement layer** — Fortran done for `line` and `catenary`
+   (model in theory.md §4.3). **Open:**
+   - `mesh` bars; Rust and Julia parity;
+   - comparison with Sunde's propagation constant for a coated buried wire
+     [41];
+   - a trend check against the measured encasement benefit [115, 116, 122];
+   - the concrete-foundation helper: a rebar cage as an equivalent cylinder,
+     `r_eq = (n·r·R^(n−1))^(1/n)` (n bars of radius r on a circle of radius
+     R), inside a layer of the foundation radius;
+   - parameter guidance in `common/README.md`: insulation (σ_c ≈ 0, ε_r
+     2.3–4), concrete (σ_c roughly 10⁻³–5·10⁻² S/m with moisture, ε_r about
+     5–15, dispersive; more conductive than resistive soil, which is why
+     encasement lowers footing resistance [115, 116, 122]), semiconducting
+     screens and ground-enhancing compounds [110, 117].
+   The same layer forms the jacket on a cable armour (item 4). Pad and pile
+   footings of 0.5–1.5 m radius violate the thin-layer assumption and belong
+   to Phase 15 item 2.
+4. **Insulated and multipolar cables (armoured)** — **L**. Target types, all three in scope: single-core
    with a metallic screen; three screened cores in a common steel-wire
    armour (MV land and submarine); LV/control multicore cables with an
    overall screen or armour (substation EMC, induced voltages). An
@@ -398,7 +370,7 @@ Application-tier features (ADR 0018). Item 1 (`catenary`) is closed (log).
      is a performance kernel. PRTL-mHEM's tubular bundles are a partial
      analogue.
 5. **Sheet cross-section for the `plane` element (steel walls)** — **M**.
-   *Added 2026-10-29 (author).* The `plane` element (Phase 10e) gives every
+   The `plane` element (Phase 10e) gives every
    bar a round-wire radius. For a metal wall, each bar stands for a strip of
    width `d` of a **continuous** sheet, where `d` is the cell size across
    the bar. An isolated-strip entry would add edge crowding, which a
@@ -424,13 +396,13 @@ Application-tier features (ADR 0018). Item 1 (`catenary`) is closed (log).
      steel-sheet walls to measure the difference from bare wire-grid walls
      [118, 119].
 
+### Phase 14 — Air–soil coupling
 
-### Phase 14 — Air–soil coupling — Fortran done 2026-10-19 (log P14)
-
-**Open:** Rust and Julia ports (their loaders refuse `numerics.crossMedium`);
-flipping the default after review; a published reference to validate against
-(the checks so far are analytic limits and continuity, not literature curves);
-lossy-ground induced voltages and LEMP.
+Fortran done, opt-in (theory.md §5.1, ADR 0029). **Open:** Rust and Julia
+ports; a published reference to validate against — the checks so far are
+analytic limits and continuity. Candidate: a wire crossing the interface
+against the NEC treatment of Burke & Miller [134]; flipping the default after
+that; lossy-ground induced voltages and LEMP.
 
 ### Phase 15 — Multi-layer soil
 
@@ -438,12 +410,12 @@ lossy-ground induced voltages and LEMP.
    the §5 single-interface premise; route: layered-earth Green's
    functions via quasi-static complex images (Li, Chen & Wang [33]; Sunde
    [41] background). Explicitly out of MVP scope (theory.md §5, §10.1).
-   Layered-media Green's functions: Michalski & Mosig [130]. Time-domain and
-   full-wave counterparts for cross-checking: Fan & Li [103] and Nazari et
-   al. [104].
+   Time-domain and full-wave counterparts for cross-checking: Fan & Li [103]
+   and Nazari et al. [104]. The general layered-media Green's functions are
+   reviewed by Michalski & Mosig [135].
 2. **Finite conductive and dielectric volumes (concrete footings,
-   backfill)** — **L**, research. *Added 2026-10-29 (author), stage 2 of
-   Phase 13 item 3.* A concrete pad or pile is a bounded region of a third
+   backfill)** — **L**, research. Stage 2 of Phase 13
+   item 3. A concrete pad or pile is a bounded region of a third
    medium, not a thin coaxial layer. Candidate routes:
    - (a) a volume integral equation, with the conduction and polarisation
      currents of the inclusion as extra unknowns;
@@ -456,58 +428,62 @@ lossy-ground induced voltages and LEMP.
    Shares interface machinery with item 1 and with the faceted-terrain idea
    (layered and inhomogeneous media).
 
+### Maintenance
 
-### Maintenance M1 — Remove SLATEC — mostly done (log M1)
+- **M1 — Remove SLATEC**: open are step 8 (per-conductor `Z_int` cache),
+  step 10 (the decision on the `|ρ| > 500 → ratio = 1` cut-off, 1e-3
+  relative error) and the 40× parity run. `K₀/K₁` follow with Phase 12
+  item 2.
+- **Known test failures** (not regressions; see the log entries cited):
+  - `test_common_cases` on `channel_loaded`: the fixture is older than the
+    case (log L-13). Regenerate it with Phase 8 item 1.
+  - Under the release flags of `build.sh` (fast-math), the harmonic fixtures
+    of `channel_tower` and `channel_tower_gap` drift past 1e-6 and the
+    `channel_loaded` transient differs (log L-02, M2). The gate runs the
+    golden suite with `-O2 -fopenmp`. To decide: state that in
+    `fortran/README.md` as the rule, or give those fixtures a documented
+    tolerance (needs an ADR, log L-10).
+  - `test_bessel` and `test_impedance` assert NaN/Inf results and cannot run
+    under `-ffinite-math-only` (log L-01).
+  - GUI: `test_load_portela_mesh_element` (title `portelaMesh` vs `m`).
 
-**Open:** step 8 (per-conductor `Z_int` cache), step 10 (the decision on the
-`|ρ| > 500 → ratio = 1` cut-off, 1e-3 relative error) and the 40× parity run.
-`K₀/K₁` follow with Phase 12 item 2.
+### Near-term work
 
-### Near-term work (2026-11)
-
-Raised by the LabUAT investigation (log INV-2026-11-02):
-
-1. **Tame the NLT record end in the LabUAT cases** — *done 2026-11-03 for the solver (ADR 0032, `signal.riseTime` + `nltDamping` at c·T ≈ 6; `labuat_impulse_noarc` 4096 points, 4 min, finite and monotone to the last sample, peak 4.64 MV); still open: usable-fraction field/warning, GUI marker, Rust/Julia port, golden fixtures.* Original item: The 1.6e10 V peaks are an
-   end-of-window artefact (about the last 25 % of the record; amplitude ∝ N²;
-   the first ~60 % is physical, peak ≈ 4.8 MV — log INV-2026-11-02). Try the
-   spectral Hann window (`signal.window`), a smaller `nltDamping` and a longer
-   window cropped to its usable part; state the usable fraction in
-   `marx_generator.md` and in the results (a field or a warning), and consider a
-   GUI marker for the unreliable tail. Then add golden fixtures for the
-   laboratory cases (Phase 10e).
-2. **Audit the NaN-dependent code.** `ieee_is_nan` alone did not rescue the
-   closed-form fallback under `-ffinite-math-only`; find every NaN/Inf-based
-   guard (`Geometry.f90`, `Bessel.f90`, `Channel*`) and make it independent of
-   the flag, or document why the flag is required. Add a regression test that
-   runs under the release flags (the golden suite is run with `-O2`, L-02).
-3. **ifx portability.** Replace `__has_include` in `Version.F90` (generate the
-   file or use a plain include) so `fpm --compiler ifx` builds the repo as is.
-4. **Make `build.sh` executable** (`chmod +x`) and decide whether the fast-math
-   release path needs `-fno-finite-math-only` documented in DISTRIBUTION.md.
+1. **Usable part of an NLT record.** The solver side is done (ADR 0032, log
+   INV-2026-11-03). Open: report the usable fraction of the record (a field
+   in the results or a warning when the tail grows), a GUI marker for the
+   unreliable tail, and the Rust/Julia port of `riseTime` (their loaders
+   ignore the field today and would silently return the unsmoothed result —
+   make them refuse it, log L-12).
+2. **Finish the NaN audit** (log M2). `Channel*` and the transient path under
+   `-ffinite-math-only`; then decide whether `-fno-finite-math-only` stays a
+   requirement or becomes a safeguard, and say so in DISTRIBUTION.md.
+3. **Documentation follow-through** (log DOC-2026-11-14): code comments and
+   ADR bodies still cite "theory.md §n" by number, which the theory index
+   resolves; a FORD page that links the chapters is optional.
 
 ---
 
 ## 4. Milestones and next steps
 
-Milestones met (8a, 8J-a, release bar, Phases 9–11 and the 10x series) are in
-the log, "Milestones and releases". Open: **8b** (Rust full conformance — needs
-Phase 8 item 1) and **8J-b** (Julia transient/widened fixtures).
+Open milestones: **8b** (Rust full conformance — needs Phase 8 item 1) and
+**8J-b** (Julia transient and widened fixtures). Milestones met are in the
+log, "Milestones and releases".
 
-**Next engineering steps:** the near-term list above; then Phase 8 item 1
-(widened fixtures, structure dump, conformance tag) and item 9 (report); Phase 8J
-follow-along (Julia Phase 9, then 10b, then 11); Phase 12 items 2 and 4 with
-transient potential maps as the Phase 11 remainder. Conductor and cable track
-(2026-10-29, on top of ADR 0030): tube entries (Phase 12 item 2) → coaxial
-encasement layer (Phase 13 item 3) → `sheet` kind for planes (Phase 13 item 5) →
-the `matrix` kind and the `cable` element, stages 4a–4c (Phase 13 item 4) →
+**Next engineering steps:** the near-term list; Phase 8 item 1 (widened
+fixtures, structure dump, conformance tag) and item 9 (report); Phase 8J
+follow-along (Julia Phase 9, then 10b, then 11); the tall-object
+induced-voltage case (Phase 10d item 5); Phase 12 items 2 and 4 with
+transient potential maps as the Phase 11 remainder. Conductor and cable
+track, on top of ADR 0030: tube entries (Phase 12 item 2) → remaining coating
+items (Phase 13 item 3) → `sheet` kind for planes (Phase 13 item 5) → the
+`matrix` kind and the `cable` element, stages 4a–4c (Phase 13 item 4) →
 finite volumes (Phase 15 item 2, research).
 
-Prioritisation rules (2026-09-30) that still apply: second implementations
-before features; decided-and-small before open-ended; MVP before application
-tier; dependencies (P1 before large grids, Γ(ω) before mixed-media coupling);
-change the golden fixtures once; new theory and object-model work last.
-Effort is rated S/M/L (S ≈ days, M ≈ a focused week-scale task, L = new theory
-or object-model work).
+Prioritisation rules: second implementations before features;
+decided-and-small before open-ended; MVP before application tier;
+dependencies first; change the golden fixtures once (log L-13); new theory
+and object-model work last.
 
 ---
 
@@ -531,20 +507,23 @@ frequencies run in parallel under `-fopenmp`.
 
 ---
 
+---
+
 ## 6. Open decisions
 
 | Decision | Status |
 | --- | --- |
 | Reduced `Z_g` solver | Deferred optimisation (ADR 0003) |
 | NLT as the transient default | Not flipped (ADR 0024 §7); revisit after a TAGS time-domain comparison |
+| Default `nltDamping` (c·T = ln N² vs ≈ 6) | Unchanged (ADR 0032); a change moves every NLT fixture, so it goes with the next fixture regeneration |
+| Cross-medium coupling as default | Opt-in (ADR 0029); revisit after a published comparison (Phase 14) |
 | Binary results format | Deferred — stay on JSON/CSV (ADR 0012); HDF5 is the leading candidate vs ADR 0006's zero-dependency philosophy. Revisit once a real case is too large for JSON |
-| `|ρ| > 500` Bessel cut-off | Open (M1 step 10) |
+| `\|ρ\| > 500` Bessel cut-off | Open (M1 step 10) |
 | Plane-bar radius (`d/2π` vs `d/4`) | Open (Phase 13 item 5) |
-| Release flags and NaN semantics | `-fno-finite-math-only` kept; audit pending (near-term item 2) |
+| Release flags and NaN semantics | `-fno-finite-math-only` kept; audit to finish (near-term item 2) |
+| Gate flags for the golden suite | `-O2 -fopenmp` in practice; to be written down or replaced by a tolerance (Maintenance) |
 
-The resolved decisions of the former table (soil dispersion, voltage sources,
-fill interface, FFT, JSON schema, Rust dependencies, GUI technology, results
-schemas, quadrature tolerances) are in the log's decision register.
+Resolved decisions are in the log's decision register.
 
 ---
 
@@ -558,14 +537,14 @@ equals `g_self`.
 
 | # | Proposal | Status | Where |
 | --- | --- | --- | --- |
-| P1 | mHEM single-integral kernel for `g(a,b)` | done 2026-10-01 | Phase 10 item 1, log P10 |
-| P2 | Frequency-dependent image coefficient `Γ(ω)` | done 2026-10-01 | Phase 10 item 2, log P10 |
-| P3 | Cross-code validation against TAGS | done 2026-10-01 | Phase 10 item 5, [tags-xval.md](validation/tags-xval.md) |
-| P4 | Numerical Laplace Transform | done 2026-09-30 | Phase 9 item 5, log P9 |
-| P5 | Dispersive-soil subtypes | mean set done 2026-07-16; remainder open | Phase 12 item 4 |
-| P6 | Parallelise over frequencies | done 2026-10-01 | Phase 10 item 4, log P10 |
+| P1 | mHEM single-integral kernel for `g(a,b)` | done | Phase 10 item 1, log P10 |
+| P2 | Frequency-dependent image coefficient `Γ(ω)` | done | Phase 10 item 2, log P10 |
+| P3 | Cross-code validation against TAGS | done | Phase 10 item 5, [tags-xval.md](validation/tags-xval.md) |
+| P4 | Numerical Laplace Transform | done | Phase 9 item 5, log P9 |
+| P5 | Dispersive-soil subtypes | mean set done; remainder open | Phase 12 item 4 |
+| P6 | Parallelise over frequencies | done | Phase 10 item 4, log P10 |
 | P7 | Field/potential post-processing | scalar potential done | Phase 11, log P11 |
-| P8 | Criteria-based segmentation | done 2026-10-01 | Phase 10 item 3, log P10 |
+| P8 | Criteria-based segmentation | done | Phase 10 item 3, log P10 |
 
 Explicitly *not* proposed:
 
@@ -583,6 +562,8 @@ Explicitly *not* proposed:
   format*, not solver work. The cheapest first step would write the port
   impedance matrix as Touchstone Z-parameters [71]; external vector-fitting
   tools [69, 70] could then do the fitting and passivity enforcement.
+
+---
 
 ---
 

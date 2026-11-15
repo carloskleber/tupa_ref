@@ -1,11 +1,19 @@
 # Changelog
 
-Semantic versioning, annotated git tags (ADR 0018). The roadmap
-([docs/ROADMAP.md](docs/ROADMAP.md)) carries the phase-by-phase history;
+Semantic versioning, annotated git tags (ADR 0018). The
+[engineering log](docs/engineering_log.md) carries the phase-by-phase history;
 this file records what changes **for users of the solver** — above all default
 numerics, which move result files.
 
 ## Unreleased
+
+### Documentation
+
+- The theory is split into chapters under `docs/theory/` (`docs/theory.md` is
+  the index; section numbers are unchanged), with a reader's guide, a worked
+  example checked against `common/rod_dc.json`, and diagrams. Dates and
+  history now live only in the engineering log; the roadmap holds the current
+  state and the plan. References [124]–[143] added. No solver change.
 
 ### Added
 

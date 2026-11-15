@@ -15,7 +15,7 @@ the deviation from a reference implementation.
 
 Change the set with `--cases` (any name in `common/`, without `.json`).
 
-> **Since ROADMAP Phase 10 (2026-10-01)** Fortran and Rust default to the
+> **Since ROADMAP Phase 10** Fortran and Rust default to the
 > single-integral kernel and `Γ(ω)` images, while the Julia port still computes
 > the pre-Phase-10 numerics (ADR 0024 §8): the Julia deviation columns now show
 > that difference (up to ~2e-3 relative at 1 MHz, growing as f²) as well as
@@ -103,7 +103,7 @@ Fortran, Rust and Julia agree to ~1e-6 (golden-fixture tolerance) on
 every case — measured case by case in the conformance tables of
 [rust/README.md](../../rust/README.md) and
 [julia/README.md](../../julia/README.md). A larger deviation is a bug in one
-of them. (Before its 2026-09-30 realignment the Julia port differed by
+of them. (Before its realignment, engineering log P8J, the Julia port differed by
 ≲ 0.1–0.2 % in \|Z\| because of its quadrature.)
 
 ## Notes
@@ -118,6 +118,6 @@ of them. (Before its 2026-09-30 realignment the Julia port differed by
   second executable standing in for Fortran to exercise the multi-
   implementation plots). The Fortran build step was **not** executed by the
   author of this script (no working fpm/SLATEC build in that environment);
-  `run_julia.jl` was rewritten for the realigned Julia port on 2026-09-30.
+  `run_julia.jl` was rewritten for the realigned Julia port.
   If either fails on your machine, the error text is in `summary.md` / the
   console; please report it.

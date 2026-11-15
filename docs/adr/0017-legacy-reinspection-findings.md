@@ -93,6 +93,35 @@ other documents and code comments cite them as "ADR 0017 finding N"
    (`calcfreq.m`) no longer passes. TUPÃ implements the latter's model; the
    legacy touch voltage is the maximum of `|ψ − u|` over 36 points on a 1 m
    circle at `z = 0` around the node.
+10. **The insulated-cable branch is a placeholder** (flagged TODO in the
+    Matlab; text moved here from theory.md §4.3). It only swaps the
+    transversal constant `c_E` of the leakage term to `1/(4π·jωε_s)`: the
+    soil *conduction* path is dropped and the leakage goes through the soil
+    permittivity (an earlier commented variant used a fictitious
+    σ = 1e-8 S/m). The coating's own geometry and permittivity never enter,
+    and `Z_ℓ` is untouched. TUPÃ implements Sunde's coated wire instead
+    (theory.md §4.3) and does not port the branch.
+11. **Details of the legacy internal impedance** (moved here from
+    theory.md §4.3). One routine covers the solid and the tubular conductor
+    (solid when the inner radius is zero); the tube *element* is the straight
+    line plus a wall thickness. The solid-case Bessel ratio is clamped to 1
+    by the test `rho > 700` on a complex `rho`, which Matlab evaluates on the
+    real part only, i.e. `|ρ| ≳ 990`. The Fortran reference cuts at
+    `|ρ| > 500` (ADR 0031).
+12. **Lumped branches and the transient modes** (moved here from theory.md
+    §6 and §8). The `Impedancia` elements are appended after the
+    electromagnetic segments as extra branches of the `(i₁, i₂)` system,
+    with `Z(ω) = R + jωL + 1/(jωC)` (or a directly given complex `Z`) on the
+    `Z_ℓ` diagonal, zero off-diagonal coupling and a zeroed `Z_t` diagonal
+    (zeroed *after* the fill, relying on the incidence rows to keep the
+    system determined). The legacy stores the **D** incidence with entries
+    −1 and assembles the KCL block as `[0 C −D]`, and carries commented-out
+    "Portela convention" sign variants. Its default transient mode solves
+    `H` on the reduced scan grid and interpolates onto the FFT bins by
+    complex `pchip` (a global `TODA_FREQ` flag solves every bin); a second
+    mode evaluates the inverse Fourier integral by adaptive quadrature over a
+    spline of the spectrum. The older `potsolonovo.m` and the dispersive
+    soil at ω₀ = 1 rad/s are findings 9 and 6.
 
 ## Consequences
 

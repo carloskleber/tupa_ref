@@ -4,7 +4,7 @@ What "validated" means for this project, which cases count, and where they
 stand. The physics definition of each anchor is in
 [theory.md §9](theory.md); this file tracks execution status and policy.
 
-**Current status (2026-10-11): the end-to-end frequency-sweep and
+**Current status: the end-to-end frequency-sweep and
 time-domain pipeline are wired and green (ROADMAP Phases 0–10).** Six
 literature comparisons (anchors 7–11, Lima's two grids sharing anchor 10)
 have run against published papers' own figures — see
@@ -21,20 +21,20 @@ quadrature oracles, Bessel limits, hand-solved 4×4 system) are green — see
 
 | # | Case | Source | Tolerance | Status |
 | --- | --- | --- | --- | --- |
-| 1 | DC grounding resistance, buried horizontal conductor (Sunde/Dwight formula) | [10] + theory.md §9.1 | solver precision at the DC limit | pending — no dedicated test yet (the `rod_air.json` case gets an informal ≈1% DC check against the rod formula, common/README.md, but that isn't wired as this anchor) |
+| 1 | DC grounding resistance, buried horizontal conductor (Sunde/Dwight formula) | [10] + theory.md §9.1 | solver precision at the DC limit | pending as a wired anchor: `test_solve` checks the 10 Hz impedance against the three-term formula at 15 %, and the DC point (`frequencies.dc`, `test_dc`) now gives the limit directly; the [worked example](theory/worked-example.md) reproduces a one-segment rod by hand to five digits and its exercise 1 gives 14.941 Ω against Dwight's 14.940 Ω for this conductor |
 | 2 | Harmonic input impedance, 10 m conductor, 0.5 m depth, σ = 0.01 S/m, εr ≈ 10, 100 Hz–1 MHz | Portela 1997 [2] | 5 % (project decision, driven by curve readability) | pending; **no tabulated data exists** — see "Data provenance" |
-| 3 | Grounding-electrode harmonic/impulse responses | Visacro & Soares 2005 [5] | — | **dropped as a data anchor** — the paper has no usable comparison data (author, 2026-07-05); kept as formulation reference only |
+| 3 | Grounding-electrode harmonic/impulse responses | Visacro & Soares 2005 [5] | — | **dropped as a data anchor** — the paper has no usable comparison data; kept as formulation reference only |
 | 4 | Internal consistency: full Zeq vs reduced Z_g; reciprocity; passivity; quadrature vs closed forms | theory.md §9.4 | solver/quadrature precision | partially green (reciprocity, closed forms — unit tests); rest pending |
 | 5 | Square grounding grids, harmonic impedance | Grcev & Heimbach 1997 [18] | qualitative curve match; needs Γ(ω) (ROADMAP P2, done) for the MHz range | grid element done (ROADMAP Phase 7 item 3); a 32 × 32 m grid sweeps in seconds since the P1 kernel (`common/portelaMesh.json`, Phase 10 item 6); the Grcev & Heimbach curve itself still needs its tabulated data |
-| 6 | Cross-code: identical cases through TAGS (and PRTL-mHEM) | references.md, companion codes | input impedance over the sweep; compare **physical outputs only** | **executed 2026-10-01** against TAGS — [validation/tags-xval.md](validation/tags-xval.md): ≤ 0.3 % below 1 MHz on six cases (a conductor, a rod, a loop, two Grcev electrodes, a tower footing) once TAGS' `|cos θ|` convention is accounted for; PRTL-mHEM only on the Grcev 10 m case |
+| 6 | Cross-code: identical cases through TAGS (and PRTL-mHEM) | references.md, companion codes | input impedance over the sweep; compare **physical outputs only** | **executed** against TAGS — [validation/tags-xval.md](validation/tags-xval.md): ≤ 0.3 % below 1 MHz on six cases (a conductor, a rod, a loop, two Grcev electrodes, a tower footing) once TAGS' `|cos θ|` convention is accounted for; PRTL-mHEM only on the Grcev 10 m case |
 | 7 | `tVisacroAlipioSoil` harmonic impedance, 60 m buried electrode, ρ0 = 100/300/1000/2400 Ω·m | Silva et al. 2025 [36], Fig. 3 | qualitative (digitized plot, no tabulated data — see [validation/](validation/)) | **executed** — [validation/silva2025-fig3.md](validation/silva2025-fig3.md): endpoints within ~1-4%, resonance dips/peaks match in location and depth for ρ0 = 1000/2400; mid-band knee off by up to ~29% for ρ0 = 100/300 (unconfirmed cause — see writeup) |
 | 8 | Time-domain GPR, same 60 m electrode, MCS_FST#2 double-peaked first-stroke current | Silva et al. 2025 [36], Fig. 4 | qualitative (digitized plot) | **executed** — [validation/silva2025-fig4.md](validation/silva2025-fig4.md): both GPR humps agree within ~5% at every ρ0 (worst point +12.5%); mild +0.6-2% tail overestimate |
 | 9 | Harmonic input impedance, buried horizontal electrodes, ℓ = 10/100 m, ρ1 = 30/300/3000 Ω·m, vs. the paper's own rigorous full-wave MoM model | Grcev et al. 2018 [23], Fig. 12 | qualitative (digitized plot) | **executed** — [validation/grcev-fig12.md](validation/grcev-fig12.md): DC/HF asymptotes within 0-4%, resonance shape/depth/location reproduced; excluding digitization outliers, every other point within ±11.5% |
 | 10 | Harmonic input impedance, distribution-tower counterpoise (Case #9) and two square grounding grids (Cases #10/#11), ρ = 1000 Ω·m | Lima et al. 2020 [11], Figs. 6–7 | qualitative (digitized plot) | **executed** — [validation/lima-fig6.md](validation/lima-fig6.md): resonance locations within ~10-15% but a systematic −13 to −17% DC-to-2MHz gap (case geometry only partially stated by the paper); [validation/lima-fig7.md](validation/lima-fig7.md): both grids within ±7% below ~4 MHz, 10-19% through the ~6.5-7 MHz peak |
 | 11 | Harmonic input impedance, single vertical electrode, L = 2 m, ρ = 5400 Ω·m, DC-100 MHz | Poljak & Doric 2006 [35], Fig. 4 | qualitative (digitized plot) | **executed** — [validation/poljak-fig4.md](validation/poljak-fig4.md): closest agreement of any comparison in this folder — DC plateau, roll-off and all four resonance lobes within ±10% almost everywhere |
-| 12 | Voltage sources and two-node sources (current dipole, delta gap) against superposition of unit-current runs; transient surges against U(t)/R and R·i(t) | ADR 0016, ADR 0025 (internal consistency) | solver/output precision (harmonic); surge bandwidth (transient) | **executed 2026-10-11** — [validation/sources-validation.md](validation/sources-validation.md): harmonic ≤ 5e-9, two-node transient 3e-5 of peak, Fortran and Rust identical |
-| 13 | Surface potential, GPR, touch and step voltage: flush rod against Dwight and the line-source closed form; 16 × 16 m grid against the disc bound, Laurent–Niemann and Sverak and the point-source far field; potential beside a conductor against its node voltage | ADR 0027, theory.md §3.1 (closed forms; no published curve) | closed-form agreement stated per quantity | **executed 2026-10-11** — [validation/gpr-potentials.md](validation/gpr-potentials.md): rod GPR −0.06 %, ψ within 0.5 % beyond 5 m, far field 0.2 %, conductor-side ψ within 0.5 % to 1 MHz; the grid resistance is bracketed, not pinned (a published grid case is still open) |
-| 14 | Windowing (`signal.window`, `antialiasStart`): sensitivity on the unresolved Portela front and the resolved Silva MCS_FST#2 case, spectral Hann ≡ `antialiasStart` → 0, time window ≡ excitation × w(t) | ADR 0015 amendment, ADR 0021 (internal consistency) | identities to ≤ 4e-7 | **executed 2026-10-11** — [validation/phase9-transient-options.md](validation/phase9-transient-options.md) §3: spectral Hann −10.5 % of peak on the Portela surge, −0.56 % on Silva (the unwindowed Fig. 4 comparison stands) |
+| 12 | Voltage sources and two-node sources (current dipole, delta gap) against superposition of unit-current runs; transient surges against U(t)/R and R·i(t) | ADR 0016, ADR 0025 (internal consistency) | solver/output precision (harmonic); surge bandwidth (transient) | **executed** — [validation/sources-validation.md](validation/sources-validation.md): harmonic ≤ 5e-9, two-node transient 3e-5 of peak, Fortran and Rust identical |
+| 13 | Surface potential, GPR, touch and step voltage: flush rod against Dwight and the line-source closed form; 16 × 16 m grid against the disc bound, Laurent–Niemann and Sverak and the point-source far field; potential beside a conductor against its node voltage | ADR 0027, theory.md §3.1 (closed forms; no published curve) | closed-form agreement stated per quantity | **executed** — [validation/gpr-potentials.md](validation/gpr-potentials.md): rod GPR −0.06 %, ψ within 0.5 % beyond 5 m, far field 0.2 %, conductor-side ψ within 0.5 % to 1 MHz; the grid resistance is bracketed, not pinned (a published grid case is still open) |
+| 14 | Windowing (`signal.window`, `antialiasStart`): sensitivity on the unresolved Portela front and the resolved Silva MCS_FST#2 case, spectral Hann ≡ `antialiasStart` → 0, time window ≡ excitation × w(t) | ADR 0015 amendment, ADR 0021 (internal consistency) | identities to ≤ 4e-7 | **executed** — [validation/phase9-transient-options.md](validation/phase9-transient-options.md) §3: spectral Hann −10.5 % of peak on the Portela surge, −0.56 % on Silva (the unwindowed Fig. 4 comparison stands) |
 
 Anchors 7-11 are the primary executable oracle for the near term. Anchor
 2's original data does not exist in tabulated form (only the published
@@ -45,7 +45,7 @@ references will be supplied by the author as they are processed.
 
 ## Cross-code benchmark setup
 
-Decision (author, 2026-07-05): add the companion codes as git submodules
+Decision: add the companion codes as git submodules
 under a top-level `benchmarks/` folder:
 
 ```
@@ -55,7 +55,7 @@ benchmarks/
   cases/       ← per-case drivers + comparison scripts (this repo's own code) — not created yet
 ```
 
-`benchmarks/tags` and `benchmarks/prtl-mhem` were added on 2026-07-05 (see
+`benchmarks/tags` and `benchmarks/prtl-mhem` are in place (see
 `.gitmodules`). TAGS builds locally (C99 + Cubature + LAPACK + OpenBLAS +
 FFTW3 — `git submodule update --init --recursive benchmarks/tags`, then
 `make -C benchmarks/tags-xval`) and accepts arbitrary electrode lists.
@@ -83,7 +83,7 @@ The cross-implementation timing benchmark of the three TUPÃ codes lives in
 ## Performance benchmarks
 
 Correctness first (CONVENTIONS.md); the measurements below are the
-before/after data of ROADMAP Phase 10 (ADR 0024), taken 2026-10-01 on a
+before/after data of ROADMAP Phase 10 (ADR 0024), taken on a
 4-core Linux container (gfortran 13, `-O3`-class release flags, reference
 LAPACK/BLAS), not a benchmark suite:
 

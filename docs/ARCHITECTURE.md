@@ -7,7 +7,7 @@ specified in [theory.md](theory.md) (normative); forward plans live in
 defined in [GLOSSARY.md](GLOSSARY.md).
 
 Everything below describes the **Fortran** implementation (package version
-0.7.0) as of 2026-10-01. Statements about intent (rather than code) are marked
+0.7.0). Statements about intent (rather than code) are marked
 *(intent)*; the object model itself is language-agnostic by decision
 ([ADR 0002](adr/0002-language-agnostic-object-model.md)) and the Rust and
 Julia ports (§8) map onto the same components.

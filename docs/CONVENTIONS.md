@@ -4,7 +4,7 @@ Rules for contributing code to any TUPÃ implementation. Physics/sign
 conventions are in [theory.md §2](theory.md) (normative, enforced by
 [ADR 0008](adr/0008-sign-conventions-and-validation.md)); this file covers
 everything else. This document absorbs the former `CLAUDE.md` project
-instructions (retired 2026-07-05).
+instructions (retired; ADR 0018).
 
 ## Fortran
 
@@ -32,8 +32,8 @@ instructions (retired 2026-07-05).
   workarounds — never restating what the code plainly does.
 - **English only**: all identifiers, comments, and documentation are in
   English. Legacy Portuguese identifiers inherited from the original MATLAB
-  (e.g. `tensao`, `corrente1/2`, `IMPMUTUA`) were translated in bulk
-  2026-07-09; do not reintroduce Portuguese names in new code.
+  (e.g. `tensao`, `corrente1/2`, `IMPMUTUA`) were translated in bulk;
+  do not reintroduce Portuguese names in new code.
 - **Compilers**: latest gfortran is the development compiler; keep the code
   ifx-compatible (no gfortran-only extensions).
 
@@ -55,6 +55,33 @@ instructions (retired 2026-07-05).
 - **Public repo hygiene**: private legacy-code locations and personal
   reference-library paths must never appear in committed files.
 
+## Documentation rules
+
+- **One home per kind of information** ([docs/README.md](README.md) has the
+  table): the model in the theory, state and plan in the roadmap, history
+  and lessons in the engineering log, decisions in the ADRs, measured
+  comparisons in `validation/`. Link instead of repeating.
+- **Dates and history only in the [engineering log](engineering_log.md).**
+  Every other document states what is true now, in the present tense, and
+  cites a log entry ID (`P10`, `INV-2026-11-02`) when the past matters. Do
+  not write "done on", "reviewed on … settled on …", "not yet" or "as of" in
+  the theory, the roadmap or a README. Exceptions: the `Date` line and dated
+  amendment headings of an ADR, the release headings of the CHANGELOG, and
+  the run date of a `validation/` report.
+- **Closing an item**: remove its text from the roadmap, add a log entry
+  (template in the log §2), and update the theory if the model changed.
+- **Theory chapters** follow the editing rules at the end of
+  [theory.md](theory.md): stable section numbers, a summary at the top,
+  "check yourself" items at the end, legacy-code behaviour in ADR 0017 and never in the theory (no routine, variable or file names of the private codes; cite the dissertation instead).
+- **References**: `references.md` numbers are permanent. A new reference is
+  appended in a consecutive block at the end, never inserted into an older
+  section, because the renderer renumbers each ordered list from its first
+  item. Only electromagnetic, lightning, grounding and related numerical
+  sources belong there. Text from a source is paraphrased and cited, never
+  copied.
+- **Language**: plain technical English for readers who may not be native
+  speakers; short sentences, one idea each.
+
 ## Defaults (carried over from the retired CLAUDE.md hooks)
 
 | Topic | Default |
@@ -63,17 +90,19 @@ instructions (retired 2026-07-05).
 | Soil dispersion model | `tPortelaSoil`, Lima–Portela parametrisation (ADR 0007) |
 | JSON library escape hatch | json-fortran (ADR 0006) |
 | Frequency axis | Logarithmic spacing for harmonic sweeps; linear grid for transients (theory.md §8) |
-| FFT implementation | In-repo double-precision radix-2 (`mFft`), not SLATEC (single precision) or stdlib (no FFT module in the pinned version) — ADR 0014 |
-| Parallelism | OpenMP over the frequency loop (`runSweep`, thread-private meshes; ROADMAP Phase 10 item 4, ADR 0024 §4); the fill-loop OpenMP of Phase 3 item 4 is superseded (the LU is ≈ 100 % of a frequency's cost). Results are bit-identical for any thread count; `build.sh` enables `-fopenmp`, `--threads`/`OMP_NUM_THREADS` set the count, one BLAS thread per solve |
+| FFT implementation | In-repo double-precision radix-2 (`mFft`) — ADR 0014 |
+| Parallelism | OpenMP over the frequency loop (`runSweep`, thread-private meshes; ADR 0024 §4). Results are bit-identical for any thread count; `build.sh` enables `-fopenmp`, `--threads`/`OMP_NUM_THREADS` set the count, one BLAS thread per solve |
 | Default numerics | Single-integral geometry kernel and Γ(ω) images since 0.6.0 (ADR 0024); `numerics: { "kernel": "double", "imageModel": "ideal" }` reproduces the earlier results |
 | Output formats | CSV (primary) + JSON (structured) |
-| Element priority | `tLine`, `mesh` (done); next per ROADMAP Phases 12–13 (`tCircumference` first) |
+| Element priority | per ROADMAP Phases 12–13 |
 | Reference validation case | Buried straight conductor, 10 m, 0.5 m depth, σ = 0.01 S/m, εr ≈ 10 (theory.md §9) |
 
 ## Testing
 
-- `fpm test` locally is the merge gate — there is **no hosted CI** (author
-  decision, [ROADMAP §9](ROADMAP.md)).
+- `fpm test` locally is the merge gate — there is **no hosted CI**
+  ([ADR 0018](adr/0018-author-interview-decisions-2026-07.md)). Validate
+  solver changes with `-O2 -fopenmp` as well as the release flags
+  (engineering log L-02, L-14).
 - Fast suites (`test_mesh`, `test_assemble`) run in seconds in any profile.
   The quadrature-heavy suites (`test_geometry`, `test_impedance`) are only
   practical under `--profile release` — see [ROADMAP §5](ROADMAP.md).
