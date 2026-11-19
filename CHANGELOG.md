@@ -7,13 +7,14 @@ numerics, which move result files.
 
 ## Unreleased
 
-### Documentation
+(nothing yet)
 
-- The theory is split into chapters under `docs/theory/` (`docs/theory.md` is
-  the index; section numbers are unchanged), with a reader's guide, a worked
-  example checked against `common/rod_dc.json`, and diagrams. Dates and
-  history now live only in the engineering log; the roadmap holds the current
-  state and the plan. References [124]–[143] added. No solver change.
+## 0.8.0 — 2026-11-19
+
+Additive: every new feature is opt-in, default numerics are unchanged and no
+existing result moves (the SLATEC removal agrees to ≤ 3e-14). Most of the
+additions are **Fortran only**; the Rust and Julia loaders now refuse them with
+an explicit error instead of ignoring them (see Fixed and Known).
 
 ### Added
 
@@ -107,25 +108,6 @@ numerics, which move result files.
   `transientResponseSignals` (API only). Case `common/marx_single_stage.json`;
   tests `test_marx`, `test_lumped_segment`.
 
-### Documentation
-
-- **Validation writeups for the newer features** ([docs/validation/](docs/validation/README.md)):
-  `sources-validation.md` (ideal voltage sources and two-node sources against
-  superposition of unit-current runs), `gpr-potentials.md` (surface potential,
-  GPR, touch and step voltage against closed forms) and a windowing section in
-  `phase9-transient-options.md`. The scripts behind them
-  (`sources_checks.py`, `phase11_checks.py`, `phase9_transient_checks.py`) run on
-  any solver executable through `run_checks.sh`. Root README: repository layout
-  and the full case list.
-- **Induced-voltage literature, second pass** (references.md [82]–[106]): the
-  original Agrawal derivation, field data (Rubinstein, Barker), the Rachidi
-  review, and corona, dispersive and lossy ground, inclined channels,
-  grounding coupling, sag and terrain. theory.md §4.4, §4.5, §4.6, §7, §9 and
-  §10.1 gain the matching notes and errata. The 1985 Florida line is now
-  taken as 450 m. ROADMAP Phase 10d lists the candidate follow-up cases.
-
-### Added
-
 - **Air–soil cross-medium coupling** (`numerics.crossMedium: "transmission"`,
   default `"none"`; ADR 0029, theory.md §5.1, ROADMAP Phase 14). Segments in air
   and in soil couple through the transmitted field (`1/(2π(Wₐ+Wₛ))`, no image term,
@@ -213,6 +195,50 @@ numerics, which move result files.
   `position` (anything but three numbers), a `signal` block without
   `observeNodes`, and a `frequencies` block with `min <= 0`, `max < min` or no
   `pointsPerDecade`.
+- **Rust and Julia loaders refuse Fortran-only input.** They used to ignore
+  unknown keys, so `coating`, `crossSections`, `lumped`, `frequencies.dc`,
+  `signal.riseTime` and `signal.totalVoltage` were dropped silently and the
+  `ring`/`plane` elements skipped with a stderr warning, giving a result
+  without the requested model. Each is now a load error naming the feature.
+
+### Documentation
+
+- The theory is split into chapters under `docs/theory/` (`docs/theory.md` is
+  the index; section numbers are unchanged), with a reader's guide, a worked
+  example checked against `common/rod_dc.json`, and diagrams. Dates and
+  history now live only in the engineering log; the roadmap holds the current
+  state and the plan. References [124]–[143] added. No solver change.
+
+- **Validation writeups for the newer features** ([docs/validation/](docs/validation/README.md)):
+  `sources-validation.md` (ideal voltage sources and two-node sources against
+  superposition of unit-current runs), `gpr-potentials.md` (surface potential,
+  GPR, touch and step voltage against closed forms) and a windowing section in
+  `phase9-transient-options.md`. The scripts behind them
+  (`sources_checks.py`, `phase11_checks.py`, `phase9_transient_checks.py`) run on
+  any solver executable through `run_checks.sh`. Root README: repository layout
+  and the full case list.
+- **Induced-voltage literature, second pass** (references.md [82]–[106]): the
+  original Agrawal derivation, field data (Rubinstein, Barker), the Rachidi
+  review, and corona, dispersive and lossy ground, inclined channels,
+  grounding coupling, sag and terrain. theory.md §4.4, §4.5, §4.6, §7, §9 and
+  §10.1 gain the matching notes and errata. The 1985 Florida line is now
+  taken as 450 m. ROADMAP Phase 10d lists the candidate follow-up cases.
+
+### Known
+
+- Not ported to Rust or Julia (refused at load): `ring`, `plane`, `branch`,
+  `coating`, `lumped`, `crossSections`/`crossSection`, `frequencies.dc`,
+  `signal.riseTime`, `signal.totalVoltage`, `numerics.crossMedium`, and the
+  `step`/`branchNorton` waveforms. The conformance tables in `rust/README.md`
+  and `julia/README.md` do not list the newer features yet.
+- Test failures that are not regressions: the `channel_loaded` golden fixture
+  is older than the case (Fortran `test_common_cases` and Rust `conformance`);
+  under the `build.sh` release flags (fast-math) the harmonic fixtures of
+  `channel_tower` and `channel_tower_gap` drift past 1e-6, so the golden suite
+  is gated with `-O2 -fopenmp`; GUI `test_load_portela_mesh_element` (title
+  `portelaMesh` vs `m`).
+- Open (ROADMAP near-term work): a usable-fraction report for NLT records, the
+  NaN audit of `Channel*` under `-ffinite-math-only`.
 
 ## 0.7.0 — 2026-10-01 (ROADMAP Phase 10b)
 
