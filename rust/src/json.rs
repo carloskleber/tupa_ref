@@ -510,8 +510,57 @@ fn count(x: f64) -> usize {
 
 /// Parse a case from a JSON string.
 pub fn load_study_str(text: &str) -> Result<LoadedCase> {
-    let spec: CaseSpec = serde_json::from_str(text)?;
+    let raw: serde_json::Value = serde_json::from_str(text)?;
+    refuse_fortran_only(&raw)?;
+    let spec: CaseSpec = serde_json::from_value(raw)?;
     build(spec)
+}
+
+/// Inputs that only the Fortran solver implements (Phases 12, 13 and the DC point,
+/// `riseTime`, `totalVoltage`). The typed loader ignores unknown keys, so each is
+/// refused here: a case must never run without the model it asks for (log L-12).
+fn refuse_fortran_only(root: &serde_json::Value) -> Result<()> {
+    use serde_json::Value;
+    let lag = |what: &str| -> Result<()> {
+        Err(TupaError::new(format!(
+            "mTupa: {what} is not implemented in the Rust port yet (Fortran only; see rust/README.md)"
+        )))
+    };
+    if root.get("crossSections").is_some() {
+        return lag("crossSections (ADR 0030)");
+    }
+    if let Some(Value::Array(elems)) = root.get("elements") {
+        for e in elems {
+            match e.get("type").and_then(Value::as_str) {
+                Some("ring") => return lag("the ring element (ROADMAP Phase 12)"),
+                Some("plane") => return lag("the plane element"),
+                _ => {}
+            }
+            if e.get("coating").is_some() {
+                return lag("the coating layer (ROADMAP Phase 13)");
+            }
+            if e.get("lumped").is_some() {
+                return lag("the lumped segment (ROADMAP Phase 10e)");
+            }
+            if e.get("crossSection").is_some() {
+                return lag("element crossSection (ADR 0030)");
+            }
+        }
+    }
+    if let Some(f) = root.get("frequencies") {
+        if f.get("dc").and_then(Value::as_bool).unwrap_or(false) || f.get("dcFrequency").is_some() {
+            return lag("the quasi-stationary DC point (frequencies.dc)");
+        }
+    }
+    if let Some(sig) = root.get("signal") {
+        if sig.get("riseTime").and_then(Value::as_f64).unwrap_or(0.0) != 0.0 {
+            return lag("signal.riseTime (ADR 0032)");
+        }
+        if sig.get("totalVoltage").and_then(Value::as_bool).unwrap_or(false) {
+            return lag("signal.totalVoltage (ADR 0028)");
+        }
+    }
+    Ok(())
 }
 
 /// Parse a case from a file.
@@ -1239,6 +1288,25 @@ mod tests {
         let text = CASE.replace("\"type\": \"line\"", "\"type\": \"circumference\"");
         let c = load_study_str(&text).unwrap();
         assert!(c.study.structure.elements.is_empty());
+    }
+
+    #[test]
+    fn fortran_only_inputs_are_refused() {
+        let cases = [
+            ("\"outputs\"", "\"crossSections\": [], \"outputs\"", "crossSections"),
+            ("\"outputs\"", "\"frequencies\": {\"dc\": true}, \"outputs\"", "DC point"),
+            ("\"outputs\"", "\"signal\": {\"riseTime\": 1e-7}, \"outputs\"", "riseTime"),
+            ("\"outputs\"", "\"signal\": {\"totalVoltage\": true}, \"outputs\"", "totalVoltage"),
+            ("\"type\": \"line\"", "\"type\": \"line\", \"coating\": {}", "coating"),
+            ("\"type\": \"line\"", "\"type\": \"line\", \"lumped\": {}", "lumped"),
+            ("\"type\": \"line\"", "\"type\": \"line\", \"crossSection\": \"x\"", "crossSection"),
+            ("\"type\": \"line\"", "\"type\": \"ring\"", "ring"),
+            ("\"type\": \"line\"", "\"type\": \"plane\"", "plane"),
+        ];
+        for (from, to, what) in cases {
+            let e = load_study_str(&CASE.replace(from, to)).unwrap_err();
+            assert!(e.message().contains(what) && e.message().contains("not implemented"), "{what}: {e}");
+        }
     }
 
     #[test]

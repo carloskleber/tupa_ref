@@ -710,7 +710,7 @@ authoritative text is in the ADR; this is the quick index.
   (Grcev, Lima ×2, Poljak, Silva ×2) accepted as the executable-oracle
   substitute for the 0.1.0 bar (decision 2026-08-02).
 - **Julia contributed prototype** 2026-09-29; **8a, 8J-a** 2026-09-30.
-- **0.6.0** — Phase 10 (2026-10-01). **0.7.0** — Phase 10b.
+- **0.6.0** — Phase 10 (2026-10-01). **0.7.0** — Phase 10b. **0.8.0** (2026-11-19) — DC point, coating, cross-section impedance, `ring`/`plane`, Marx and LabUAT cases, induced voltages (`branch`), air–soil coupling, safety outputs; Rust/Julia loaders refuse Fortran-only input.
 
 ### GUI
 

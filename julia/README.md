@@ -228,6 +228,15 @@ alike (ROADMAP Phase 8J item 5 regenerates them).
 
 See ROADMAP Phase 8J for the remaining items.
 
+### Fortran-only inputs (0.8.0)
+
+The loader refuses, with an error naming the feature, every input that only the
+Fortran solver implements: the `ring`, `plane` and `branch` elements, `coating`,
+`lumped`, `crossSections`/`crossSection`, `frequencies.dc`, `signal.riseTime`,
+`signal.totalVoltage`, `numerics.crossMedium` and the `step`/`branchNorton`
+waveforms (log L-12). Port a feature, then remove its refusal and add its fixture
+to the conformance table above.
+
 ## Follow-along rule
 
 Like the Rust port (ROADMAP Phase 8 item 10): each contract change (schema,

@@ -90,6 +90,40 @@ function load_study(path::AbstractString)
     return load_study_string(text)
 end
 
+"""
+Inputs only the Fortran solver implements. The reader ignores unknown keys, so each is
+refused here: a case must never run without the model it asks for (log L-12).
+"""
+function refuse_fortran_only(root)
+    lag(what) = raise_error("mTupa: $what is not implemented in the Julia port yet " *
+                            "(Fortran only; see julia/README.md)")
+    haskey(root, "crossSections") && lag("crossSections (ADR 0030)")
+    elems = get(root, "elements", nothing)
+    if elems isa AbstractVector
+        for e in elems
+            e isa AbstractDict || continue
+            kind = get(e, "type", "")
+            kind == "ring" && lag("the ring element (ROADMAP Phase 12)")
+            kind == "plane" && lag("the plane element")
+            haskey(e, "coating") && lag("the coating layer (ROADMAP Phase 13)")
+            haskey(e, "lumped") && lag("the lumped segment (ROADMAP Phase 10e)")
+            haskey(e, "crossSection") && lag("element crossSection (ADR 0030)")
+        end
+    end
+    f = get(root, "frequencies", nothing)
+    if f isa AbstractDict
+        (get(f, "dc", false) === true || haskey(f, "dcFrequency")) &&
+            lag("the quasi-stationary DC point (frequencies.dc)")
+    end
+    sig = get(root, "signal", nothing)
+    if sig isa AbstractDict
+        rt = get(sig, "riseTime", 0)
+        rt isa Number && rt != 0 && lag("signal.riseTime (ADR 0032)")
+        get(sig, "totalVoltage", false) === true && lag("signal.totalVoltage (ADR 0028)")
+    end
+    return nothing
+end
+
 "Parse a case from a JSON string."
 function load_study_string(text::AbstractString)
     root = try
@@ -99,6 +133,7 @@ function load_study_string(text::AbstractString)
     end
     root isa AbstractDict || raise_error("JSON error: the case file must be a JSON object")
 
+    refuse_fortran_only(root)
     kernel, image_model, max_segment_length = load_numerics(field(root, "numerics"))
     # ROADMAP Phase 11 (ADR 0027): rejected rather than skipped, so a case never
     # runs without the potentials it asks for

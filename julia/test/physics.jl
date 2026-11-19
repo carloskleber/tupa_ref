@@ -191,6 +191,26 @@ end
     @test err isa TupaError && occursin("crosses the air-soil interface", err.msg)
 end
 
+@testset "Fortran-only inputs are refused (L-12)" begin
+    base = read(joinpath(COMMON, "rod_air.json"), String)
+    # splice a key right after the opening brace of the document / its first element
+    top(k) = replace(base, r"^\s*\{" => "{" * k * ","; count = 1)
+    elem(k) = replace(base, r"\"elements\"\s*:\s*\[\s*\{" => s"\"elements\": [{" * k * ","; count = 1)
+    for (text, what) in (
+            (top("\"crossSections\": []"), "crossSections"),
+            (replace(base, "\"frequencies\": {" => "\"frequencies\": {\"dc\": true,"), "DC point"),
+            (top("\"signal\": {\"riseTime\": 1e-7}"), "riseTime"),
+            (top("\"signal\": {\"totalVoltage\": true}"), "totalVoltage"),
+            (elem("\"coating\": {}"), "coating"),
+            (elem("\"lumped\": {}"), "lumped"),
+            (elem("\"crossSection\": \"x\""), "crossSection"),
+            (replace(base, "\"type\": \"line\"" => "\"type\": \"ring\""; count = 1), "ring"),
+            (replace(base, "\"type\": \"line\"" => "\"type\": \"plane\""; count = 1), "plane"))
+        err = try load_study_string(text); nothing catch e; e end
+        @test err isa TupaError && occursin(what, err.msg) && occursin("not implemented", err.msg)
+    end
+end
+
 @testset "every common/*.json loads, validates and assembles (test_validation)" begin
     cases = filter(endswith(".json"), readdir(COMMON))
     @test length(cases) >= 25
@@ -201,7 +221,7 @@ end
         catch e
             e
         end
-        @test err isa TupaError && occursin("ROADMAP Phase 9", err.msg)
+        @test err isa TupaError && (occursin("ROADMAP Phase 9", err.msg) || occursin("Fortran only", err.msg))
     end
     for f in filter(f -> replace(f, ".json" => "") in PHASE10B_LAG_CASES, cases)
         # Phase 10b cases (lightning channel): refused explicitly (lag)
@@ -210,7 +230,7 @@ end
         catch e
             e
         end
-        @test err isa TupaError && occursin("ROADMAP Phase 10b", err.msg)
+        @test err isa TupaError && (occursin("ROADMAP Phase 10b", err.msg) || occursin("Fortran only", err.msg))
     end
     for f in filter(f -> replace(f, ".json" => "") in PHASE10D_LAG_CASES, cases)
         # Phase 10d cases (`branch` element): refused explicitly (lag)
@@ -219,7 +239,7 @@ end
         catch e
             e
         end
-        @test err isa TupaError && occursin("ROADMAP Phase 10d", err.msg)
+        @test err isa TupaError && (occursin("ROADMAP Phase 10d", err.msg) || occursin("Fortran only", err.msg))
     end
     for f in filter(f -> replace(f, ".json" => "") in PHASE14_LAG_CASES, cases)
         # Phase 14 cases (`numerics.crossMedium`): refused explicitly (lag)
@@ -228,7 +248,7 @@ end
         catch e
             e
         end
-        @test err isa TupaError && occursin("ROADMAP Phase 14", err.msg)
+        @test err isa TupaError && (occursin("ROADMAP Phase 14", err.msg) || occursin("Fortran only", err.msg))
     end
     for f in filter(f -> replace(f, ".json" => "") in PHASE11_LAG_CASES, cases)
         # Phase 11 cases (`observation` block): refused explicitly (lag)
@@ -237,13 +257,21 @@ end
         catch e
             e
         end
-        @test err isa TupaError && occursin("ROADMAP Phase 11", err.msg)
+        @test err isa TupaError && (occursin("ROADMAP Phase 11", err.msg) || occursin("Fortran only", err.msg))
+    end
+    # Fortran-only inputs (ring, plane, coating, cross sections, DC point, riseTime, ...):
+    # refused explicitly by `refuse_fortran_only`, never run without the model
+    fortran_only(f) = try
+        load_study(joinpath(COMMON, f)); false
+    catch e
+        e isa TupaError && occursin("not implemented", e.msg)
     end
     for f in filter(f -> !(replace(f, ".json" => "") in PHASE9_LAG) &&
                          !(replace(f, ".json" => "") in PHASE10B_LAG_CASES) &&
                          !(replace(f, ".json" => "") in PHASE10D_LAG_CASES) &&
                          !(replace(f, ".json" => "") in PHASE14_LAG_CASES) &&
-                         !(replace(f, ".json" => "") in PHASE11_LAG_CASES), cases)
+                         !(replace(f, ".json" => "") in PHASE11_LAG_CASES) &&
+                         !fortran_only(f), cases)
         c = validate_study_references!(load_study(joinpath(COMMON, f)))
         @test !isempty(c.study.structure.electrodes)
     end

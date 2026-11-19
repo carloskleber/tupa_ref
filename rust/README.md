@@ -109,6 +109,15 @@ item 9) still needs Fortran outputs for the non-golden cases.
   general-phase implementation (ADR 0022).
 - No parallelism (the Fortran sweep is threaded since Phase 10 item 4; the Rust one stays serial — Phase 8 scope), no LAPACK/`faer` backend, no SLATEC FFI feature.
 
+### Fortran-only inputs (0.8.0)
+
+The loader refuses, with an error naming the feature, every input that only the
+Fortran solver implements: the `ring`, `plane` and `branch` elements, `coating`,
+`lumped`, `crossSections`/`crossSection`, `frequencies.dc`, `signal.riseTime`,
+`signal.totalVoltage`, `numerics.crossMedium` and the `step`/`branchNorton`
+waveforms (log L-12). Port a feature, then remove its refusal and add its fixture
+to the conformance table above.
+
 ## Phase 8 item 10 (follow-along rule)
 
 Each later contract change (schema, `common/` case, default numerics)
