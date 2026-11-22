@@ -1,0 +1,99 @@
+{
+  "title": "Passivity probe: 300 m open-ended ACSR Grosbeak line 30 m above ground, parallel 70 mm2 copper wire buried 1 m deep at 50 m lateral distance, unit current at A0, air-soil cross-coupling on",
+  "soil": {
+    "conductivity": 0.001,
+    "permittivity": 10.0,
+    "permeability": 1.0
+  },
+  "nodes": [
+    {
+      "id": "A0",
+      "position": [
+        0.0,
+        0.0,
+        30.0
+      ]
+    },
+    {
+      "id": "A300",
+      "position": [
+        300.0,
+        0.0,
+        30.0
+      ]
+    },
+    {
+      "id": "G0",
+      "position": [
+        0.0,
+        50.0,
+        -1.0
+      ]
+    },
+    {
+      "id": "G300",
+      "position": [
+        300.0,
+        50.0,
+        -1.0
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "id": "acsr_grosbeak_eq",
+      "epsilonr": 1.0,
+      "mur": 1.0,
+      "sigma": 22466019.4
+    },
+    {
+      "id": "copper",
+      "epsilonr": 1.0,
+      "mur": 1.0,
+      "sigma": 58000000.0
+    }
+  ],
+  "elements": [
+    {
+      "type": "line",
+      "id": "Aerial",
+      "from": "A0",
+      "to": "A300",
+      "radius": 0.012575,
+      "segments": 30,
+      "material": "acsr_grosbeak_eq"
+    },
+    {
+      "type": "line",
+      "id": "Buried",
+      "from": "G0",
+      "to": "G300",
+      "radius": 0.00472,
+      "segments": 60,
+      "material": "copper"
+    }
+  ],
+  "sources": [
+    {
+      "node": "A0",
+      "current": {
+        "re": 1.0,
+        "im": 0.0
+      }
+    }
+  ],
+  "frequencies": {
+    "min": 100000.0,
+    "max": 3000000.0,
+    "pointsPerDecade": 20
+  },
+  "outputs": {
+    "quantities": [
+      "voltage",
+      "inputImpedance"
+    ]
+  },
+  "numerics": {
+    "crossMedium": "transmission"
+  }
+}

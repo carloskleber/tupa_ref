@@ -1,0 +1,63 @@
+{
+  "title": "Open-ended 1 km ACSR Grosbeak line 30 m above ground, parallel 70 mm2 copper wire buried 1 m deep at 50 m lateral distance; 1 kA Heidler pulse injected at one end of the aerial line, air-soil cross-coupling on",
+  "soil": {
+    "conductivity": 0.001,
+    "permittivity": 10.0,
+    "permeability": 1.0
+  },
+  "nodes": [
+    { "id": "A0",    "position": [0.0,    0.0, 30.0] },
+    { "id": "A1000", "position": [1000.0, 0.0, 30.0] },
+    { "id": "G0",    "position": [0.0,    50.0, -1.0] },
+    { "id": "G1000", "position": [1000.0, 50.0, -1.0] }
+  ],
+  "materials": [
+    {
+      "id": "acsr_grosbeak_eq",
+      "epsilonr": 1.0,
+      "mur": 1.0,
+      "sigma": 22466019.4
+    },
+    {
+      "id": "copper",
+      "epsilonr": 1.0,
+      "mur": 1.0,
+      "sigma": 58000000.0
+    }
+  ],
+  "elements": [
+    {
+      "type": "line",
+      "id": "Aerial",
+      "from": "A0",
+      "to": "A1000",
+      "radius": 0.012575,
+      "segments": 200,
+      "material": "acsr_grosbeak_eq"
+    },
+    {
+      "type": "line",
+      "id": "Buried",
+      "from": "G0",
+      "to": "G1000",
+      "radius": 0.00472,
+      "segments": 250,
+      "material": "copper"
+    }
+  ],
+  "numerics": {
+    "crossMedium": "transmission"
+  },
+  "signal": {
+    "sourceNode": "A0",
+    "waveform": "heidler",
+    "imax": 1000.0,
+    "terms": [
+      { "i0": 1000.0, "n": 10.0, "tau1": 5e-07, "tau2": 2e-06 }
+    ],
+    "observeNodes": ["A0", "A1000", "G0", "G1000"],
+    "nyquistHz": 5000000.0,
+    "fftPoints": 1024,
+    "transform": "nlt"
+  }
+}

@@ -97,9 +97,11 @@ module mMesh
     logical :: crossMedium = .false.
     !! Air-soil cross-coupling on (ROADMAP Phase 14 item 1); default off
     complex(8) :: cEMixed
-    !! Electric constant of a mixed pair, 1/(2π(W_air + W_soil)) (theory.md §5.1)
+    !! Electric constant of a mixed pair, sqrt(cEAir τ_a) sqrt(cESoil τ_s) with
+    !! τ = 1 + Γ; 1/(2π(W_air + W_soil)) under Γ(ω) (theory.md §5.1)
     complex(8) :: cMMixed
-    !! Magnetic constant of a mixed pair: mean of cMAir and cMSoil
+    !! Magnetic constant of a mixed pair: mean of cMAir and cMSoil times
+    !! sqrt(τ_a) sqrt(τ_s) (theory.md §5.1, ADR 0029 amendment)
 
     ! Image reflection coefficients (theory.md §5), set by calcParamW /
     ! calcParamLaplace from the media immittances
@@ -156,6 +158,34 @@ contains
       mesh%gammaSoil = (mesh%cEAir - mesh%cESoil) / (mesh%cEAir + mesh%cESoil)
     end if
   end subroutine calcImageCoefficients
+
+  subroutine calcMixedConstants(mesh)
+    !! Set the mixed-pair constants `cEMixed`/`cMMixed` (theory.md §5.1,
+    !! ADR 0029 amendment 2026-11-20) from the image coefficients just set.
+    !!
+    !! With the transmission factors τ = 1 + Γ of each medium, the mixed
+    !! constant is the geometric mean of the two media's transmitted
+    !! constants, `sqrt(c_own τ_own)·sqrt(c_other τ_other)`. For the scalar
+    !! potential this is exactly 1/(2π(W_a+W_s)) under Γ(ω) (c_E τ is the same
+    !! from either side). For the vector potential it gives
+    !! `c̄_M sqrt(τ_a) sqrt(τ_s)`: the self blocks reduce to `c_M τ g` at the
+    !! interface, and a 2×2 kernel with diagonal τ_a, τ_s stays positive
+    !! semidefinite only if the coupling is at most sqrt(τ_a τ_s). The earlier
+    !! direct-only form (τ-free `c̄_M`) exceeded that bound and made long
+    !! parallel air/soil conductors non-passive (`common/aerial_buried_cross`).
+    !! Equal media: τ = 1, both reduce to the homogeneous constants. Ideal
+    !! images: τ_a = 0, so the coupling vanishes, consistently with the
+    !! perfectly screening ground that model represents. Each square root is
+    !! taken separately: every factor has a non-negative real part for s in the
+    !! closed right half-plane, so the principal branch is conjugate-symmetric.
+    type(tMesh), intent(inout) :: mesh
+    complex(8) :: tauAir, tauSoil
+
+    tauAir  = 1.0d0 + mesh%gammaAir
+    tauSoil = 1.0d0 + mesh%gammaSoil
+    mesh%cEMixed = sqrt(mesh%cEAir * tauAir) * sqrt(mesh%cESoil * tauSoil)
+    mesh%cMMixed = 0.5d0 * (mesh%cMAir + mesh%cMSoil) * sqrt(tauAir) * sqrt(tauSoil)
+  end subroutine calcMixedConstants
 
   ! =====================================================================
   ! Memory allocation and initialisation
@@ -288,9 +318,8 @@ contains
     ! theory.md §2: gamma = sqrt(j*omega*mu*W), Re(gamma) >= 0
     mesh%propAir  = sqrt(cmplx(0.0d0, omega, kind=8) * muAir  * Wair)
     mesh%propSoil = sqrt(cmplx(0.0d0, omega, kind=8) * muSoil * Wsoil)
-    mesh%cEMixed = 1.0d0 / (0.5d0 * FOUR_PI * (Wair + Wsoil))
-    mesh%cMMixed = 0.5d0 * (mesh%cMAir + mesh%cMSoil)
     call calcImageCoefficients(mesh)
+    call calcMixedConstants(mesh)
   end subroutine calcParamW
 
   subroutine calcParamLaplace(mesh, s, muAir, Wair, muSoil, Wsoil)
@@ -311,9 +340,8 @@ contains
     mesh%cMSoil = s * (muSoil / FOUR_PI)
     mesh%propAir  = sqrt(s * muAir  * Wair)
     mesh%propSoil = sqrt(s * muSoil * Wsoil)
-    mesh%cEMixed = 1.0d0 / (0.5d0 * FOUR_PI * (Wair + Wsoil))
-    mesh%cMMixed = 0.5d0 * (mesh%cMAir + mesh%cMSoil)
     call calcImageCoefficients(mesh)
+    call calcMixedConstants(mesh)
   end subroutine calcParamLaplace
 
   ! =====================================================================

@@ -12,13 +12,15 @@ program test_crossmedium
   implicit none
 
   type(tMesh) :: m
-  complex(8) :: Wa, Ws, expZt, expZl, zt, zl
+  complex(8) :: Wa, Ws, expZt, expZl, zt, zl, tauA, tauS, cM1, cM2, sLap
+  complex(8), allocatable :: zin(:)
   real(8) :: omega
   real(8) :: p1(2,3), p2(2,3), rad(2)
   real(8) :: G(2,2), Gi(2,2), Rb(2,2), Rbi(2,2), ct(2,2), cti(2,2)
   integer(4) :: pos(2)
   type(tStudy) :: sOn, sOff
-  integer :: iTop, k
+  integer :: iTop, k, nNeg
+  real(8) :: worst
   real(8) :: rel(3)
 
   omega = 2.0d0 * PI * 1.0d5
@@ -32,11 +34,19 @@ program test_crossmedium
   ! air segment 1, soil segment 2: d = 6 m total, 4 m of it in air
   call calcZMutual(m, 1, 2, 1, 2, 6.0d0, 4.0d0, 2.0d0, 3.0d0, 1.5d0, 0.0d0, 0.5d0, 0.0d0)
   expZt = exp(-4.0d0 * m%propAir - 2.0d0 * m%propSoil) * 1.5d0 / (2.0d0 * PI * (Wa + Ws)) / 6.0d0
-  expZl = exp(-4.0d0 * m%propAir - 2.0d0 * m%propSoil) * 1.5d0 * 0.5d0 * cmplx(0.0d0, omega * MU0 / FOUR_PI, kind=8)
+  ! Longitudinal: the direct term scaled by sqrt(tau_a tau_s), tau = 1 + Gamma
+  ! (ADR 0029 amendment 2026-11-20)
+  tauA = 2.0d0 * Wa / (Wa + Ws)
+  tauS = 2.0d0 * Ws / (Wa + Ws)
+  expZl = exp(-4.0d0 * m%propAir - 2.0d0 * m%propSoil) * 1.5d0 * 0.5d0 * cmplx(0.0d0, omega * MU0 / FOUR_PI, kind=8) &
+          * sqrt(tauA) * sqrt(tauS)
   call test_ok("Ztrans = g e^{-g.R}/(2 pi (Wa+Ws) la lb)", abs(m%Ztrans(1,2) - expZt) < 1.0d-12 * abs(expZt), &
                "mixed Zt must carry 1/(2 pi (Wa+Ws)) and the piecewise retardation")
-  call test_ok("Zlong = cM cosTheta g e^{-g.R}", abs(m%Zlong(1,2) - expZl) < 1.0d-12 * abs(expZl), &
-               "mixed Zl is the direct term only")
+  call test_ok("Zlong = cM sqrt(tau_a tau_s) cosTheta g e^{-g.R}", abs(m%Zlong(1,2) - expZl) < 1.0d-12 * abs(expZl), &
+               "mixed Zl is the direct term times the geometric mean of the transmission factors")
+  call test_ok("passivity bound: (cMMixed/cM)^2 = tau_a tau_s", &
+               abs((m%cMMixed / m%cMAir)**2 - tauA * tauS) < 1.0d-12 * abs(tauA * tauS), &
+               "coupling must sit at the semidefinite bound of the interface kernel")
   call test_ok("symmetric", m%Ztrans(1,2) == m%Ztrans(2,1) .and. m%Zlong(1,2) == m%Zlong(2,1), &
                "mixed block must be reciprocal")
 
@@ -53,6 +63,27 @@ program test_crossmedium
   call test_ok("equal media: mixed Zt equals the homogeneous direct term", &
                abs(m%Ztrans(1,2) - expZt) < 1.0d-12 * abs(expZt), "must reduce to the uniform-medium kernel")
   call test_ok("equal media: image coefficient vanishes", abs(m%gammaSoil) < 1.0d-14, "Gamma = 0 for identical media")
+  expZl = m%cMSoil * 0.5d0 * exp(-6.0d0 * m%propSoil) * 1.5d0
+  call test_ok("equal media: mixed Zl equals the homogeneous direct term", &
+               abs(m%Zlong(1,2) - expZl) < 1.0d-12 * abs(expZl), "tau = 1 must give the uniform-medium kernel")
+
+  ! Ideal images (Gamma_air = -1): tau_a = 0, the ground screens perfectly and
+  ! the consistent coupling is zero in both kernels
+  m%imageModel = IMAGE_IDEAL
+  call calcParamW(m, omega, MU0, Wa, MU0, Ws)
+  call test_ok("ideal images: mixed constants vanish", abs(m%cEMixed) == 0.0d0 .and. abs(m%cMMixed) == 0.0d0, &
+               "tau_a = 0 under Gamma = -1")
+  m%imageModel = 0
+
+  ! Laplace path: conjugate frequencies give conjugate mixed constants
+  sLap = cmplx(2.0d4, omega, kind=8)
+  call calcParamLaplace(m, sLap, MU0, sLap * EPSILON0, MU0, 0.01d0 + sLap * 10.0d0 * EPSILON0)
+  cM1 = m%cMMixed; zt = m%cEMixed
+  call calcParamLaplace(m, conjg(sLap), MU0, conjg(sLap) * EPSILON0, MU0, 0.01d0 + conjg(sLap) * 10.0d0 * EPSILON0)
+  cM2 = m%cMMixed
+  call test_ok("Laplace: mixed constants conjugate-symmetric", &
+               abs(cM2 - conjg(cM1)) < 1.0d-12 * abs(cM1) .and. abs(m%cEMixed - conjg(zt)) < 1.0d-12 * abs(zt), &
+               "principal branches must not cross a cut")
 
   ! Switch off: legacy behaviour
   m%crossMedium = .false.
@@ -88,6 +119,41 @@ program test_crossmedium
   call test_ok("1 MHz: coupling effect > 1 % and < 50 %", rel(3) > 1.0d-2 .and. rel(3) < 0.5d0, &
                "channel-to-buried-rod coupling should be visible but moderate at 1 MHz")
   call test_ok("effect increases with frequency", rel(1) < rel(2) .and. rel(2) < rel(3), "monotone growth")
+
+  ! Long parallel air and buried conductors: the direct-only longitudinal
+  ! term of the first ADR 0029 kernel gave Re(Zin) down to -0.46 |Zin| here;
+  ! the geometric-mean kernel stays passive up to a straight-ray retardation
+  ! residual of ~0.2 % of |Zin| near the MHz resonances (theory.md §5.1)
+  call test_init("parallel aerial line and buried wire: passivity (common/aerial_buried_cross_short)")
+  call runStudyFromFile("../common/aerial_buried_cross_short.json", sOn)
+  zin = sOn%inputImpedance("A0")
+  worst = minval(real(zin) / abs(zin))
+  nNeg = count(real(zin) < 0.0d0)
+  call test_ok("finite results", all(zin == zin), "NaN in parallel-conductor sweep")
+  call test_ok("Re(Zin) >= -1e-2 |Zin| at every frequency", worst > -1.0d-2, &
+               "mixed longitudinal coupling must not create negative resistance")
+  call test_ok("at most 2 of 31 frequencies with Re(Zin) < 0", nNeg <= 2, "residual must stay isolated")
+
+  ! Power frequency, voltage source and loaded line (about 10 A). Carson's
+  ! earth-return mutual impedance for this cross-section (rho = 1000 ohm.m,
+  ! d = 58.8 m, De = 2688 m at 60 Hz) is 0.294 ohm/km, an EMF of 2.94 V along
+  ! the buried wire. The screened air self-terms make the model's inductive
+  ! coupling vanish as omega -> 0 (ADR 0029 amendment, theory.md §5.1), so the
+  ! buried wire sees millivolts. The last check pins that known limit: it fails
+  ! on purpose when an earth-return Zl lands (ROADMAP Phase 14, earth-return scope)
+  call test_init("parallel aerial line and buried wire at 60 Hz (common/aerial_buried_cross_60hz)")
+  call runStudyFromFile("../common/aerial_buried_cross_60hz.json", sOn)
+  associate (vA0 => sOn%voltageResults%get(sOn%structure%findNodeIndex("A0"), 2), &
+             vA1 => sOn%voltageResults%get(sOn%structure%findNodeIndex("A1000"), 2), &
+             vG0 => sOn%voltageResults%get(sOn%structure%findNodeIndex("G0"), 2), &
+             vG1 => sOn%voltageResults%get(sOn%structure%findNodeIndex("G1000"), 2))
+    call test_ok("finite results", vG0 == vG0 .and. vG1 == vG1, "NaN at power frequency")
+    call test_ok("voltage source holds 1 kV at A0", abs(vA0 - 1000.0d0) < 1.0d-6, "ADR 0016 superposition")
+    call test_ok("load current about 10 A", abs(abs(vA1) / 100.0d0 - 10.0d0) < 0.1d0, "line drop must be small at 60 Hz")
+    call test_ok("buried wire is excited", abs(vG0) > 1.0d-4, "coupling on must reach the floating wire")
+    call test_ok("known limit: |V(G0) - V(G1000)| < 1 % of Carson EMF 2.94 V", abs(vG0 - vG1) < 2.94d-2, &
+                 "earth-return coupling appeared: update the fixture and ROADMAP Phase 14")
+  end associate
 
   call test_summary()
   call test_close()

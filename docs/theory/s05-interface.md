@@ -154,14 +154,41 @@ segment integrals of §4.1 and attaching retardation, the mixed-pair entries are
 $$Z_t(a,b) = \frac{c_E^{\times}}{l_a\,l_b}\, e^{-\gamma_a R_a - \gamma_s R_s}\, g,
 \qquad Z_\ell(a,b) = c_M^{\times}\,\cos\theta\; e^{-\gamma_a R_a - \gamma_s R_s}\, g,$$
 
-with $c_E^{\times} = 1/(2\pi(W_a + W_s)) = 2\,c_E^{a} c_E^{s}/(c_E^{a} + c_E^{s})$
-(symmetric in the two media, so the mixed block stays reciprocal, §9 item 4),
-$c_M^{\times}$ the mean of the two $c_M$ (the model assumes equal permeabilities),
-$g$ the ordinary direct geometry factor of the pair, and $R = R_a + R_s$ the
+with $g$ the ordinary direct geometry factor of the pair, $R = R_a + R_s$ the
 midpoint distance split at the point where the straight midpoint-to-midpoint
-ray crosses $z = 0$. $Z_\ell$ has no image parcel either: with equal $\mu$ the
-vector potential is continuous across the interface to the quasi-static level,
-so only its reflection (a higher-order effect) is dropped.
+ray crosses $z = 0$, and the mixed constants
+
+$$c_E^{\times} = \sqrt{c_E^{a}\tau_a}\,\sqrt{c_E^{s}\tau_s}, \qquad
+c_M^{\times} = \bar c_M\,\sqrt{\tau_a}\,\sqrt{\tau_s}, \qquad
+\tau_{a,s} = 1 + \Gamma_{a,s},$$
+
+where $\bar c_M$ is the mean of the two $c_M$ (the model assumes equal
+permeabilities). With $\Gamma(\omega)$, $c_E\tau$ is the same seen from either
+medium, and $c_E^{\times}$ is exactly $1/(2\pi(W_a + W_s))$, the transmitted
+term above. Both constants are symmetric in the two media, so the mixed block
+stays reciprocal (§9 item 4), and both reduce to the homogeneous ones for
+equal media ($\tau = 1$).
+
+**Why the longitudinal factor is $\sqrt{\tau_a\tau_s}$.** The vector potential
+of a physical current is continuous across the interface when the
+permeabilities are equal, which suggests $c_M^{\times} = \bar c_M$ with no
+transmission factor. That is not consistent with the rest of this model. The
+self-terms apply the same $\Gamma$ to the $Z_\ell$ images (§5.0), so for a
+conductor in air the soil screens the vector potential ($\Gamma_a \approx -1$,
+an earth return at the surface). Take two segments just either side of the
+interface. Their self-blocks become $c_M\tau_a g$ and $c_M\tau_s g$, with
+$\tau_a \approx 0$ and $\tau_s \approx 2$. A $2\times2$ kernel with that diagonal
+is positive semidefinite, i.e. it absorbs power for every current
+distribution, only if the off-diagonal factor $\kappa$ obeys
+$\kappa^2 \le \tau_a\tau_s$. With $\kappa = 1$ the bound fails by orders of
+magnitude, and long parallel conductors in the two media become non-passive.
+`common/aerial_buried_cross` is a 1 km open line above a parallel buried wire.
+There Re$(Z_{in})$ went down to $-9.6$ kΩ, and a pulse grew on every round
+trip. The geometric mean sits at the bound, so it is the largest coupling the
+self-terms allow. Applied to $c_E$ it recovers the transmitted term exactly.
+Under ideal images $\tau_a = 0$, and the two media decouple, as a perfectly
+screening ground should. The rule is
+[ADR 0029](../adr/0029-cross-medium-coupling.md) as amended on 2026-11-20.
 
 Checks built into the test suite ([ADR 0029](../adr/0029-cross-medium-coupling.md)):
 for identical media the mixed kernel equals the homogeneous direct term
@@ -169,13 +196,20 @@ and $\Gamma = 0$; the scalar potential is continuous across $z = 0$ with the
 coupling on and visibly discontinuous with it off; and the same
 transmitted term is applied to the observation potentials of §3.1, so GPR,
 touch and step voltages feel air-side sources (the lightning channel
-included). **Limits.** The retardation factor is the
-straight-ray heuristic, not a Sommerfeld solution; the model is a
-low-frequency one and the neglected lateral-wave terms grow with frequency
-(§10.1). On `rod_air` the input voltage moves by 3.6e-6 at 10 Hz, 3.6e-4 at
-1 kHz, 3.1e-2 at 100 kHz and 5.7e-2 at 1 MHz; for the tower–channel–rod
-case (`channel_tower_cross`) the tower-top voltage moves by 0.2 % at
-10 kHz and 9.5 % at 1 MHz.
+included). A passivity sweep of the parallel-conductor probe
+(`aerial_buried_cross_short`) is also part of the suite. **Limits.** The
+retardation factor is the straight-ray heuristic, not a Sommerfeld solution.
+The model is a low-frequency one, and the neglected lateral-wave terms grow
+with frequency (§10.1). The straight ray also leaves a small passivity residual:
+isolated points near the MHz series resonances of the parallel probes where
+Re$(Z_{in})$ is slightly negative, at worst 0.2 % of $|Z_{in}|$ on the short
+probe. Consistent with the screened self-terms, the inductive coupling also
+vanishes as $\omega \to 0$. The deep earth-return coupling of power lines to
+buried pipelines at power frequency (Carson, Sunde [41]) is therefore outside
+this model. On `rod_air` the input voltage moves by 4.7e-8 at 10 Hz, 4.7e-6
+at 1 kHz, 1.7e-3 at 100 kHz and 9.5e-3 at 1 MHz. For the tower–channel–rod
+case (`channel_tower_cross`), the tower-top voltage moves by 0.21 % at 10 kHz
+and 7.8 % at 1 MHz.
 The model has analytic limits and continuity checks behind it but no
 published curve yet, which is why it is not the default. Anything beyond it
 is Sommerfeld territory (§10.1). The antenna-theory reflection/transmission
