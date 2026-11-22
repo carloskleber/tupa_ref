@@ -218,6 +218,20 @@ the evidence, not people.
   Rust until regenerated).
 - **Applies when**: planning a numerical default change.
 
+#### L-20 — Test a new coupling term for passivity where it dominates
+
+- **Rule**: when a kernel term couples blocks that were uncoupled before,
+  sweep Re(Z_in) ≥ 0 over the band on a geometry where that term dominates
+  (long parallel conductors), not only analytic limits, reciprocity and
+  continuity. In a transient, a pulse that grows on an open line is the
+  signature of a non-passive term. NLT shows it, while FFT folds it into
+  acausal ringing.
+- **Origin**: P14-2026-11-20 (the first ADR 0029 kernel passed every local
+  check, but its direct-only `Zℓ` gave Re(Z_in) down to −9.6 kΩ on a 1 km line
+  over a buried wire).
+- **Applies when**: adding or changing mutual terms between media, between
+  element types (channel, branch), or any off-diagonal block.
+
 ### Process and environment
 
 #### L-14 — Local gate, release profile, warm cache
@@ -323,6 +337,8 @@ authoritative text is in the ADR; this is the quick index.
 | 2026-11-03 | Optional excitation rise time; `nltDamping` default unchanged, c·T ≈ 6 recommended for step-like sources | INV-2026-11-03, ADR 0032 |
 | 2026-11-05 | The DC limit is a true solve at a low frequency (default 1 mHz), not an ω = 0 special case | DC-2026-11-05 |
 | 2026-11-14 | Theory split into chapters under `theory/` with stable § numbers; dates and history only in this log; roadmap holds state and plan | DOC-2026-11-14, L-18 |
+| 2026-11-20 | Insulator strings: one `insulator` element, two kinds. Cap-and-pin: one `ring` per floating cap-pin assembly, pure-C `branch` per unit, end fittings are the terminals, ring radius = metal cap. Long rod: distributed series-C chain from the core `ε_r`, grading rings inside the element. Linear (no flashover), lossless in v1 | P16 |
+| 2026-11-20 | Mixed air–soil constants are the geometric mean √(c^a τ_a)·√(c^s τ_s), τ = 1 + Γ; the direct-only `Zℓ` was non-passive | P14-2026-11-20, ADR 0029 amendment |
 
 ---
 
@@ -654,6 +670,62 @@ authoritative text is in the ADR; this is the quick index.
 - **Evidence**: analytic limits and continuity only — no literature curve yet.
 - **Decisions**: strictly after Γ(ω) (2026-07-17); opt-in, default not flipped.
 - **Refs**: ADR 0029.
+
+#### P14-2026-11-20 — Mixed-kernel passivity (2026-11-20)
+
+- **Delivered**: `mMesh%calcMixedConstants`. The mixed constants are now
+  `√(c^a τ_a)·√(c^s τ_s)` with τ = 1 + Γ, so `c_M×` gains `√τ_a √τ_s` and
+  `c_E×` is unchanged under Γ(ω). Both vanish under ideal images. Cases
+  `common/aerial_buried_cross.json` (1 km ACSR Grosbeak line 30 m up, open
+  ends, 1 kA pulse at one end; 70 mm² Cu buried 1 m deep at 50 m lateral) and
+  `aerial_buried_cross_short.json` (300 m harmonic passivity probe).
+  `rod_air_cross_expected.csv` regenerated. New `test_crossmedium` checks:
+  the `Zℓ` formula, the bound, the equal-media `Zℓ` limit, the ideal-image
+  zero, Laplace conjugate symmetry, and the probe sweep.
+- **Evidence**: on the 1 km case, under the first kernel the pulse grew from
+  1.0 MV to 2.9 MV in nine round trips. Re(Z_in) at `A0` was negative at 64 of
+  100 frequencies from 10 kHz to 3 MHz (minimum −9.6 kΩ). Zeroing one mixed
+  term at a time, in a diagnostic build, showed that the direct-only `Zℓ`
+  alone was the cause. With the fix, 4 of 100 frequencies remain negative,
+  all above 0.6 MHz and at most −7 Ω at a series resonance. Without retardation
+  in the mixed terms, none are negative. The transient peaks decay on every
+  round trip (A1000: 997 kV first, 905 kV at the eighth). On the 409.5 µs
+  record they decay monotonically to 729 kV at about 220 µs. The coupling
+  effect at 1 MHz is now 9.5e-3 on `rod_air` (was 5.7e-2) and 7.8 % on
+  `channel_tower_cross` (was 9.5 %). Suite: 695/696, the remaining failure
+  being the known stale `channel_loaded` fixture.
+- **Decisions**: the author asked for the fix on 2026-11-20. Geometric mean
+  chosen as the largest coupling the self-terms allow. Rejected: dropping the
+  mixed retardation (instantaneous long-range coupling), a one-sided
+  `τ_a × direct` (not reciprocal), and Γ_ℓ = 0 for the self-terms (moves every
+  fixture; earth-return scope).
+- **Lesson**: L-20.
+- **Refs**: ADR 0029 amendment 2026-11-20, theory.md §5.1, ROADMAP Phase 14
+  item 1.
+
+#### P14-pipeline — Coated pipeline: fault and lightning study (2026-11-22)
+
+- **Delivered**: `docs/validation/pipeline_checks.py` (generator and
+  analysis, `--write-common`), report `docs/validation/pipeline-study.md`,
+  cases `common/pipeline_fault_60hz.json` and `pipeline_lightning.json`. The
+  ROADMAP Phase 14 item 2 cross-section with a tower at mid-length on a
+  4 × 30 m star counterpoise, 20 m from the pipe at the closest arm tip.
+- **Evidence**: footing resistance 21.09 Ω against 21.78 Ω from Dwight's
+  four-point star (−3.2 %). The coating voltage I_t·z_c matches the pipe voltage
+  minus ψ on the coating surface to 0.5 % at the GPR zone (7 % at the pipe end,
+  a 1 m position offset). Fault 10 kA: 4.0–5.9 kV across the coating, the
+  highest with earthed ends and a new coating. Lightning 31 kA: 50 kV, peaking
+  at 48 µs because the pipe first follows the soil through its 7 nF/m coating
+  and then equalises along its length. μr has no effect, and `crossMedium`
+  under 0.1 % on the coating voltage. The order of magnitude matches the fault
+  cases of Ribeiro et al. (SNPTEE 2019, 2.6–10.7 kV).
+- **Decisions**: conductive coupling only at 60 Hz, with the phase conductor
+  left out, since its inductive part is the missing earth-return term
+  (item 1.3). The lightning case has matched aerial ends. The coating
+  voltage is computed from the leakage currents (exact in the model) rather
+  than from transient observation points, which the transient path does not
+  offer.
+- **Refs**: ROADMAP Phase 14 item 2, theory.md §4.3, §5.1.
 
 ### Maintenance
 

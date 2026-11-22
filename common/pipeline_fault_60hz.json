@@ -1,0 +1,712 @@
+{
+  "title": "Tower-footing fault, conductive coupling only: 10 kA at 50/60 Hz into the tower top, aerial conductor ended by 10 ohm; DN 300 3LPE-coated steel pipe (r_c = 1e+05 ohm m2, mu_r 300) 1 km long, 1.5 m deep, 50 m from a 30 m high aerial conductor with one tower at x = 500 m on a 4 x 30 m star counterpoise; pipe ends earthed; rho = 1000 ohm m; air-soil coupling on",
+  "soil": {
+    "conductivity": 0.001,
+    "permittivity": 10.0,
+    "permeability": 1.0
+  },
+  "nodes": [
+    {
+      "id": "A0",
+      "position": [
+        0.0,
+        0.0,
+        30.0
+      ]
+    },
+    {
+      "id": "T_top",
+      "position": [
+        500.0,
+        0.0,
+        30.0
+      ]
+    },
+    {
+      "id": "A1000",
+      "position": [
+        1000.0,
+        0.0,
+        30.0
+      ]
+    },
+    {
+      "id": "T_gl",
+      "position": [
+        500.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "id": "F_hub",
+      "position": [
+        500.0,
+        0.0,
+        -0.5
+      ]
+    },
+    {
+      "id": "F_xp",
+      "position": [
+        530.0,
+        0.0,
+        -0.5
+      ]
+    },
+    {
+      "id": "F_xm",
+      "position": [
+        470.0,
+        0.0,
+        -0.5
+      ]
+    },
+    {
+      "id": "F_yp",
+      "position": [
+        500.0,
+        30.0,
+        -0.5
+      ]
+    },
+    {
+      "id": "F_ym",
+      "position": [
+        500.0,
+        -30.0,
+        -0.5
+      ]
+    },
+    {
+      "id": "P0",
+      "position": [
+        0.0,
+        50.0,
+        -1.5
+      ]
+    },
+    {
+      "id": "P1000",
+      "position": [
+        1000.0,
+        50.0,
+        -1.5
+      ]
+    },
+    {
+      "id": "E0",
+      "position": [
+        0.0,
+        70.0,
+        -1.0
+      ]
+    },
+    {
+      "id": "E1000",
+      "position": [
+        1000.0,
+        70.0,
+        -1.0
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "id": "acsr_grosbeak_eq",
+      "epsilonr": 1.0,
+      "mur": 1.0,
+      "sigma": 22466019.4
+    },
+    {
+      "id": "steel_tower",
+      "epsilonr": 1.0,
+      "mur": 1.0,
+      "sigma": 5000000.0
+    },
+    {
+      "id": "copper",
+      "epsilonr": 1.0,
+      "mur": 1.0,
+      "sigma": 58000000.0
+    },
+    {
+      "id": "pipe_steel",
+      "epsilonr": 1.0,
+      "mur": 300.0,
+      "sigma": 5000000.0
+    },
+    {
+      "id": "coat_3lpe",
+      "epsilonr": 2.3,
+      "mur": 1.0,
+      "sigma": 3e-08
+    }
+  ],
+  "elements": [
+    {
+      "type": "line",
+      "id": "AerialW",
+      "from": "A0",
+      "to": "T_top",
+      "radius": 0.012575,
+      "segments": 100,
+      "material": "acsr_grosbeak_eq"
+    },
+    {
+      "type": "line",
+      "id": "AerialE",
+      "from": "T_top",
+      "to": "A1000",
+      "radius": 0.012575,
+      "segments": 100,
+      "material": "acsr_grosbeak_eq"
+    },
+    {
+      "type": "line",
+      "id": "Tower",
+      "from": "T_top",
+      "to": "T_gl",
+      "radius": 0.3,
+      "segments": 15,
+      "material": "steel_tower"
+    },
+    {
+      "type": "line",
+      "id": "Link",
+      "from": "T_gl",
+      "to": "F_hub",
+      "radius": 0.00472,
+      "segments": 1,
+      "material": "copper"
+    },
+    {
+      "type": "line",
+      "id": "ArmXp",
+      "from": "F_hub",
+      "to": "F_xp",
+      "radius": 0.00472,
+      "segments": 15,
+      "material": "copper"
+    },
+    {
+      "type": "line",
+      "id": "ArmXm",
+      "from": "F_hub",
+      "to": "F_xm",
+      "radius": 0.00472,
+      "segments": 15,
+      "material": "copper"
+    },
+    {
+      "type": "line",
+      "id": "ArmYp",
+      "from": "F_hub",
+      "to": "F_yp",
+      "radius": 0.00472,
+      "segments": 15,
+      "material": "copper"
+    },
+    {
+      "type": "line",
+      "id": "ArmYm",
+      "from": "F_hub",
+      "to": "F_ym",
+      "radius": 0.00472,
+      "segments": 15,
+      "material": "copper"
+    },
+    {
+      "type": "line",
+      "id": "Pipe",
+      "from": "P0",
+      "to": "P1000",
+      "radius": 0.161925,
+      "segments": 500,
+      "material": "pipe_steel",
+      "coating": {
+        "outerRadius": 0.16492500000000002,
+        "material": "coat_3lpe"
+      }
+    },
+    {
+      "type": "line",
+      "id": "Term0",
+      "from": "P0",
+      "to": "E0",
+      "radius": 0.00472,
+      "segments": 10,
+      "material": "copper"
+    },
+    {
+      "type": "line",
+      "id": "Term1000",
+      "from": "P1000",
+      "to": "E1000",
+      "radius": 0.00472,
+      "segments": 10,
+      "material": "copper"
+    },
+    {
+      "type": "branch",
+      "id": "EndW",
+      "from": "A0",
+      "resistance": 10.0
+    },
+    {
+      "type": "branch",
+      "id": "EndE",
+      "from": "A1000",
+      "resistance": 10.0
+    }
+  ],
+  "numerics": {
+    "crossMedium": "transmission"
+  },
+  "sources": [
+    {
+      "node": "T_top",
+      "current": {
+        "re": 10000.0,
+        "im": 0.0
+      }
+    }
+  ],
+  "frequencies": {
+    "min": 50.0,
+    "max": 60.0,
+    "pointsPerDecade": 1
+  },
+  "observation": {
+    "points": [
+      {
+        "id": "S0",
+        "position": [
+          0.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S20",
+        "position": [
+          20.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S40",
+        "position": [
+          40.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S60",
+        "position": [
+          60.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S80",
+        "position": [
+          80.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S100",
+        "position": [
+          100.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S120",
+        "position": [
+          120.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S140",
+        "position": [
+          140.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S160",
+        "position": [
+          160.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S180",
+        "position": [
+          180.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S200",
+        "position": [
+          200.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S220",
+        "position": [
+          220.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S240",
+        "position": [
+          240.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S260",
+        "position": [
+          260.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S280",
+        "position": [
+          280.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S300",
+        "position": [
+          300.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S320",
+        "position": [
+          320.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S340",
+        "position": [
+          340.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S360",
+        "position": [
+          360.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S380",
+        "position": [
+          380.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S400",
+        "position": [
+          400.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S420",
+        "position": [
+          420.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S440",
+        "position": [
+          440.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S460",
+        "position": [
+          460.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S480",
+        "position": [
+          480.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S500",
+        "position": [
+          500.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S520",
+        "position": [
+          520.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S540",
+        "position": [
+          540.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S560",
+        "position": [
+          560.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S580",
+        "position": [
+          580.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S600",
+        "position": [
+          600.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S620",
+        "position": [
+          620.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S640",
+        "position": [
+          640.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S660",
+        "position": [
+          660.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S680",
+        "position": [
+          680.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S700",
+        "position": [
+          700.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S720",
+        "position": [
+          720.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S740",
+        "position": [
+          740.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S760",
+        "position": [
+          760.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S780",
+        "position": [
+          780.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S800",
+        "position": [
+          800.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S820",
+        "position": [
+          820.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S840",
+        "position": [
+          840.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S860",
+        "position": [
+          860.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S880",
+        "position": [
+          880.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S900",
+        "position": [
+          900.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S920",
+        "position": [
+          920.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S940",
+        "position": [
+          940.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S960",
+        "position": [
+          960.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S980",
+        "position": [
+          980.0,
+          49.835075,
+          -1.5
+        ]
+      },
+      {
+        "id": "S1000",
+        "position": [
+          1000.0,
+          49.835075,
+          -1.5
+        ]
+      }
+    ],
+    "touch": [
+      {
+        "id": "Touch_P0",
+        "node": "P0",
+        "radius": 1.0,
+        "points": 16
+      },
+      {
+        "id": "Touch_mid",
+        "node": "Pipe_n250",
+        "radius": 1.0,
+        "points": 16
+      },
+      {
+        "id": "Touch_P1000",
+        "node": "P1000",
+        "radius": 1.0,
+        "points": 16
+      }
+    ]
+  }
+}

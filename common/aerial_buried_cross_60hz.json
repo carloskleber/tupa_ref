@@ -1,0 +1,120 @@
+{
+  "title": "Power frequency: 1 km ACSR Grosbeak line 30 m above ground, driven by a 1 kV voltage source at A0 and loaded by 100 ohm to remote earth at A1000 (about 10 A), parallel 70 mm2 copper wire buried 1 m deep at 50 m lateral distance, floating; 50 and 60 Hz, air-soil cross-coupling on",
+  "soil": {
+    "conductivity": 0.001,
+    "permittivity": 10.0,
+    "permeability": 1.0
+  },
+  "nodes": [
+    {
+      "id": "A0",
+      "position": [
+        0.0,
+        0.0,
+        30.0
+      ]
+    },
+    {
+      "id": "A1000",
+      "position": [
+        1000.0,
+        0.0,
+        30.0
+      ]
+    },
+    {
+      "id": "G0",
+      "position": [
+        0.0,
+        50.0,
+        -1.0
+      ]
+    },
+    {
+      "id": "G1000",
+      "position": [
+        1000.0,
+        50.0,
+        -1.0
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "id": "acsr_grosbeak_eq",
+      "epsilonr": 1.0,
+      "mur": 1.0,
+      "sigma": 22466019.4
+    },
+    {
+      "id": "copper",
+      "epsilonr": 1.0,
+      "mur": 1.0,
+      "sigma": 58000000.0
+    }
+  ],
+  "elements": [
+    {
+      "type": "line",
+      "id": "Aerial",
+      "from": "A0",
+      "to": "A1000",
+      "radius": 0.012575,
+      "segments": 200,
+      "material": "acsr_grosbeak_eq"
+    },
+    {
+      "type": "line",
+      "id": "Buried",
+      "from": "G0",
+      "to": "G1000",
+      "radius": 0.00472,
+      "segments": 250,
+      "material": "copper"
+    },
+    {
+      "type": "branch",
+      "id": "Load",
+      "from": "A1000",
+      "resistance": 100.0
+    }
+  ],
+  "numerics": {
+    "crossMedium": "transmission"
+  },
+  "sources": [
+    {
+      "node": "A0",
+      "voltage": {
+        "re": 1000.0,
+        "im": 0.0
+      }
+    }
+  ],
+  "frequencies": {
+    "min": 50.0,
+    "max": 60.0,
+    "pointsPerDecade": 1
+  },
+  "outputs": {
+    "nodes": [
+      "A0",
+      "A1000",
+      "G0",
+      "Buried_n125",
+      "G1000"
+    ],
+    "electrodes": [
+      "Aerial_e1",
+      "Aerial_e200",
+      "Buried_e1",
+      "Buried_e125",
+      "Buried_e250"
+    ],
+    "quantities": [
+      "voltage",
+      "i1",
+      "i2"
+    ]
+  }
+}

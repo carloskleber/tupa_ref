@@ -404,6 +404,114 @@ analytic limits and continuity. Candidate: a wire crossing the interface
 against the NEC treatment of Burke & Miller [134]; flipping the default after
 that; lossy-ground induced voltages and LEMP.
 
+1. **Passivity of the mixed kernel** — **M**. The mixed constants are the
+   geometric mean of the two media's transmitted constants (ADR 0029
+   amendment 2026-11-20, log P14-2026-11-20), which removed the
+   non-passivity of long parallel air/soil conductors. Open:
+   1. **Retardation residual.** The straight-ray factor
+      `e^{−γ_a R_a − γ_s R_s}` still leaves isolated Re(Z_in) < 0 points near
+      the MHz series resonances: −0.23 % of |Z_in| on
+      `aerial_buried_cross_short`, −7 Ω at 1.42 MHz on `aerial_buried_cross`.
+      Find a retarded form that keeps the semidefinite bound, or show the
+      residual is below the model's own quasi-static error. Gate: a passivity
+      sweep of `aerial_buried_cross` to 5 MHz with no negative point.
+   2. **A published anchor for the parallel case.** Find induced voltages on a
+      buried cable or counterpoise from an overhead conductor or a nearby
+      stroke, measured or full-wave, and add it to references.md and
+      `validation/`. It also serves the default-flip decision above.
+   3. **Earth-return scope.** Consistent with the screened (Γ ≈ −1) air
+      self-terms, the inductive coupling vanishes as ω → 0, so the
+      power-frequency line-to-pipeline coupling of Carson and Sunde [41] is
+      not modelled (theory.md §5.1). Decide whether an earth-return
+      (Γ_ℓ(ω)) treatment of `Zℓ` belongs in a later phase. It would move
+      every air-conductor fixture. **Size of the gap:**
+      `aerial_buried_cross_60hz` (10 A load current at 60 Hz) gives 3.5 mV of
+      differential voltage on the buried wire. Carson gives an EMF of 2.94 V
+      (0.294 Ω/km). That is a factor of about 400, the same order as
+      1/√(τ_a τ_s) ≈ 270. `test_crossmedium` pins the gap on purpose: the
+      pin fails when an earth-return term lands. **Literature for the anchor:** the
+      Carson-based circuit method of CIGRE TB 95 (WG 36.02) and the field
+      approach of Dawalibi & Southey (IEEE Trans. PWRD, 1989; MoM with
+      through-earth coupling). Cristofolini, Popoli & Sandrolini compare
+      Carson's formulae with 2-D FEM for line-to-pipeline interference, and
+      Ribeiro et al. (SNPTEE 2019, held in the reference library) give fault
+      cases with coating voltages against the 5 kV of NBR 16563-1. To read
+      and add to references.md: Carson (BSTJ 1926), TB 95, Dawalibi &
+      Southey, Taflove & Dabkowski (IEEE PAS 1979, closed-form pipeline
+      voltage under 60 Hz inductive coupling).
+
+2. **Coated pipeline with bare-wire terminations (cathodic-protection /
+   AC-interference case)** — **M**, partly done. This replaces the buried wire of
+   `aerial_buried_cross_60hz` by a coated steel pipe whose ends are earthed
+   by bare wires, the AC path that a CP system (anode beds, earthing through
+   DC decouplers) gives the pipe.
+   - **State.** The parts that run without item 1.3 are done:
+     [validation/pipeline-study.md](validation/pipeline-study.md) (log
+     P14-pipeline), cases `pipeline_fault_60hz.json` and
+     `pipeline_lightning.json`, generator `validation/pipeline_checks.py`.
+     The cross-section below gained a tower at x = 500 m on a 4 × 30 m star
+     counterpoise (need (v)). Fault at the tower, conductive only: the
+     coating voltage opposite the tower is 4.0–5.9 kV for 10 kA (1.9 kA in the
+     footing). Earthing the pipe ends raises it above the 5 kV of NBR 16563-1.
+     Lightning, 31 kA to the tower: 50 kV across the coating, peaking on the
+     tail (48 µs). In both, μr changes nothing (under 0.1 %), and the air–soil
+     coupling moves the pipe potential by at most 2.4 % and the coating
+     voltage by under 0.1 %: conductive coupling dominates. Open from this item: the DC-decoupler variant
+     (c), the three-phase line, the holiday current density, and a
+     published case with tabulated coating voltages.
+   - **Case `pipeline_cp_60hz.json`.**
+     - *Pipe.* DN 300 (OD 323.9 mm, wall 9.5 mm), 1 km long, 1.5 m to the
+       axis, 50 m from the line, ≥ 1.3 m segments (l ≥ 4r). Steel at
+       σ ≈ 5e6 S/m with a μr family of 100, 300 and 1000, as a solid
+       cylinder in `materials` (`mur`). That is valid while the skin depth
+       (1.7 mm at 60 Hz and μr 300) is below the wall. The DC point needs
+       the tube entry (Phase 12 item 2).
+     - *Coating.* 3LPE, 3 mm, εr 2.3, as a `coating`. σ comes from the
+       specific coating resistance r_c (σ = t/r_c). Sweep r_c over
+       1e4 (aged), 1e5 and 1e7 Ω·m² (new 3LPE). The pipe propagation
+       constant, and so the length 1/γ (km to tens of km), depends on it.
+     - *Terminations.* At each end, a bare copper wire (70 mm², 20 m,
+       perpendicular to the line, 1 m deep) or a 3 m rod. Variants:
+       (a) isolated, with insulating joints and no earthing; (b) earthed
+       directly; (c) earthed through a DC decoupler, a `branch` of large C
+       or small R at 60 Hz.
+     - *Line side.* As `aerial_buried_cross_60hz`. Then a three-phase
+       version with shield wires: three complex voltage sources at 120°,
+       loaded, in which the unbalance drives the pipe.
+   - **Outputs, mapped to the study requirements.**
+     - *Pipe potential to remote earth along the pipe.* Touch voltage at
+       fittings: EN 50443 (60 V long-term), NACE SP0177 (15 V).
+     - *Coating stress.* Pipe potential minus the soil potential just
+       outside the coating, from `observation` points. Fault limits are
+       5 kV in NBR 16563-1, and the coating dielectric strength depends on
+       its type.
+     - *AC current density at a holiday.* A post-processed spread-resistance
+       estimate J ≈ 8V/(ρπd) at a 1 cm² defect, checked against the
+       ISO 18086 bands (about 30 and 100 A/m²; to confirm against the
+       standard). A cm-scale holiday cannot be a segment on a 0.16 m-radius
+       pipe, so it is not meshed.
+   - **What a CP study needs that the solver lacks.**
+     - (i) The earth-return inductive coupling of item 1.3. This blocks the
+       steady-state (operating-current) part. The fault and lightning
+       transient parts can run today.
+     - (ii) Layered soil (Phase 15). CP and interference studies routinely
+       use two-layer soil.
+     - (iii) The DC CP current itself. An impressed-current rectifier
+       between an anode bed and the pipe is a current source at the DC point
+       (`frequencies.dc`), but its distribution along the coating needs the
+       tube DC resistance (Phase 12 item 2). Polarisation of the
+       steel–electrolyte interface is out of scope.
+     - (iv) Route geometry beyond straight parallels: crossings at an
+       angle, as in Ribeiro et al., which line chains already allow.
+     - (v) Conductive coupling from a faulted tower footing, which needs the
+       tower, a footing electrode and a fault-current source in the same case.
+   - **Validation.** For an isolated pipe, the transmission-line closed form
+     (Sunde [41]; Taflove & Dabkowski) with Carson's Z_m and the pipe's own
+     Z and Y. The comparison holds only once item 1.3 is done. Until then,
+     the case is a fault and lightning transient study, and a check that the
+     bare terminations pull the pipe-end potential down as the closed form
+     predicts for given terminal impedances.
+
 ### Phase 15 — Multi-layer soil
 
 1. **Multi-layer soil and reflection-coefficient images** — **L**. Lifts
@@ -427,6 +535,92 @@ that; lossy-ground induced voltages and LEMP.
    thin-layer model (Phase 13 item 3) as the limit of a slender inclusion.
    Shares interface machinery with item 1 and with the faceted-terrain idea
    (layered and inhomogeneous media).
+
+### Phase 16 — Line tier: insulator strings
+
+Application tier (ADR 0018). Today a string is either an open gap, with the
+string voltage read as crossarm minus phase node (the CIGRE procedure [140]),
+or a closed arc (the laboratory cases). This phase adds the string itself: a
+new **`insulator` element** (Fortran only) between a crossarm node and a phase
+node. It comes in two kinds and expands at load time into existing primitives,
+as `mesh` does (ADR 0020). The string's floating metal parts are ordinary node
+unknowns. Their stray capacitances to the tower, the phase conductor, the
+ground and the neighbouring units come out of the HEM fill and are not inputs.
+Decided in the author interview (log §5):
+
+- the model is **linear**: the string stays intact, and flashover is not
+  modelled (no criteria and no switch; theory.md §8);
+- v1 is **lossless**: pure capacitance, with no leakage or tan δ.
+
+1. **Cap-and-pin string (glass, porcelain)** — **M**.
+   - **Topology.** A string of n units has n − 1 floating cap-pin
+     assemblies. Each assembly is a **single `ring`**, not two objects close
+     together. The ring is centred on the string axis, its normal lies along
+     the axis, and the rings are spaced by the unit length (146 mm for the
+     standard disc). The ring radius is the metal-cap radius, user-set,
+     typically about 40 mm. The two end fittings are the terminal nodes
+     themselves and carry no ring.
+   - **Unit capacitance.** A pure-C `branch` joins consecutive rings: the
+     first ring to the crossarm node, the last to the phase node. The branch
+     attaches to the ring's first vertex, since the ring is equipotential to
+     first order. `C_unit` is user-set (tens of pF per disc).
+   - **Thin-wire limit (open).** A 40 mm ring with a few chords has chords
+     comparable to its tube radius. Settle the chord count and the tube
+     radius with a convergence check of the ring's capacitance against the
+     closed-form torus, both isolated and above a ground plane. Apply the
+     `l < 4r` warning of ADR 0030 §6.
+2. **Long-rod composite (polymeric)** — **M**.
+   - **Distributed rod.** The rod is a perfectly conducting `line` along the
+     axis with N segments and a series C on **every** segment. This needs
+     `lumped` extended from one segment to a list of segments, or to all of
+     them. The internal nodes float. By default
+     `C_seg = ε₀ε_r·πa²/ℓ_seg`, from the core radius `a` and its `ε_r` (FRP
+     about 4–5). The user can give an end-to-end total instead, and then
+     `C_seg = N·C_total`.
+   - **What it leaves out.** The capacitive chain is a 1-D approximation of
+     a dielectric rod. It does not represent the field structure inside the
+     housing or the sheds. A housing layer is a later refinement.
+     Segments must stay longer than 4 rod radii.
+   - **Grading rings** are declared inside the element. Each end can have a
+     ring (ring radius, tube radius, axial offset from the fitting) built as
+     a `ring` and bonded to the end-fitting terminal by a short conductor.
+3. **Outputs** — **S**. The voltage across each unit or rod segment and the
+   string total, plus the largest unit share. For a harmonic run at power
+   frequency, also the string efficiency `V_total/(n·V_max)`. For a
+   transient, the per-unit voltage time series. These are node-voltage
+   differences. They are written beside the branch-current output (Phase 10d
+   item 4, Phase 10e item 3) and in the same writers.
+4. **Validation** — **M**.
+   1. **Ladder oracle** (unit test). A cap-and-pin string whose strays are
+      given as branches (`C_unit`, `C_ground`, `C_line`, no EM coupling)
+      reproduces the closed-form chain distribution. The EM string then
+      reports the equivalent `C_ground` it implies.
+   2. **Published distributions.** A measured or computed power-frequency
+      distribution on a glass string (source to choose and add to
+      references.md). A composite string with and without a corona ring
+      against CIGRE TB 284 (to add to references.md).
+   3. **Tower lightning case.** A `common/` case: a tower strike in the style
+      of `channel_tower`, with strings on the phases. In the limit `C → 0` it
+      must recover the open-gap convention. It quantifies how the string
+      voltage differs from the open-gap value.
+   4. **Floating-node conditioning.** The DC point (1 mHz) and an NLT run
+      with floating rings: no NaN, and the low-frequency capacitive division
+      matches the ladder.
+5. **Contract** — **S**. Theory first (ADR 0002 order). A theory section
+   covers floating conductors coupled by capacitive branches and the rod as
+   a capacitive chain. Then a new ADR, the schema in `common/README.md`
+   (`kind: capAndPin | longRod`, terminals, units or segments, unit length,
+   `C_unit` or core `ε_r` and radius, ring geometry, grading rings), and a
+   GUI view of the expanded parts. Rust and Julia refuse the type (log L-12)
+   until they port it (follow-along rule, Phase 8 item 10).
+
+**Depends on:** `ring` and `branch` (Fortran, done); the multi-segment
+`lumped` (item 2).
+
+**Not in scope:** flashover (volt-time curves, disruptive effect, leader
+progression, piecewise-LTI switching); leakage, pollution and dielectric
+loss; corona on the fittings. V-strings and double strings are two or more
+`insulator` elements and need no special case.
 
 ### Maintenance
 
@@ -562,8 +756,6 @@ Explicitly *not* proposed:
   format*, not solver work. The cheapest first step would write the port
   impedance matrix as Touchstone Z-parameters [71]; external vector-fitting
   tools [69, 70] could then do the fitting and passivity enforcement.
-
----
 
 ---
 

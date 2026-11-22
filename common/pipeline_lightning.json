@@ -1,0 +1,348 @@
+{
+  "title": "First stroke 31 kA (Heidler 1.8/95 us) to the tower top, aerial conductor matched (508.22 ohm) at both ends; DN 300 3LPE-coated steel pipe (r_c = 1e+05 ohm m2, mu_r 300) 1 km long, 1.5 m deep, 50 m from a 30 m high aerial conductor with one tower at x = 500 m on a 4 x 30 m star counterpoise; pipe ends earthed; rho = 1000 ohm m; air-soil coupling on",
+  "soil": {
+    "conductivity": 0.001,
+    "permittivity": 10.0,
+    "permeability": 1.0
+  },
+  "nodes": [
+    {
+      "id": "A0",
+      "position": [
+        0.0,
+        0.0,
+        30.0
+      ]
+    },
+    {
+      "id": "T_top",
+      "position": [
+        500.0,
+        0.0,
+        30.0
+      ]
+    },
+    {
+      "id": "A1000",
+      "position": [
+        1000.0,
+        0.0,
+        30.0
+      ]
+    },
+    {
+      "id": "T_gl",
+      "position": [
+        500.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "id": "F_hub",
+      "position": [
+        500.0,
+        0.0,
+        -0.5
+      ]
+    },
+    {
+      "id": "F_xp",
+      "position": [
+        530.0,
+        0.0,
+        -0.5
+      ]
+    },
+    {
+      "id": "F_xm",
+      "position": [
+        470.0,
+        0.0,
+        -0.5
+      ]
+    },
+    {
+      "id": "F_yp",
+      "position": [
+        500.0,
+        30.0,
+        -0.5
+      ]
+    },
+    {
+      "id": "F_ym",
+      "position": [
+        500.0,
+        -30.0,
+        -0.5
+      ]
+    },
+    {
+      "id": "P0",
+      "position": [
+        0.0,
+        50.0,
+        -1.5
+      ]
+    },
+    {
+      "id": "P1000",
+      "position": [
+        1000.0,
+        50.0,
+        -1.5
+      ]
+    },
+    {
+      "id": "E0",
+      "position": [
+        0.0,
+        70.0,
+        -1.0
+      ]
+    },
+    {
+      "id": "E1000",
+      "position": [
+        1000.0,
+        70.0,
+        -1.0
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "id": "acsr_grosbeak_eq",
+      "epsilonr": 1.0,
+      "mur": 1.0,
+      "sigma": 22466019.4
+    },
+    {
+      "id": "steel_tower",
+      "epsilonr": 1.0,
+      "mur": 1.0,
+      "sigma": 5000000.0
+    },
+    {
+      "id": "copper",
+      "epsilonr": 1.0,
+      "mur": 1.0,
+      "sigma": 58000000.0
+    },
+    {
+      "id": "pipe_steel",
+      "epsilonr": 1.0,
+      "mur": 300.0,
+      "sigma": 5000000.0
+    },
+    {
+      "id": "coat_3lpe",
+      "epsilonr": 2.3,
+      "mur": 1.0,
+      "sigma": 3e-08
+    }
+  ],
+  "elements": [
+    {
+      "type": "line",
+      "id": "AerialW",
+      "from": "A0",
+      "to": "T_top",
+      "radius": 0.012575,
+      "segments": 100,
+      "material": "acsr_grosbeak_eq"
+    },
+    {
+      "type": "line",
+      "id": "AerialE",
+      "from": "T_top",
+      "to": "A1000",
+      "radius": 0.012575,
+      "segments": 100,
+      "material": "acsr_grosbeak_eq"
+    },
+    {
+      "type": "line",
+      "id": "Tower",
+      "from": "T_top",
+      "to": "T_gl",
+      "radius": 0.3,
+      "segments": 15,
+      "material": "steel_tower"
+    },
+    {
+      "type": "line",
+      "id": "Link",
+      "from": "T_gl",
+      "to": "F_hub",
+      "radius": 0.00472,
+      "segments": 1,
+      "material": "copper"
+    },
+    {
+      "type": "line",
+      "id": "ArmXp",
+      "from": "F_hub",
+      "to": "F_xp",
+      "radius": 0.00472,
+      "segments": 15,
+      "material": "copper"
+    },
+    {
+      "type": "line",
+      "id": "ArmXm",
+      "from": "F_hub",
+      "to": "F_xm",
+      "radius": 0.00472,
+      "segments": 15,
+      "material": "copper"
+    },
+    {
+      "type": "line",
+      "id": "ArmYp",
+      "from": "F_hub",
+      "to": "F_yp",
+      "radius": 0.00472,
+      "segments": 15,
+      "material": "copper"
+    },
+    {
+      "type": "line",
+      "id": "ArmYm",
+      "from": "F_hub",
+      "to": "F_ym",
+      "radius": 0.00472,
+      "segments": 15,
+      "material": "copper"
+    },
+    {
+      "type": "line",
+      "id": "Pipe",
+      "from": "P0",
+      "to": "P1000",
+      "radius": 0.161925,
+      "segments": 500,
+      "material": "pipe_steel",
+      "coating": {
+        "outerRadius": 0.16492500000000002,
+        "material": "coat_3lpe"
+      }
+    },
+    {
+      "type": "line",
+      "id": "Term0",
+      "from": "P0",
+      "to": "E0",
+      "radius": 0.00472,
+      "segments": 10,
+      "material": "copper"
+    },
+    {
+      "type": "line",
+      "id": "Term1000",
+      "from": "P1000",
+      "to": "E1000",
+      "radius": 0.00472,
+      "segments": 10,
+      "material": "copper"
+    },
+    {
+      "type": "branch",
+      "id": "EndW",
+      "from": "A0",
+      "resistance": 508.22
+    },
+    {
+      "type": "branch",
+      "id": "EndE",
+      "from": "A1000",
+      "resistance": 508.22
+    }
+  ],
+  "numerics": {
+    "crossMedium": "transmission"
+  },
+  "signal": {
+    "waveform": "heidler",
+    "imax": 31000.0,
+    "terms": [
+      {
+        "i0": 31000.0,
+        "n": 10.0,
+        "tau1": 1.8e-06,
+        "tau2": 9.5e-05
+      }
+    ],
+    "sourceNode": "T_top",
+    "observeNodes": [
+      "T_top",
+      "F_hub",
+      "P0",
+      "Pipe_n125",
+      "Pipe_n225",
+      "Pipe_n250",
+      "Pipe_n275",
+      "Pipe_n375",
+      "P1000"
+    ],
+    "observeElectrodes": [
+      "Pipe_e5",
+      "Pipe_e15",
+      "Pipe_e25",
+      "Pipe_e35",
+      "Pipe_e45",
+      "Pipe_e55",
+      "Pipe_e65",
+      "Pipe_e75",
+      "Pipe_e85",
+      "Pipe_e95",
+      "Pipe_e105",
+      "Pipe_e115",
+      "Pipe_e125",
+      "Pipe_e135",
+      "Pipe_e145",
+      "Pipe_e155",
+      "Pipe_e165",
+      "Pipe_e175",
+      "Pipe_e185",
+      "Pipe_e195",
+      "Pipe_e205",
+      "Pipe_e215",
+      "Pipe_e225",
+      "Pipe_e235",
+      "Pipe_e245",
+      "Pipe_e255",
+      "Pipe_e265",
+      "Pipe_e275",
+      "Pipe_e285",
+      "Pipe_e295",
+      "Pipe_e305",
+      "Pipe_e315",
+      "Pipe_e325",
+      "Pipe_e335",
+      "Pipe_e345",
+      "Pipe_e355",
+      "Pipe_e365",
+      "Pipe_e375",
+      "Pipe_e385",
+      "Pipe_e395",
+      "Pipe_e405",
+      "Pipe_e415",
+      "Pipe_e425",
+      "Pipe_e435",
+      "Pipe_e445",
+      "Pipe_e455",
+      "Pipe_e465",
+      "Pipe_e475",
+      "Pipe_e485",
+      "Pipe_e495",
+      "Pipe_e250",
+      "Pipe_e251",
+      "ArmYp_e15"
+    ],
+    "nyquistHz": 2000000.0,
+    "fftPoints": 1024,
+    "transform": "nlt"
+  }
+}

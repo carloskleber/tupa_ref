@@ -7,7 +7,35 @@ numerics, which move result files.
 
 ## Unreleased
 
-(nothing yet)
+### Fixed
+
+- **Air–soil coupling was non-passive for long parallel conductors**
+  (`numerics.crossMedium: "transmission"`, Fortran only). The longitudinal
+  mixed term was the direct free-space term. It exceeded the bound set by the
+  model's own screened self-terms: a 1 km open line above a parallel buried
+  wire had Re(Z_in) down to −9.6 kΩ, and an injected pulse grew on every round
+  trip. The mixed constants are now the geometric mean
+  `√(c^a τ_a)·√(c^s τ_s)` with τ = 1 + Γ (ADR 0029 amendment 2026-11-20,
+  theory.md §5.1). **Results move** for studies with the coupling on. The
+  electric term is unchanged under the default Γ(ω). The inductive term is
+  smaller (the `rod_air` coupling effect at 1 MHz goes from 5.7e-2 to 9.5e-3),
+  and with `imageModel: "ideal"` both mixed terms are now zero. Default
+  studies (`"none"`) do not move. New cases `common/aerial_buried_cross.json`
+  and `aerial_buried_cross_short.json`.
+
+### Added
+
+- `common/aerial_buried_cross_60hz.json`: the same cross-section at 50/60 Hz
+  with a 1 kV voltage source and a 100 Ω load. It documents a known limit:
+  the air–soil inductive coupling vanishes as ω → 0, so the buried wire sees
+  millivolts where Carson's earth-return coupling gives volts (ROADMAP
+  Phase 14 item 1.3).
+- Coated-pipeline study (ROADMAP Phase 14 item 2):
+  `common/pipeline_fault_60hz.json` (conductive coupling from a faulted
+  tower footing at 50/60 Hz, with coating voltage and touch voltage along the
+  pipe) and `common/pipeline_lightning.json` (31 kA first stroke to the same
+  tower). Generator and analysis `docs/validation/pipeline_checks.py`, report
+  `docs/validation/pipeline-study.md`.
 
 ## 0.8.0 — 2026-11-19
 
